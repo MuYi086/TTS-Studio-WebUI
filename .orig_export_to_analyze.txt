@@ -1,0 +1,1215 @@
+const exportAudio = async () => {
+                    const dialogueLines = scriptLines.value.filter(l => l.type === 'dialogue');
+                    if (dialogueLines.length === 0) return alert('脚本为空');
+                    if (dialogueLines.some(l => !l.audioUrl)) {
+                        if (!confirm('部分台词尚未生成音频，导出时将被跳过。确定继续吗？')) return;
+                    }
+
+                    isExportingAudio.value = true;
+
+                    try {
+                        const assets = { dialogues: {}, sfx: {}, bgm: {} };
+
+                        // 1. 加载所有台词音频
+                        for (const line of dialogueLines) {
+                            if (line.audioUrl) assets.dialogues[line.id] = await loadAudioBuffer(line.audioUrl);
+                        }
+
+                        // 2. 加载用到的音效
+                        const usedSfxNames = new Set();
+                        scriptLines.value.forEach(l => { if (l.sfx) l.sfx.forEach(s => usedSfxNames.add(s.name)); });
+                        for (const name of usedSfxNames) {
+                            const item = sfxLibrary.value.find(s => s.name === name);
+                            if (item && item.filename) {
+                                try { assets.sfx[name] = await loadAudioBuffer(item.filename); } catch (e) { }
+                            }
+                        }
+
+                        // 3. 加载用到的 BGM
+                        const usedBgmNames = new Set();
+                        scriptLines.value.forEach(l => { if (l.type === 'bgm' && l.action === 'play') usedBgmNames.add(l.bgmName); });
+                        for (const name of usedBgmNames) {
+                            const item = bgmLibrary.value.find(b => b.name === name);
+                            if (item && item.filename) {
+                                try { assets.bgm[name] = await loadAudioBuffer(item.filename); } catch (e) { }
+                            }
+                        }
+
+                        // 4. 计算时间轴
+                        let currentTime = 0;
+                        const events = [];
+                        const bgmSegments = [];
+                        let currentBgm = null;
+
+                        for (const line of scriptLines.value) {
+                            if (line.type === 'bgm') {
+                                if (line.action === 'play') {
+                                    if (currentBgm) bgmSegments.push({ ...currentBgm, end: currentTime });
+                                    currentBgm = { name: line.bgmName, start: currentTime, volume: line.volume };
+                                } else if (line.action === 'stop') {
+                                    if (currentBgm) {
+                                        bgmSegments.push({ ...currentBgm, end: currentTime });
+                                        currentBgm = null;
+                                    }
+                                }
+                            } else if (line.type === 'dialogue') {
+                                const buffer = assets.dialogues[line.id];
+                                if (buffer) {
+                                    // 计算剪辑
+                                    const trimStart = line.trimStart || 0;
+                                    const trimEnd = line.trimEnd || 1;
+                                    const playDuration = buffer.duration * (trimEnd - trimStart);
+                                    const speed = line.speed || 1.0;
+                                    const effectiveDuration = playDuration / speed;
+
+                                    // 模拟 playLineAudio 中的 0.05s 调度延迟，确保导出节奏与实时播放一致
+                                    currentTime += 0.05;
+                                    events.push({ type: 'dialogue', time: currentTime, buffer: buffer, line: line, trimStart, trimEnd, playDuration, speed });
+                                    currentTime += effectiveDuration;
+                                }
+                                currentTime += (line.break_duration || 0);
+                            }
+                        }
+                        if (currentBgm) bgmSegments.push({ ...currentBgm, end: currentTime + 2 }); // BGM 尾部淡出
+
+                        // 5. 离线渲染
+                        const totalDuration = currentTime + 1;
+                        const offlineCtx = new OfflineAudioContext(2, totalDuration * 44100, 44100);
+
+                        // 调度 BGM
+                        bgmSegments.forEach(seg => {
+                            const buffer = assets.bgm[seg.name];
+                            if (buffer) {
+                                const libItem = bgmLibrary.value.find(b => b.name === seg.name);
+                                const libVol = libItem ? (libItem.volume ?? 1.0) : 1.0;
+                                const finalVol = seg.volume * libVol;
+
+                                const src = offlineCtx.createBufferSource();
+                                src.buffer = buffer;
+                                src.loop = true;
+                                const trimStart = libItem?.trimStart ?? 0;
+                                const trimEnd = libItem?.trimEnd ?? 1;
+                                src.loopStart = buffer.duration * trimStart;
+                                src.loopEnd = buffer.duration * trimEnd;
+
+                                const gain = offlineCtx.createGain();
+                                gain.gain.setValueAtTime(0, seg.start);
+                                gain.gain.linearRampToValueAtTime(finalVol, seg.start + 2);
+                                gain.gain.setValueAtTime(finalVol, Math.max(seg.start + 2, seg.end - 2));
+                                gain.gain.linearRampToValueAtTime(0, seg.end);
+                                src.connect(gain).connect(offlineCtx.destination);
+                                src.start(seg.start, src.loopStart); // Start from loop start
+                                src.stop(seg.end);
+                            }
+                        });
+
+                        // 调度台词和音效
+                        events.forEach(evt => {
+                            const dSrc = offlineCtx.createBufferSource();
+                            dSrc.buffer = evt.buffer;
+                            dSrc.playbackRate.value = evt.speed;
+                            const dGain = offlineCtx.createGain();
+                            const char = characters.value.find(c => c.name === evt.line.role);
+                            const charVol = char ? (char.volume ?? 1.0) : 1.0;
+                            dGain.gain.value = (evt.line.dialogueVolume ?? 1.0) * charVol;
+
+                            const offset = evt.buffer.duration * evt.trimStart;
+                            const duration = evt.playDuration;
+
+                            let lastNode = dSrc;
+                            // 应用滤镜
+                            if (evt.line.filter) {
+                                const fConfig = filterLibrary.value.find(f => f.name === evt.line.filter);
+                                if (fConfig) {
+                                    if (fConfig.type === 'distortion') {
+                                        const ws = offlineCtx.createWaveShaper();
+                                        ws.curve = makeDistortionCurve(fConfig.gain);
+                                        ws.oversample = '4x';
+                                        lastNode.connect(ws);
+                                        lastNode = ws;
+                                    } else {
+                                        const bq = offlineCtx.createBiquadFilter();
+                                        bq.type = fConfig.type;
+                                        bq.frequency.value = fConfig.frequency;
+                                        bq.Q.value = fConfig.Q;
+                                        lastNode.connect(bq);
+                                        lastNode = bq;
+                                    }
+                                }
+                            }
+                            lastNode.connect(dGain).connect(offlineCtx.destination);
+                            dSrc.start(evt.time, offset, duration);
+
+                            // 调度音效
+                            if (evt.line.sfx) {
+                                evt.line.sfx.forEach(s => {
+                                    const sBuffer = assets.sfx[s.name];
+                                    if (sBuffer) {
+                                        const originalDuration = evt.buffer.duration;
+                                        const absStart = originalDuration * evt.trimStart;
+                                        const absEnd = originalDuration * evt.trimEnd;
+                                        const trimmedDuration = absEnd - absStart;
+                                        const pos = parseFloat(s.position) || 0;
+                                        // 修正：位置应该是相对于裁剪后的时长
+                                        const absSfxTime = absStart + (trimmedDuration * pos);
+
+                                        if (absSfxTime >= absStart && absSfxTime <= absEnd) {
+                                            const sSrc = offlineCtx.createBufferSource();
+                                            sSrc.buffer = sBuffer;
+                                            const sGain = offlineCtx.createGain();
+                                            const libItem = sfxLibrary.value.find(l => l.name === s.name);
+                                            const libVol = libItem ? (libItem.volume ?? 1.0) : 1.0;
+                                            const scriptVol = evt.line.sfxVolume ?? 0.5;
+                                            sGain.gain.value = scriptVol * libVol;
+
+                                            const sTrimStart = libItem?.trimStart ?? 0;
+                                            const sTrimEnd = libItem?.trimEnd ?? 1;
+                                            const sOffset = sBuffer.duration * sTrimStart;
+                                            const sDuration = sBuffer.duration * (sTrimEnd - sTrimStart);
+
+                                            sSrc.connect(sGain).connect(offlineCtx.destination);
+
+                                            const relativeStart = absSfxTime - absStart;
+                                            sSrc.start(evt.time + relativeStart / evt.speed, sOffset, sDuration);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+
+                        const renderedBuffer = await offlineCtx.startRendering();
+                        const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
+                        const url = URL.createObjectURL(wavBlob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `storyforge_export_${Date.now()}.wav`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+
+                    } catch (e) {
+                        console.error(e);
+                        alert('导出失败: ' + e.message);
+                    } finally {
+                        isExportingAudio.value = false;
+                    }
+                };
+
+                const exportSRT = async () => {
+                    const dialogueLines = scriptLines.value.filter(l => l.type === 'dialogue');
+                    if (dialogueLines.length === 0) return alert('脚本为空');
+
+                    if (dialogueLines.some(l => !l.audioUrl)) {
+                        if (!confirm('部分台词尚未生成音频，导出字幕时时间轴可能不准确（将跳过未生成音频的行）。确定继续吗？')) return;
+                    }
+
+                    isExportingAudio.value = true; // 复用 loading 状态
+
+                    try {
+                        // 1. 加载所有台词音频以获取时长
+                        const audioMap = new Map();
+                        const loadPromises = dialogueLines.map(async (line) => {
+                            if (line.audioUrl) {
+                                const buffer = await loadAudioBuffer(line.audioUrl);
+                                if (buffer) audioMap.set(line.id, buffer);
+                            }
+                        });
+                        await Promise.all(loadPromises);
+
+                        let srtContent = '';
+                        let currentTime = 0;
+                        let counter = 1;
+
+                        const formatTime = (seconds) => {
+                            const date = new Date(0);
+                            date.setMilliseconds(seconds * 1000);
+                            const hh = String(Math.floor(seconds / 3600)).padStart(2, '0');
+                            const mm = String(date.getUTCMinutes()).padStart(2, '0');
+                            const ss = String(date.getUTCSeconds()).padStart(2, '0');
+                            const ms = String(date.getUTCMilliseconds()).padStart(3, '0');
+                            return `${hh}:${mm}:${ss},${ms}`;
+                        };
+
+                        // 辅助函数：智能切割长字幕
+                        const splitLongText = (text) => {
+                            if (!text) return [];
+
+                            // 1. 去除句末的逗号和句号 (保留问号感叹号等)
+                            let processed = text.replace(/[，。,.]\s*$/, '');
+
+                            // 2. 如果文本较短，直接返回
+                            if (processed.length <= 25) return [processed];
+
+                            // 3. 优先按标点符号切割
+                            // 句号(。)和点(.)：作为分隔符消耗掉 (不保留在句末)
+                            // 问号、感叹号等：保留在上一句
+                            // 逗号：不作为主分隔符，保留在句中 (除非后续长度强制切割)
+                            const parts = processed.split(/[。.]\s*|(?<=[！？；：!?])\s*/).filter(p => p.trim().length > 0);
+
+                            const finalParts = [];
+                            for (const p of parts) {
+                                // 3. 如果切割后的片段依然过长 (> 30字符)，强制按长度再次切割
+                                if (p.length > 30) {
+                                    let remaining = p;
+                                    while (remaining.length > 0) {
+                                        let cutIndex = 25;
+                                        if (remaining.length <= 25) {
+                                            cutIndex = remaining.length;
+                                        }
+                                        else {
+                                            // 尝试在逗号或空格处断句
+                                            // 优先找逗号
+                                            const lastComma = Math.max(remaining.lastIndexOf('，', 25), remaining.lastIndexOf(',', 25));
+                                            const lastSpace = remaining.lastIndexOf(' ', 25);
+
+                                            if (lastComma > 10) {
+                                                cutIndex = lastComma; // 切在逗号处 (逗号会被丢弃)
+                                            } else if (lastSpace > 10) {
+                                                cutIndex = lastSpace;
+                                            }
+                                        }
+                                        finalParts.push(remaining.substring(0, cutIndex).trim());
+
+                                        // 如果是在逗号处切的，要跳过这个逗号
+                                        if (remaining[cutIndex] === '，' || remaining[cutIndex] === ',') {
+                                            remaining = remaining.substring(cutIndex + 1).trim();
+                                        } else {
+                                            remaining = remaining.substring(cutIndex).trim();
+                                        }
+                                    }
+                                } else {
+                                    finalParts.push(p);
+                                }
+                            }
+                            return finalParts;
+                        };
+
+                        for (const line of scriptLines.value) {
+                            if (line.type === 'dialogue') {
+                                const buffer = audioMap.get(line.id);
+                                if (buffer) {
+                                    const trimStart = line.trimStart || 0;
+                                    const trimEnd = line.trimEnd || 1;
+                                    const duration = buffer.duration * (trimEnd - trimStart);
+                                    const totalDuration = duration / (line.speed || 1.0);
+
+                                    const startTime = currentTime + 0.05; // 对应 exportAudio 的 0.05s 偏移
+
+                                    // 获取切割后的字幕片段
+                                    const textSegments = splitLongText(line.text);
+                                    const totalLength = textSegments.reduce((acc, cur) => acc + cur.length, 0);
+
+                                    let segmentStartTime = startTime;
+
+                                    if (totalLength > 0) {
+                                        for (const segment of textSegments) {
+                                            // 按字符长度比例分配时间
+                                            const segmentRatio = segment.length / totalLength;
+                                            const segmentDuration = totalDuration * segmentRatio;
+                                            const segmentEndTime = segmentStartTime + segmentDuration;
+
+                                            srtContent += `${counter}\n`;
+                                            srtContent += `${formatTime(segmentStartTime)} --> ${formatTime(segmentEndTime)}\n`;
+                                            srtContent += `${segment}\n\n`;
+
+                                            counter++;
+                                            segmentStartTime = segmentEndTime;
+                                        }
+                                    }
+
+                                    currentTime = startTime + totalDuration;
+                                }
+                                currentTime += (line.break_duration || 0);
+                            }
+                        }
+
+                        const blob = new Blob([srtContent], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Unitale字幕文件_${Date.now()}.srt`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    } catch (e) {
+                        console.error(e);
+                        alert('导出SRT失败: ' + e.message);
+                    } finally {
+                        isExportingAudio.value = false;
+                    }
+                };
+
+                // 辅助函数：AudioBuffer 转 WAV Blob
+                function bufferToWave(abuffer, len) {
+                    const numOfChan = abuffer.numberOfChannels;
+                    const length = len * numOfChan * 2 + 44;
+                    const buffer = new ArrayBuffer(length);
+                    const view = new DataView(buffer);
+                    const channels = [];
+                    let i, sample;
+                    let offset = 0;
+                    let pos = 0;
+
+                    function setUint16(data) { view.setUint16(offset, data, true); offset += 2; }
+                    function setUint32(data) { view.setUint32(offset, data, true); offset += 4; }
+
+                    setUint32(0x46464952); // "RIFF"
+                    setUint32(length - 8); // file length - 8
+                    setUint32(0x45564157); // "WAVE"
+                    setUint32(0x20746d66); // "fmt " chunk
+                    setUint32(16); // length = 16
+                    setUint16(1); // PCM (uncompressed)
+                    setUint16(numOfChan);
+                    setUint32(abuffer.sampleRate);
+                    setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+                    setUint16(numOfChan * 2); // block-align
+                    setUint16(16); // 16-bit
+                    setUint32(0x61746164); // "data" - chunk
+                    setUint32(length - offset - 4); // chunk length
+
+                    for (i = 0; i < abuffer.numberOfChannels; i++) channels.push(abuffer.getChannelData(i));
+
+                    while (pos < len) {
+                        for (i = 0; i < numOfChan; i++) {
+                            sample = Math.max(-1, Math.min(1, channels[i][pos]));
+                            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+                            view.setInt16(offset, sample, true);
+                            offset += 2;
+                        }
+                        pos++;
+                    }
+                    return new Blob([buffer], { type: "audio/wav" });
+                }
+
+                // --- 脚本制作逻辑 ---
+                const splitScript = () => {
+                    if (!rawScript.value.trim()) return alert('请输入原文内容');
+
+                    let text = rawScript.value.replace(/\r\n/g, '\n');
+                    const splitRegex = /\n+|(?<=[。！？!?])(?=["']?)\s*/;
+
+                    const lines = text.split(splitRegex)
+                        .map(l => l.trim())
+                        .filter(l => l.length > 0);
+
+                    scriptLines.value = lines.map(text => ({
+                        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
+                        type: 'dialogue',
+                        role: '旁白',
+                        emotion: '平静',
+                        intensity: '中等',
+                        filter: '',
+                        text: text,
+                        trimStart: 0,
+                        trimEnd: 1,
+                        sfxVolume: 1.0,
+                        dialogueVolume: 1.0,
+                        speed: 1.0,
+                        audioUrl: '',
+                        isGenerating: false
+                    }));
+                };
+
+                const addBgmBlock = () => {
+                    const newBlock = {
+                        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
+                        type: 'bgm',
+                        action: 'play',
+                        volume: 1.0,
+                        bgmName: bgmLibrary.value.length > 0 ? bgmLibrary.value[0].name : ''
+                    };
+                    if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
+                        scriptLines.value.splice(selectedLineIndex.value + 1, 0, newBlock);
+                        selectedLineIndex.value++;
+                    } else {
+                        scriptLines.value.push(newBlock);
+                        selectedLineIndex.value = scriptLines.value.length - 1;
+                    }
+                };
+
+                const addBgImageBlock = () => {
+                    const newId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
+                    const newBlock = {
+                        id: newId,
+                        type: 'bgImage',
+                        bgImagePrompt: '',
+                        // selected background will be saved into assets store and restored via bgImageAssetKey
+                        bgImageAssetKey: '',
+                        imageUrl: ''
+                    };
+                    if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
+                        scriptLines.value.splice(selectedLineIndex.value + 1, 0, newBlock);
+                        selectedLineIndex.value++;
+                    } else {
+                        scriptLines.value.push(newBlock);
+                        selectedLineIndex.value = scriptLines.value.length - 1;
+                    }
+                };
+
+                const addDialogueBlock = () => {
+                    const newBlock = {
+                        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
+                        type: 'dialogue',
+                        role: '旁白',
+                        emotion: '平静',
+                        intensity: '中等',
+                        filter: '',
+                        text: '',
+                        trimStart: 0,
+                        trimEnd: 1,
+                        sfx: [],
+                        break_duration: 0,
+                        sfxVolume: 1.0,
+                        dialogueVolume: 1.0,
+                        speed: 1.0,
+                        audioUrl: '',
+                        isGenerating: false
+                    };
+                    if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
+                        scriptLines.value.splice(selectedLineIndex.value + 1, 0, newBlock);
+                        selectedLineIndex.value++;
+                    } else {
+                        scriptLines.value.push(newBlock);
+                        selectedLineIndex.value = scriptLines.value.length - 1;
+                    }
+                };
+
+                const removeScriptLine = (index) => {
+                    scriptLines.value.splice(index, 1);
+                    if (selectedLineIndex.value === index) {
+                        selectedLineIndex.value = -1;
+                    } else if (selectedLineIndex.value > index) {
+                        selectedLineIndex.value--;
+                    }
+                };
+
+                const openBgImagePicker = (lineIndex) => {
+                    pendingBgImageLineIndex.value = lineIndex;
+                    if (bgImagePickerRef.value) bgImagePickerRef.value.click();
+                };
+
+                const handleBgImageFileChange = async (event) => {
+                    const file = event.target.files && event.target.files[0];
+                    const lineIndex = pendingBgImageLineIndex.value;
+                    pendingBgImageLineIndex.value = -1;
+                    event.target.value = '';
+                    if (!file) return;
+
+                    const line = scriptLines.value[lineIndex];
+                    if (!line || line.type !== 'bgImage') return;
+
+                    const assetKey = line.bgImageAssetKey || `bgImage_${line.id}`;
+                    line.bgImageAssetKey = assetKey;
+                    line.imageUrl = URL.createObjectURL(file);
+
+                    try {
+                        await saveAssetToDB(assetKey, file);
+                    } catch (e) {
+                        console.error('Failed to save bgImage asset:', e);
+                        alert('保存背景图片失败，请重试。');
+                    }
+
+                    triggerAutoSave();
+                };
+
+                const copyBgImagePrompt = async (line) => {
+                    const text = line?.bgImagePrompt || '';
+                    if (!text) return;
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        alert('已复制背景图片提示词');
+                    } catch (e) {
+                        // Fallback for environments without clipboard permission
+                        const ta = document.createElement('textarea');
+                        ta.value = text;
+                        ta.style.position = 'fixed';
+                        ta.style.left = '-9999px';
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(ta);
+                        alert('已复制背景图片提示词');
+                    }
+                };
+
+                const autoResizeTextarea = (event) => {
+                    const el = event.target;
+                    el.style.height = 'auto';
+                    el.style.height = el.scrollHeight + 'px';
+                };
+
+                const addLineSfx = (line) => {
+                    if (!line.sfx) line.sfx = [];
+                    const defaultSfx = sfxLibrary.value.length > 0 ? sfxLibrary.value[0].name : 'New SFX';
+                    line.sfx.push({ name: defaultSfx, position: 0.5 });
+                };
+
+                const removeLineSfx = (line, index) => {
+                    if (line.sfx) line.sfx.splice(index, 1);
+                };
+
+                const stopScriptSequentially = () => {
+                    isSequencePlaying.value = false;
+                    currentSequenceIndex.value = -1;
+                    if (!isGeneratingVideo.value) stageBgUrl.value = '';
+                    stageBgFadePrevUrl.value = '';
+                    stageBgFadeStartTs.value = 0;
+                    // Stop dialogue audio
+                    if (dialogueSource) {
+                        try { dialogueSource.stop(); } catch (e) { }
+                        dialogueSource = null;
+                    }
+                    // Stop SFX audio
+                    sfxSources.forEach(source => { try { source.stop(); } catch (e) { } });
+                    sfxSources = [];
+                    // Stop BGM audio
+                    if (bgmAudioNode && bgmGainNode) {
+                        const oldNode = bgmAudioNode;
+                        const oldGain = bgmGainNode;
+                        const now = audioContext.currentTime;
+                        oldGain.gain.cancelScheduledValues(now);
+                        oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+                        oldGain.gain.linearRampToValueAtTime(0, now + 2);
+                        setTimeout(() => { try { oldNode.stop(); } catch (e) { } }, 2000);
+                        bgmAudioNode = null;
+                        bgmGainNode = null;
+                    }
+                };
+
+                const playBgm = async (bgmName, volume = 0.4) => {
+                    // Stop any existing BGM
+                    if (bgmAudioNode && bgmGainNode) {
+                        const oldNode = bgmAudioNode;
+                        const oldGain = bgmGainNode;
+                        const now = audioContext.currentTime;
+
+                        // 淡出旧 BGM
+                        oldGain.gain.cancelScheduledValues(now);
+                        oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+                        oldGain.gain.linearRampToValueAtTime(0, now + 2);
+
+                        setTimeout(() => {
+                            try { oldNode.stop(); } catch (e) { }
+                        }, 2000);
+
+                        bgmAudioNode = null;
+                        bgmGainNode = null;
+                    }
+
+                    const bgmLibItem = bgmLibrary.value.find(b => b.name === bgmName);
+                    if (!bgmLibItem || !bgmLibItem.filename) {
+                        console.warn(`BGM not found in library: ${bgmName}`);
+                        return;
+                    }
+
+                    try {
+                        const audioBuffer = await loadAudioBuffer(bgmLibItem.filename);
+                        if (!audioBuffer) throw new Error('Load failed');
+
+                        bgmAudioNode = audioContext.createBufferSource();
+                        bgmAudioNode.buffer = audioBuffer;
+                        bgmAudioNode.loop = true;
+                        bgmAudioNode.loopStart = audioBuffer.duration * (bgmLibItem.trimStart ?? 0);
+                        bgmAudioNode.loopEnd = audioBuffer.duration * (bgmLibItem.trimEnd ?? 1);
+
+                        bgmGainNode = audioContext.createGain();
+                        // 淡入新 BGM
+                        const libVolume = bgmLibItem.volume ?? 1.0;
+                        const finalVolume = volume * libVolume;
+                        bgmGainNode.gain.value = 0;
+                        bgmGainNode.gain.linearRampToValueAtTime(finalVolume, audioContext.currentTime + 2);
+
+                        bgmAudioNode.connect(bgmGainNode).connect(getAudioOutputNode());
+                        bgmAudioNode.start(0, bgmAudioNode.loopStart);
+                    } catch (e) {
+                        console.error(`Failed to load or play BGM ${bgmLibItem.filename}:`, e);
+                        alert(`播放背景音乐失败: ${bgmLibItem.filename}`);
+                    }
+                };
+
+                const playScriptSequentially = async () => {
+                    stopScriptSequentially();
+                    isSequencePlaying.value = true;
+                    const startIndex = selectedLineIndex.value !== -1 ? selectedLineIndex.value : 0;
+
+                    // --- bgImage Pre-scan Logic ---
+                    if (startIndex > 0) {
+                        let lastBgImageLine = null;
+                        for (let i = startIndex - 1; i >= 0; i--) {
+                            const line = scriptLines.value[i];
+                            if (line.type === 'bgImage') {
+                                lastBgImageLine = line;
+                                break;
+                            }
+                        }
+                        if (lastBgImageLine && lastBgImageLine.imageUrl) {
+                            setStageBgUrlWithFade(lastBgImageLine.imageUrl);
+                        }
+                    } else {
+                        // 兜底：从开头播放但之前没有 bgImage，则尝试使用第一个 bgImage 作为开场背景
+                        const firstBgImageLine = scriptLines.value.find(l => l.type === 'bgImage');
+                        if (firstBgImageLine && firstBgImageLine.imageUrl) {
+                            setStageBgUrlWithFade(firstBgImageLine.imageUrl);
+                        }
+                    }
+                    // --- End bgImage Pre-scan ---
+
+                    // --- BGM Pre-scan Logic ---
+                    if (startIndex > 0) {
+                        // Find the last BGM directive before the start index.
+                        let lastBgmLine = null;
+                        for (let i = startIndex - 1; i >= 0; i--) {
+                            const line = scriptLines.value[i];
+                            if (line.type === 'bgm') {
+                                lastBgmLine = line;
+                                break; // Found the last one, no need to look further back.
+                            }
+                        }
+
+                        // If the last directive was to play a BGM, play it now.
+                        // If it was 'stop' or null, we do nothing, as stopScriptSequentially() already handled it.
+                        if (lastBgmLine && lastBgmLine.action === 'play') {
+                            await playBgm(lastBgmLine.bgmName, lastBgmLine.volume);
+                        }
+                    }
+                    // --- End BGM Pre-scan ---
+
+                    for (let i = startIndex; i < scriptLines.value.length; i++) {
+                        if (!isSequencePlaying.value) break; // Check if stopped
+
+                        currentSequenceIndex.value = i;
+
+                        // Scroll into view manually to prevent page scroll
+                        const container = scriptListContainer.value;
+                        const child = lineRefs.value[i];
+
+                        if (container && child) {
+                            const containerRect = container.getBoundingClientRect();
+                            const childRect = child.getBoundingClientRect();
+
+                            // The offset of the child relative to the container's top edge
+                            const childOffsetTop = childRect.top - containerRect.top;
+                            
+                            // The desired scrollTop to center the child
+                            const newScrollTop = container.scrollTop + childOffsetTop - (container.clientHeight / 2) + (child.clientHeight / 2);
+
+                            container.scrollTo({
+                                top: newScrollTop,
+                                behavior: 'smooth'
+                            });
+                        }
+
+                        const line = scriptLines.value[i];
+
+                        if (line.type === 'bgm') {
+                            if (line.action === 'play') {
+                                await playBgm(line.bgmName, line.volume);
+                            } else if (line.action === 'stop') {
+                                if (bgmAudioNode && bgmGainNode) {
+                                    const oldNode = bgmAudioNode;
+                                    const oldGain = bgmGainNode;
+                                    const now = audioContext.currentTime;
+                                    oldGain.gain.cancelScheduledValues(now);
+                                    oldGain.gain.setValueAtTime(oldGain.gain.value, now);
+                                    oldGain.gain.linearRampToValueAtTime(0, now + 2);
+                                    setTimeout(() => { try { oldNode.stop(); } catch (e) { } }, 2000);
+                                    bgmAudioNode = null;
+                                    bgmGainNode = null;
+                                }
+                            }
+                        } else if (line.type === 'bgImage') {
+                            setStageBgUrlWithFade(line.imageUrl || '');
+                        } else { // 'dialogue'
+                            if (!line.audioUrl) {
+                                // 跳过未生成的台词
+                                continue;
+                            }
+
+                            // A promise that resolves when the line finishes playing
+                            await playLineAudio(line, false);
+
+                            if (!isSequencePlaying.value) break;
+
+                            // Handle break duration
+                            if (line.break_duration > 0) {
+                                await new Promise(resolve => setTimeout(resolve, line.break_duration * 1000));
+                            }
+                        }
+                    }
+
+                    // Reset when done or stopped
+                    stopScriptSequentially();
+                };
+
+                // --- 视频生成（MP4 离线合成） ---
+                const generateVideo = async () => {
+                    const dialogueLines = scriptLines.value.filter(l => l.type === 'dialogue');
+                    if (dialogueLines.length === 0) return alert('脚本为空');
+
+                    if (dialogueLines.some(l => !l.audioUrl)) {
+                        if (!confirm('部分台词尚未生成音频，导出视频时将跳过未生成的台词。确定继续吗？')) return;
+                    }
+
+                    if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined') {
+                        return alert('当前浏览器不支持 WebCodecs API，无法快速导出视频。请使用最新版 Chrome 或 Edge。');
+                    }
+                    if (typeof Mp4Muxer === 'undefined') {
+                        return alert('缺少 Mp4Muxer 库，无法导出 MP4。');
+                    }
+
+                    isGeneratingVideo.value = true;
+                    exportStatus.value = '准备素材...';
+
+                    try {
+                        const assets = { dialogues: {}, sfx: {}, bgm: {} };
+
+                        // 1. 加载所有台词音频
+                        for (const line of dialogueLines) {
+                            if (line.audioUrl) assets.dialogues[line.id] = await loadAudioBuffer(line.audioUrl);
+                        }
+
+                        // 2. 加载用到的音效
+                        const usedSfxNames = new Set();
+                        scriptLines.value.forEach(l => { if (l.sfx) l.sfx.forEach(s => usedSfxNames.add(s.name)); });
+                        for (const name of usedSfxNames) {
+                            const item = sfxLibrary.value.find(s => s.name === name);
+                            if (item && item.filename) {
+                                try { assets.sfx[name] = await loadAudioBuffer(item.filename); } catch (e) { }
+                            }
+                        }
+
+                        // 3. 加载用到的 BGM
+                        const usedBgmNames = new Set();
+                        scriptLines.value.forEach(l => { if (l.type === 'bgm' && l.action === 'play') usedBgmNames.add(l.bgmName); });
+                        for (const name of usedBgmNames) {
+                            const item = bgmLibrary.value.find(b => b.name === name);
+                            if (item && item.filename) {
+                                try { assets.bgm[name] = await loadAudioBuffer(item.filename); } catch (e) { }
+                            }
+                        }
+
+                        // 4. 加载背景图片
+                        const bgUrls = Array.from(new Set(
+                            scriptLines.value.filter(l => l.type === 'bgImage' && l.imageUrl).map(l => l.imageUrl)
+                        ));
+                        const bgImageCache = new Map();
+                        for (const url of bgUrls) {
+                            const img = new Image();
+                            img.crossOrigin = 'anonymous';
+                            await new Promise((resolve) => {
+                                img.onload = resolve;
+                                img.onerror = resolve;
+                                img.src = url;
+                            });
+                            bgImageCache.set(url, img);
+                        }
+
+                        // 5. 计算时间轴 (同时用于音频和视频)
+                        let currentTime = 0;
+                        const events = [];
+                        const bgmSegments = [];
+                        let currentBgm = null;
+                        
+                        const visualTimeline = [];
+                        let currentBgUrl = '';
+                        let lastBgChangeTime = 0;
+
+                        // 初始化首个背景
+                        const firstBgLine = scriptLines.value.find(l => l.type === 'bgImage' && l.imageUrl);
+                        if (firstBgLine) currentBgUrl = firstBgLine.imageUrl;
+
+                        for (const line of scriptLines.value) {
+                            if (line.type === 'bgm') {
+                                if (line.action === 'play') {
+                                    if (currentBgm) bgmSegments.push({ ...currentBgm, end: currentTime });
+                                    currentBgm = { name: line.bgmName, start: currentTime, volume: line.volume };
+                                } else if (line.action === 'stop') {
+                                    if (currentBgm) {
+                                        bgmSegments.push({ ...currentBgm, end: currentTime });
+                                        currentBgm = null;
+                                    }
+                                }
+                            } else if (line.type === 'bgImage') {
+                                if (line.imageUrl && line.imageUrl !== currentBgUrl) {
+                                    if (currentTime > lastBgChangeTime) {
+                                        visualTimeline.push({
+                                            url: currentBgUrl,
+                                            start: lastBgChangeTime,
+                                            end: currentTime
+                                        });
+                                    }
+                                    currentBgUrl = line.imageUrl;
+                                    lastBgChangeTime = currentTime;
+                                }
+                            } else if (line.type === 'dialogue') {
+                                const buffer = assets.dialogues[line.id];
+                                if (buffer) {
+                                    const trimStart = line.trimStart || 0;
+                                    const trimEnd = line.trimEnd || 1;
+                                    const playDuration = buffer.duration * (trimEnd - trimStart);
+                                    const speed = line.speed || 1.0;
+                                    const effectiveDuration = playDuration / speed;
+
+                                    currentTime += 0.05;
+                                    events.push({ type: 'dialogue', time: currentTime, buffer: buffer, line: line, trimStart, trimEnd, playDuration, speed });
+                                    currentTime += effectiveDuration;
+                                }
+                                currentTime += (line.break_duration || 0);
+                            }
+                        }
+                        if (currentBgm) bgmSegments.push({ ...currentBgm, end: currentTime + 2 }); // BGM 尾部淡出
+                        if (currentTime > lastBgChangeTime) {
+                            visualTimeline.push({
+                                url: currentBgUrl,
+                                start: lastBgChangeTime,
+                                end: currentTime + 1 // 视频多留1秒结尾
+                            });
+                        }
+                        
+                        const totalDuration = currentTime + 1;
+                        const sampleRate = 44100;
+                        const offlineCtx = new OfflineAudioContext(2, totalDuration * sampleRate, sampleRate);
+
+                        // 调度 BGM
+                        bgmSegments.forEach(seg => {
+                            const buffer = assets.bgm[seg.name];
+                            if (buffer) {
+                                const libItem = bgmLibrary.value.find(b => b.name === seg.name);
+                                const libVol = libItem ? (libItem.volume ?? 1.0) : 1.0;
+                                const finalVol = seg.volume * libVol;
+                                const src = offlineCtx.createBufferSource();
+                                src.buffer = buffer;
+                                src.loop = true;
+                                const trimStart = libItem?.trimStart ?? 0;
+                                const trimEnd = libItem?.trimEnd ?? 1;
+                                src.loopStart = buffer.duration * trimStart;
+                                src.loopEnd = buffer.duration * trimEnd;
+                                const gain = offlineCtx.createGain();
+                                gain.gain.setValueAtTime(0, seg.start);
+                                gain.gain.linearRampToValueAtTime(finalVol, seg.start + 2);
+                                gain.gain.setValueAtTime(finalVol, Math.max(seg.start + 2, seg.end - 2));
+                                gain.gain.linearRampToValueAtTime(0, seg.end);
+                                src.connect(gain).connect(offlineCtx.destination);
+                                src.start(seg.start, src.loopStart);
+                                src.stop(seg.end);
+                            }
+                        });
+
+                        // 调度台词和音效
+                        events.forEach(evt => {
+                            const dSrc = offlineCtx.createBufferSource();
+                            dSrc.buffer = evt.buffer;
+                            dSrc.playbackRate.value = evt.speed;
+                            const dGain = offlineCtx.createGain();
+                            const char = characters.value.find(c => c.name === evt.line.role);
+                            const charVol = char ? (char.volume ?? 1.0) : 1.0;
+                            dGain.gain.value = (evt.line.dialogueVolume ?? 1.0) * charVol;
+
+                            const offset = evt.buffer.duration * evt.trimStart;
+                            const duration = evt.playDuration;
+
+                            let lastNode = dSrc;
+                            if (evt.line.filter) {
+                                const fConfig = filterLibrary.value.find(f => f.name === evt.line.filter);
+                                if (fConfig) {
+                                    if (fConfig.type === 'distortion') {
+                                        const ws = offlineCtx.createWaveShaper();
+                                        ws.curve = makeDistortionCurve(fConfig.gain);
+                                        ws.oversample = '4x';
+                                        lastNode.connect(ws);
+                                        lastNode = ws;
+                                    } else {
+                                        const bq = offlineCtx.createBiquadFilter();
+                                        bq.type = fConfig.type;
+                                        bq.frequency.value = fConfig.frequency;
+                                        bq.Q.value = fConfig.Q;
+                                        lastNode.connect(bq);
+                                        lastNode = bq;
+                                    }
+                                }
+                            }
+                            lastNode.connect(dGain).connect(offlineCtx.destination);
+                            dSrc.start(evt.time, offset, duration);
+
+                            if (evt.line.sfx) {
+                                evt.line.sfx.forEach(s => {
+                                    const sBuffer = assets.sfx[s.name];
+                                    if (sBuffer) {
+                                        const originalDuration = evt.buffer.duration;
+                                        const absStart = originalDuration * evt.trimStart;
+                                        const absEnd = originalDuration * evt.trimEnd;
+                                        const trimmedDuration = absEnd - absStart;
+                                        const pos = parseFloat(s.position) || 0;
+                                        const absSfxTime = absStart + (trimmedDuration * pos);
+
+                                        if (absSfxTime >= absStart && absSfxTime <= absEnd) {
+                                            const sSrc = offlineCtx.createBufferSource();
+                                            sSrc.buffer = sBuffer;
+                                            const sGain = offlineCtx.createGain();
+                                            const libItem = sfxLibrary.value.find(l => l.name === s.name);
+                                            const libVol = libItem ? (libItem.volume ?? 1.0) : 1.0;
+                                            const scriptVol = evt.line.sfxVolume ?? 0.5;
+                                            sGain.gain.value = scriptVol * libVol;
+                                            const sTrimStart = libItem?.trimStart ?? 0;
+                                            const sTrimEnd = libItem?.trimEnd ?? 1;
+                                            const sOffset = sBuffer.duration * sTrimStart;
+                                            const sDuration = sBuffer.duration * (sTrimEnd - sTrimStart);
+                                            sSrc.connect(sGain).connect(offlineCtx.destination);
+                                            const relativeStart = absSfxTime - absStart;
+                                            sSrc.start(evt.time + relativeStart / evt.speed, sOffset, sDuration);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+
+                        exportStatus.value = '合成音频...';
+                        const renderedBuffer = await offlineCtx.startRendering();
+
+                        exportStatus.value = '生成视频轨道...';
+                        
+                        const fps = 30;
+                        let [width, height] = videoResolution.value.split('x').map(Number);
+                        
+                        // Ensure width and height are even numbers (required by many hardware encoders)
+                        width = width % 2 === 0 ? width : width + 1;
+                        height = height % 2 === 0 ? height : height + 1;
+                        
+                        const muxer = new Mp4Muxer.Muxer({
+                            target: new Mp4Muxer.ArrayBufferTarget(),
+                            video: { codec: 'avc', width, height },
+                            audio: { codec: 'aac', sampleRate: 44100, numberOfChannels: 2 },
+                            fastStart: 'in-memory'
+                        });
+
+                        let videoEncoder, audioEncoder;
+
+                        const encodeErrorPromise = new Promise((_, reject) => {
+                            videoEncoder = new VideoEncoder({
+                                output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                                error: e => { 
+                                    console.error('VideoEncoder error:', e); 
+                                    reject(new Error('视频编码错误: ' + e.message)); 
+                                }
+                            });
+
+                            audioEncoder = new AudioEncoder({
+                                output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+                                error: e => { 
+                                    console.error('AudioEncoder error:', e); 
+                                    reject(new Error('音频编码错误: ' + e.message)); 
+                                }
+                            });
+                        });
+
+                        // Dynamically choose codec profile based on resolution.                        // 1080p (1920x1080 or 1080x1920) typically needs Level 4.2 (avc1.64002A) or Level 4.0.
+                        let codecString = 'avc1.4d002a'; // Main Profile, Level 4.2 (1080p 60fps)
+                        
+                        const config = {
+                            codec: codecString,
+                            width, height,
+                            bitrate: 5_000_000,
+                            framerate: fps,
+                            hardwareAcceleration: "prefer-hardware"
+                        };
+
+                        try {
+                            const support = await VideoEncoder.isConfigSupported(config);
+                            if (!support.supported) {
+                                console.warn("Video configuration not supported by hardware, trying software/baseline fallback...");
+                                config.codec = 'avc1.42002a'; // Fallback to Baseline Profile Level 4.2
+                                config.hardwareAcceleration = "no-preference";
+                                
+                                const fallbackSupport = await VideoEncoder.isConfigSupported(config);
+                                if (!fallbackSupport.supported) {
+                                    // Extreme fallback
+                                    config.codec = 'avc1.42001f'; // Baseline 3.1
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("Failed to check video config support, using default", e);
+                            config.codec = 'avc1.42002a'; // Fallback to Baseline Profile Level 4.2 on error
+                            config.hardwareAcceleration = "no-preference";
+                        }
+
+                        videoEncoder.configure(config);
+                        audioEncoder.configure({
+                            codec: 'mp4a.40.2',
+                            sampleRate: 44100,
+                            numberOfChannels: 2,
+                            bitrate: 128000
+                        });
+
+                        // Yield to the event loop to allow the encoders' configuration tasks to complete.
+                        await new Promise(r => setTimeout(r, 0));
+
+                        const renderVideoPromise = async () => {
+                            // 绘制视频帧
+                            const offscreenCanvas = new OffscreenCanvas(width, height);
+                            const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
+                            const totalFrames = Math.ceil(totalDuration * fps);
+                            
+                            const drawCover = (ctx, img, cw, ch) => {
+                                const scale = Math.max(cw / img.width, ch / img.height);
+                                const dw = img.width * scale;
+                                const dh = img.height * scale;
+                                const dx = (cw - dw) / 2;
+                                const dy = (ch - dh) / 2;
+                                ctx.drawImage(img, dx, dy, dw, dh);
+                            };
+
+                            let currentTimelineIndex = 0;
+                            const fadeFrames = Math.floor(0.25 * fps); // 250ms fade
+                            let fadeCounter = 0;
+                            let prevBgUrl = '';
+                            
+                            let lastDrawnBgUrl = null;
+                            let lastDrawnAlpha = -1;
+
+                            for (let i = 0; i < totalFrames; i++) {
+                                const t = i / fps;
+                                
+                                while (currentTimelineIndex < visualTimeline.length - 1 && t >= visualTimeline[currentTimelineIndex].end) {
+                                    prevBgUrl = visualTimeline[currentTimelineIndex].url;
+                                    currentTimelineIndex++;
+                                    fadeCounter = fadeFrames;
+                                }
+                                
+                                const stage = visualTimeline[currentTimelineIndex];
+                                const currentUrl = stage ? stage.url : '';
+
+                                let alpha = 1;
+                                let isFading = false;
+                                if (fadeCounter > 0 && prevBgUrl !== currentUrl) {
+                                    alpha = 1 - (fadeCounter / fadeFrames);
+                                    fadeCounter--;
+                                    isFading = true;
+                                }
+
+                                const needsRedraw = isFading || currentUrl !== lastDrawnBgUrl || alpha !== lastDrawnAlpha;
+                                
+                                if (needsRedraw) {
+                                    offscreenCtx.fillStyle = '#000';
+                                    offscreenCtx.fillRect(0, 0, width, height);
+
+                                    if (isFading && bgImageCache.has(prevBgUrl)) {
+                                        const img = bgImageCache.get(prevBgUrl);
+                                        offscreenCtx.globalAlpha = 1 - alpha;
+                                        drawCover(offscreenCtx, img, width, height);
+                                    }
+
+                                    if (currentUrl && bgImageCache.has(currentUrl)) {
+                                        const img = bgImageCache.get(currentUrl);
+                                        offscreenCtx.globalAlpha = alpha;
+                                        drawCover(offscreenCtx, img, width, height);
+                                    }
+                                    
+                                    offscreenCtx.globalAlpha = 1;
+                                    lastDrawnBgUrl = currentUrl;
+                                    lastDrawnAlpha = alpha;
+                                }
+
+                                while (videoEncoder.encodeQueueSize > 30) {
+                                    if (videoEncoder.state !== 'configured') {
+                                        break;
+                                    }
+                                    await new Promise(r => setTimeout(r, 10));
+                                }
+                                
+                                if (i % 30 === 0) {
+                                    exportStatus.value = `编码视频 ${Math.round((i / totalFrames) * 100)}%`;
+                                    await new Promise(r => setTimeout(r, 0));
+                                }
+
+                                const frame = new VideoFrame(offscreenCanvas, { timestamp: i * 1000000 / fps });
+                                if (videoEncoder.state !== 'configured') {
+                                    frame.close();
+                                    throw new Error('视频编码器状态异常 (' + videoEncoder.state + ')。可能是分辨率或编码配置不受当前浏览器支持。');
+                                }
+                                videoEncoder.encode(frame, { keyFrame: i % fps === 0 });
+                                frame.close();
+                            }
+                            
+                            if (videoEncoder.state === 'configured') {
+                                await videoEncoder.flush();
+                                videoEncoder.close();
+                            }
+                        };
+
+                        const renderAudioPromise = async () => {
+                            exportStatus.value = '编码音频...';
+                            const numberOfChannels = renderedBuffer.numberOfChannels;
+                            const length = renderedBuffer.length;
+                            
+                            const chunkSize = 1024;
+                            for (let i = 0; i < length; i += chunkSize) {
+                                const end = Math.min(i + chunkSize, length);
+                                const chunkLength = end - i;
+                                
+                                const chunkPlanarData = new Float32Array(chunkLength * numberOfChannels);
+                                for(let c = 0; c < numberOfChannels; c++) {
+                                    const sourceChannelData = renderedBuffer.getChannelData(c);
+                                    chunkPlanarData.set(sourceChannelData.subarray(i, end), c * chunkLength);
+                                }
+
+                                const audioData = new AudioData({
+                                    format: 'f32-planar',
+                                    sampleRate: 44100,
+                                    numberOfFrames: chunkLength,
+                                    numberOfChannels: 2,
+                                    timestamp: (i / 44100) * 1000000,
+                                    data: chunkPlanarData
+                                });
+                                
+                                while (audioEncoder.encodeQueueSize > 50) {
+                                    if (audioEncoder.state !== 'configured') {
+                                        break;
+                                    }
+                                    await new Promise(r => setTimeout(r, 10));
+                                }
+                                if (audioEncoder.state !== 'configured') {
+                                    audioData.close();
+                                    throw new Error('音频编码器状态异常 (' + audioEncoder.state + ')');
+                                }
+                                audioEncoder.encode(audioData);
+                                audioData.close();
+                            }
+                            
+                            if (audioEncoder.state === 'configured') {
+                                await audioEncoder.flush();
+                                audioEncoder.close();
+                            }
+                        };
+
+                        // 运行编码并捕获任何可能发生的抛错
+                        await Promise.race([
+                            Promise.all([renderVideoPromise(), renderAudioPromise()]),
+                            encodeErrorPromise
+                        ]);
+
+                        exportStatus.value = '封装 MP4...';
+                        muxer.finalize();
+                        const mp4Buffer = muxer.target.buffer;
+                        const blob = new Blob([mp4Buffer], { type: 'video/mp4' });
+                        
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Unitale_导出视频_${Date.now()}.mp4`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+
+                    } catch (e) {
+                        console.error('Video generation failed:', e);
+                        alert('导出视频失败: ' + e.message);
+                    } finally {
+                        isGeneratingVideo.value = false;
+                        exportStatus.value = '';
+                    }
+                };
+
+                
