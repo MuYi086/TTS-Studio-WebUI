@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @fileoverview 音频素材资源区块
- * @description 复用音效与 BGM 的表单、裁剪预览、列表维护交互
+ * @description 使用 Element Plus 复用音效与 BGM 的表单、裁剪预览和列表维护交互
  * @module src/components/workbench/sfx/AudioAssetSection
  */
 import { computed, useTemplateRef } from 'vue'
@@ -106,195 +106,130 @@ const deleteAsset = (id: string): void => {
 
 <template>
   <section class="space-y-6" :class="{ 'border-t border-slate-200 pt-6': kind === 'bgm' }">
-    <h2 class="text-lg font-bold text-slate-800 border-b pb-2">{{ sectionTitle }}</h2>
-    <p v-if="kind === 'sfx'">
-      音效和背景音乐可以自行使用其他的AI模型生成，或者前往在线免费音效网站下载：
-      <a :href="pixabaySoundEffectsUrl" style="color: blue;" target="_blank" rel="noreferrer">Pixabay在线音效库</a>
-    </p>
-
-    <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
-      <h3 class="text-sm font-bold text-slate-700 mb-4">{{ formHeading }}</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div>
-          <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">{{ nameLabel }}</label>
-          <input
-            v-model="assetForm.name"
-            class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            :placeholder="namePlaceholder"
-          />
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">{{ descriptionLabel }}</label>
-          <input
-            v-model="assetForm.description"
-            class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            :placeholder="descriptionPlaceholder"
-          />
-        </div>
-        <div class="md:col-span-2">
-          <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">音频文件名 / 路径</label>
-          <div class="flex gap-2 items-center">
-            <input ref="fileInput" type="file" accept=".wav,.mp3" class="hidden" @change="handleFileUpload" />
-            <button
-              type="button"
-              class="whitespace-nowrap px-3 py-2 bg-slate-100 border border-slate-300 text-slate-600 rounded-lg text-xs hover:bg-slate-200 transition-colors"
-              @click="openFileDialog"
-            >
-              选择文件
-            </button>
-            <input
-              v-model="assetForm.filename"
-              class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              :placeholder="filePlaceholder"
-            />
-          </div>
-          <p class="text-[10px] text-slate-400 mt-1"></p>
-        </div>
-        <div class="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
-          <div class="flex items-center gap-4 mb-4">
-            <span class="text-[10px] font-bold text-slate-500 uppercase w-16">默认音量</span>
-            <input
-              v-model.number="assetForm.volume"
-              type="range"
-              min="0"
-              max="2"
-              step="0.05"
-              class="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-            />
-            <span class="text-xs text-slate-500 font-mono w-10 text-right">{{ Math.round((assetForm.volume ?? 1) * 100) }}%</span>
-            <button
-              type="button"
-              :disabled="!assetForm.filename"
-              class="text-xs text-slate-400 hover:text-green-600 ml-2 disabled:opacity-30 disabled:cursor-not-allowed"
-              title="试听"
-              @click="playPreview(assetForm)"
-            >
-              <svg
-                v-if="previewPlayingFile === assetForm.filename"
-                class="h-5 w-5 text-green-600"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <svg v-else class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fill-rule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <div v-if="assetForm.filename">
-            <div class="flex justify-between items-center px-0.5 mb-1">
-              <span class="text-[10px] font-bold text-slate-500 uppercase">音频剪辑 (预览)</span>
-              <span class="text-[10px] text-slate-400 font-mono">{{ Math.round(((assetForm.trimEnd ?? 1) - (assetForm.trimStart ?? 0)) * 100) }}%</span>
-            </div>
-            <div :key="assetForm.filename" class="relative w-full bg-slate-100 rounded border border-slate-200 overflow-hidden select-none group/wave" style="height: 40px;">
-              <canvas :ref="(el) => drawWaveform(el, assetForm)" width="300" height="40" class="w-full h-full block opacity-60"></canvas>
-              <div class="absolute inset-0 pointer-events-none">
-                <div class="absolute top-0 bottom-0 left-0 bg-slate-500/30 border-r border-blue-500" :style="{ width: (assetForm.trimStart ?? 0) * 100 + '%' }"></div>
-                <div class="absolute top-0 bottom-0 right-0 bg-slate-500/30 border-l border-red-500" :style="{ width: (1 - (assetForm.trimEnd ?? 1)) * 100 + '%' }"></div>
-                <div
-                  class="absolute top-0 bottom-0 w-4 -ml-2 cursor-ew-resize pointer-events-auto hover:bg-blue-500/10 transition-colors flex justify-center group/handle"
-                  :style="{ left: (assetForm.trimStart ?? 0) * 100 + '%' }"
-                  @mousedown.stop="startDragTrim($event, assetForm, 'start')"
-                >
-                  <div class="w-0.5 h-full bg-blue-500 group-hover/handle:w-1 transition-all"></div>
-                </div>
-                <div
-                  class="absolute top-0 bottom-0 w-4 -ml-2 cursor-ew-resize pointer-events-auto hover:bg-red-500/10 transition-colors flex justify-center group/handle"
-                  :style="{ left: (assetForm.trimEnd ?? 1) * 100 + '%' }"
-                  @mousedown.stop="startDragTrim($event, assetForm, 'end')"
-                >
-                  <div class="w-0.5 h-full bg-red-500 group-hover/handle:w-1 transition-all"></div>
-                </div>
-                <div
-                  v-if="previewPlayingFile === assetForm.filename"
-                  class="absolute top-0 bottom-0 w-0.5 bg-green-500 z-20 pointer-events-none shadow-[0_0_4px_rgba(34,197,94,0.8)]"
-                  :style="{ left: (playbackProgress * 100) + '%' }"
-                ></div>
-              </div>
-            </div>
-            <div class="text-[10px] text-slate-400 mt-1 text-right">提示：拖动红蓝线条裁剪音频，点击保存后生效</div>
-          </div>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all"
-          @click.prevent="saveAsset"
-        >
-          {{ saveLabel }}
-        </button>
-        <button
-          v-if="isEditing"
-          type="button"
-          class="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300 transition-all"
-          @click="resetAssetForm"
-        >
-          取消
-        </button>
-      </div>
+    <div>
+      <h2 class="text-lg font-bold text-slate-800 border-b pb-2">{{ sectionTitle }}</h2>
+      <p v-if="kind === 'sfx'" class="text-sm text-slate-500 mt-3">
+        音效和背景音乐可以自行使用其他的AI模型生成，或者前往在线免费音效网站下载：
+        <el-link :href="pixabaySoundEffectsUrl" type="primary" target="_blank" rel="noreferrer">Pixabay在线音效库</el-link>
+      </p>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
-      <div
-        v-for="asset in assetLibrary"
-        :key="asset.id"
-        class="bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-shadow flex flex-col"
-      >
-        <div class="flex items-start justify-between p-4">
-          <div class="flex items-start gap-3">
-            <input
-              v-model="asset.enabled"
-              type="checkbox"
-              class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer mt-1 flex-shrink-0"
-              title="启用/禁用此资源"
-            />
-            <div>
-              <div class="font-bold text-slate-800 text-sm">{{ asset.name }}</div>
-              <div class="text-xs text-slate-500 mt-0.5">{{ asset.description }}</div>
-              <div class="text-xs text-slate-400 mt-1">{{ asset.filename }}</div>
+    <el-card shadow="never">
+      <template #header>
+        <div class="font-bold text-slate-700">{{ formHeading }}</div>
+      </template>
+
+      <el-form :model="assetForm" label-position="top">
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="12">
+            <el-form-item :label="nameLabel">
+              <el-input v-model="assetForm.name" clearable :placeholder="namePlaceholder" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-form-item :label="descriptionLabel">
+              <el-input v-model="assetForm.description" clearable :placeholder="descriptionPlaceholder" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="音频文件名 / 路径">
+              <el-input v-model="assetForm.filename" clearable :placeholder="filePlaceholder">
+                <template #prepend>
+                  <el-button @click="openFileDialog">
+                    <el-icon><FolderOpened /></el-icon>
+                    <span>选择文件</span>
+                  </el-button>
+                </template>
+              </el-input>
+              <input ref="fileInput" type="file" accept=".wav,.mp3" class="hidden" @change="handleFileUpload" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="默认音量">
+              <div class="flex items-center gap-4 w-full">
+                <el-slider v-model="assetForm.volume" :min="0" :max="2" :step="0.05" class="flex-1" />
+                <span class="text-xs text-slate-500 font-mono w-12 text-right">{{ Math.round((assetForm.volume ?? 1) * 100) }}%</span>
+                <el-button
+                  :disabled="!assetForm.filename"
+                  :type="previewPlayingFile === assetForm.filename ? 'success' : 'info'"
+                  plain
+                  @click="playPreview(assetForm)"
+                >
+                  {{ previewPlayingFile === assetForm.filename ? '停止' : '试听' }}
+                </el-button>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <div v-if="assetForm.filename" class="mb-4">
+          <div class="flex justify-between items-center px-0.5 mb-1">
+            <span class="text-[10px] font-bold text-slate-500 uppercase">音频剪辑 (预览)</span>
+            <span class="text-[10px] text-slate-400 font-mono">{{ Math.round(((assetForm.trimEnd ?? 1) - (assetForm.trimStart ?? 0)) * 100) }}%</span>
+          </div>
+          <div :key="assetForm.filename" class="relative w-full bg-slate-100 rounded border border-slate-200 overflow-hidden select-none group/wave" style="height: 40px;">
+            <canvas :ref="(el) => drawWaveform(el, assetForm)" width="300" height="40" class="w-full h-full block opacity-60"></canvas>
+            <div class="absolute inset-0 pointer-events-none">
+              <div class="absolute top-0 bottom-0 left-0 bg-slate-500/30 border-r border-blue-500" :style="{ width: (assetForm.trimStart ?? 0) * 100 + '%' }"></div>
+              <div class="absolute top-0 bottom-0 right-0 bg-slate-500/30 border-l border-red-500" :style="{ width: (1 - (assetForm.trimEnd ?? 1)) * 100 + '%' }"></div>
+              <div
+                class="absolute top-0 bottom-0 w-4 -ml-2 cursor-ew-resize pointer-events-auto hover:bg-blue-500/10 transition-colors flex justify-center group/handle"
+                :style="{ left: (assetForm.trimStart ?? 0) * 100 + '%' }"
+                @mousedown.stop="startDragTrim($event, assetForm, 'start')"
+              >
+                <div class="w-0.5 h-full bg-blue-500 group-hover/handle:w-1 transition-all"></div>
+              </div>
+              <div
+                class="absolute top-0 bottom-0 w-4 -ml-2 cursor-ew-resize pointer-events-auto hover:bg-red-500/10 transition-colors flex justify-center group/handle"
+                :style="{ left: (assetForm.trimEnd ?? 1) * 100 + '%' }"
+                @mousedown.stop="startDragTrim($event, assetForm, 'end')"
+              >
+                <div class="w-0.5 h-full bg-red-500 group-hover/handle:w-1 transition-all"></div>
+              </div>
+              <div
+                v-if="previewPlayingFile === assetForm.filename"
+                class="absolute top-0 bottom-0 w-0.5 bg-green-500 z-20 pointer-events-none shadow-[0_0_4px_rgba(34,197,94,0.8)]"
+                :style="{ left: (playbackProgress * 100) + '%' }"
+              ></div>
             </div>
           </div>
-          <div class="flex gap-2 flex-shrink-0 ml-2">
-            <button class="text-xs text-slate-400 hover:text-green-600 mr-1" title="试听" @click="playPreview(asset)">
-              <svg
-                v-if="previewPlayingFile === asset.filename"
-                class="h-4 w-4 text-green-600"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <svg v-else class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fill-rule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </button>
-            <button class="text-xs text-blue-600 hover:underline font-medium" @click="editAsset(asset)">编辑</button>
-            <button class="text-xs text-red-500 hover:underline font-medium" @click="deleteAsset(asset.id)">删除</button>
-          </div>
+          <div class="text-[10px] text-slate-400 mt-1 text-right">提示：拖动红蓝线条裁剪音频，点击保存后生效</div>
         </div>
-      </div>
-      <div v-if="assetLibrary.length === 0" class="col-span-full text-center py-8 text-slate-400 text-sm">{{ emptyLabel }}</div>
+
+        <el-space>
+          <el-button type="primary" @click.prevent="saveAsset">
+            <el-icon><Check /></el-icon>
+            <span>{{ saveLabel }}</span>
+          </el-button>
+          <el-button v-if="isEditing" @click="resetAssetForm">
+            <el-icon><Close /></el-icon>
+            <span>取消</span>
+          </el-button>
+        </el-space>
+      </el-form>
+    </el-card>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
+      <el-card v-for="asset in assetLibrary" :key="asset.id" shadow="hover">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex items-start gap-3 min-w-0">
+            <el-checkbox v-model="asset.enabled" title="启用/禁用此资源" />
+            <div class="min-w-0">
+              <div class="font-bold text-slate-800 text-sm">{{ asset.name }}</div>
+              <div class="text-xs text-slate-500 mt-0.5">{{ asset.description }}</div>
+              <div class="text-xs text-slate-400 mt-1 break-all">{{ asset.filename }}</div>
+            </div>
+          </div>
+          <el-space>
+            <el-button :type="previewPlayingFile === asset.filename ? 'success' : 'info'" link @click="playPreview(asset)">
+              {{ previewPlayingFile === asset.filename ? '停止' : '试听' }}
+            </el-button>
+            <el-button type="primary" link @click="editAsset(asset)">编辑</el-button>
+            <el-button type="danger" link @click="deleteAsset(asset.id)">删除</el-button>
+          </el-space>
+        </div>
+      </el-card>
+      <el-empty v-if="assetLibrary.length === 0" class="col-span-full" :description="emptyLabel" />
     </div>
   </section>
 </template>

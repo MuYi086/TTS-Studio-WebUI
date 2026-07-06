@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @fileoverview 脚本输入与批量控制面板
- * @description 管理原文输入、LLM 分析、控制块插入、批量配音与顺序播放入口
+ * @description 使用 Element Plus 管理原文输入、LLM 分析、控制块插入、批量配音与顺序播放入口
  * @module src/components/workbench/script/ScriptInputPanel
  */
 import { computed } from 'vue'
@@ -39,105 +39,103 @@ const sequencePlaybackLabel = computed(() =>
 </script>
 
 <template>
-  <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-    <div class="flex justify-between items-center mb-4">
-      <h3 class="text-sm font-bold text-slate-700">1. 输入原文 / 小说片段</h3>
-    </div>
+  <el-card shadow="never">
+    <template #header>
+      <div class="font-bold text-slate-700">1. 输入原文 / 小说片段</div>
+    </template>
 
-    <textarea
+    <el-input
       v-model="rawScript"
-      class="w-full p-4 border rounded-xl h-48 mb-4 focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-slate-50 text-sm leading-relaxed"
+      type="textarea"
+      :rows="9"
+      resize="vertical"
       placeholder="请粘贴小说内容或剧本原文..."
-    ></textarea>
+      class="mb-4"
+    />
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
-        <div class="font-bold text-xs text-slate-700">AI 深度分析</div>
-        <select
-          v-model="currentConfigId"
-          class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white w-full"
-          title="选择用于分析的 LLM 模型"
-        >
-          <option value="" disabled>-- 选择LLM模型 --</option>
-          <option v-for="conf in llmConfigs" :key="conf.id" :value="conf.id">{{ conf.name }}</option>
-        </select>
-        <button
-          :class="['w-full px-3 py-2 text-white rounded-lg text-sm font-bold transition-all flex items-center justify-center', isAnalyzingScript ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50']"
-          @click="analyzeScript"
-        >
-          <span v-if="isAnalyzingScript" class="animate-spin mr-2">...</span>
-          {{ isAnalyzingScript ? '停止分析' : 'AI 深度分析' }}
-        </button>
-      </div>
+    <el-row :gutter="12">
+      <el-col :xs="24" :md="8">
+        <el-card shadow="never">
+          <div class="font-bold text-xs text-slate-700 mb-2">AI 深度分析</div>
+          <el-space direction="vertical" fill class="w-full">
+            <el-select v-model="currentConfigId" placeholder="选择LLM模型" class="w-full">
+              <el-option v-for="conf in llmConfigs" :key="conf.id" :label="conf.name" :value="conf.id" />
+            </el-select>
+            <el-button
+              class="w-full"
+              :type="isAnalyzingScript ? 'danger' : 'primary'"
+              @click="analyzeScript"
+            >
+              {{ isAnalyzingScript ? '停止分析' : 'AI 深度分析' }}
+            </el-button>
+          </el-space>
+        </el-card>
+      </el-col>
 
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
-        <div class="font-bold text-xs text-slate-700">插入控制块</div>
-        <div class="flex flex-wrap gap-2">
-          <button class="px-2 py-2 bg-blue-100 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-200 transition-all" @click="addDialogueBlock">+ 插入台词</button>
-          <button class="px-2 py-2 bg-purple-100 text-purple-600 rounded-lg text-sm font-bold hover:bg-purple-200 transition-all" @click="addBgmBlock">+ 插入BGM</button>
-          <button class="px-2 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-200 transition-all" @click="addBgImageBlock">+ 插入背景图片</button>
-        </div>
-        <div class="flex flex-wrap items-center gap-2 px-2 py-2 bg-white border border-slate-200 rounded-lg">
-          <label class="text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">背景图片数量</label>
-          <input
-            v-model.number="bgImageCount"
-            type="number"
-            min="0"
-            max="100"
-            class="w-20 px-2 py-1 border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
-            title="LLM 将严格插入的 bgImage 块数量"
-          />
-          <span class="text-[10px] text-slate-400 whitespace-nowrap">张</span>
-          <span class="text-[10px] text-slate-400 ml-2">（若需关闭，可从Prompt管理中删除背景图片块相关提示词）</span>
-        </div>
-      </div>
+      <el-col :xs="24" :md="8">
+        <el-card shadow="never">
+          <div class="font-bold text-xs text-slate-700 mb-2">插入控制块</div>
+          <el-space wrap class="mb-3">
+            <el-button type="primary" plain @click="addDialogueBlock">
+              <el-icon><Plus /></el-icon>
+              <span>插入台词</span>
+            </el-button>
+            <el-button type="warning" plain @click="addBgmBlock">
+              <el-icon><Plus /></el-icon>
+              <span>插入BGM</span>
+            </el-button>
+            <el-button type="success" plain @click="addBgImageBlock">
+              <el-icon><Plus /></el-icon>
+              <span>插入背景图片</span>
+            </el-button>
+          </el-space>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">背景图片数量</span>
+            <el-input-number v-model="bgImageCount" :min="0" :max="100" size="small" />
+            <span class="text-[10px] text-slate-400">张</span>
+          </div>
+        </el-card>
+      </el-col>
 
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
-        <div class="font-bold text-xs text-slate-700">配音与播放</div>
-        <select
-          v-model="currentTtsConfigId"
-          class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white w-full"
-          title="选择用于生成的 TTS 服务"
-        >
-          <option value="" disabled>-- 选择 TTS 模型 --</option>
-          <option v-for="conf in ttsConfigs" :key="conf.id" :value="conf.id">{{ conf.name }}</option>
-        </select>
-
-        <div class="flex flex-wrap gap-2">
-          <button
-            :disabled="isSequencePlaying"
-            :class="['flex-1 px-2 py-2 text-white rounded-lg text-sm font-bold transition-all flex items-center justify-center', isGeneratingAll ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700 disabled:opacity-50']"
-            @click="generateAllLines"
-          >
-            <span v-if="isGeneratingAll" class="animate-spin mr-2">...</span>
-            {{ generateAllButtonLabel }}
-          </button>
-          <button
-            :disabled="isSequencePlaying || isGeneratingAll"
-            class="px-2 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 disabled:opacity-50 transition-all flex items-center justify-center"
-            @click="clearAllGeneratedAudio"
-          >
-            清空配音
-          </button>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-if="!isSequencePlaying"
-            class="flex-1 px-2 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 disabled:opacity-50 transition-all"
-            @click="playScriptSequentially"
-          >
-            {{ sequencePlaybackLabel }}
-          </button>
-          <button
-            v-else
-            class="flex-1 px-2 py-2 bg-red-500 text-white rounded-lg text-sm font-bold hover:bg-red-600 transition-all"
-            @click="stopScriptSequentially"
-          >
-            停止播放
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+      <el-col :xs="24" :md="8">
+        <el-card shadow="never">
+          <div class="font-bold text-xs text-slate-700 mb-2">配音与播放</div>
+          <el-space direction="vertical" fill class="w-full">
+            <el-select v-model="currentTtsConfigId" placeholder="选择 TTS 模型" class="w-full">
+              <el-option v-for="conf in ttsConfigs" :key="conf.id" :label="conf.name" :value="conf.id" />
+            </el-select>
+            <el-button
+              class="w-full"
+              :disabled="isSequencePlaying"
+              :type="isGeneratingAll ? 'danger' : 'success'"
+              @click="generateAllLines"
+            >
+              {{ generateAllButtonLabel }}
+            </el-button>
+            <el-button
+              class="w-full"
+              type="danger"
+              plain
+              :disabled="isSequencePlaying || isGeneratingAll"
+              @click="clearAllGeneratedAudio"
+            >
+              清空配音
+            </el-button>
+            <el-button
+              v-if="!isSequencePlaying"
+              class="w-full"
+              type="primary"
+              :disabled="isGeneratingAll"
+              @click="playScriptSequentially"
+            >
+              {{ sequencePlaybackLabel }}
+            </el-button>
+            <el-button v-else class="w-full" type="danger" @click="stopScriptSequentially">
+              停止播放
+            </el-button>
+          </el-space>
+        </el-card>
+      </el-col>
+    </el-row>
+  </el-card>
 </template>

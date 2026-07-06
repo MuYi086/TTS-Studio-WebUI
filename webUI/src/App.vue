@@ -14,6 +14,9 @@ import * as Mp4Muxer from 'mp4-muxer'
 import { useAppConfigStore } from './stores/appConfig'
 import { INTENSITY_VALUE_MAP, SYSTEM_EMOTIONS, isSystemEmotion } from './constants/emotions'
 import { useImagePreview } from './composables/useImagePreview'
+import { useModelConfigs } from './composables/useModelConfigs'
+import { usePromptTemplates } from './composables/usePromptTemplates'
+import { useResourceLibraries } from './composables/useResourceLibraries'
 import { useScriptWorkspace } from './composables/useScriptWorkspace'
 import { useStageBackground } from './composables/useStageBackground'
 import { getJson, postBlob, postForm, postJson } from './utils/http'
@@ -110,50 +113,78 @@ const activeTab = ref(appConfigStore.defaultTab);
 watch(activeTab, (newValue) => {
     localStorage.setItem('storyforge_activeTab', newValue);
 });
-const llmConfigs = ref([]);
-const currentConfigId = ref('');
+const {
+    llmConfigs,
+    currentConfigId,
+    form,
+    isEditing,
+    currentConfig,
+    saveConfig,
+    editConfig,
+    deleteConfig,
+    resetForm,
+    ttsConfigs,
+    currentTtsConfigId,
+    ttsForm,
+    isEditingTts,
+    currentTtsConfig,
+    saveTtsConfig,
+    editTtsConfig,
+    deleteTtsConfig,
+    resetTtsForm
+} = useModelConfigs();
 
-watch(currentConfigId, (newId) => {
-    if (newId) localStorage.setItem('unitale_llmConfigId', newId);
+const {
+    characters,
+    addCharacter,
+    deleteCharacter,
+    timbres,
+    timbreForm,
+    isEditingTimbre,
+    handleTimbreFileUpload,
+    syncTimbresWithServer,
+    saveTimbre,
+    editTimbre,
+    deleteTimbre,
+    resetTimbreForm,
+    emotionPresets,
+    emotionForm,
+    isEditingEmotion,
+    saveEmotion,
+    editEmotion,
+    deleteEmotion,
+    resetEmotionForm,
+    sfxLibrary,
+    sfxForm,
+    isEditingSfx,
+    saveSfx,
+    editSfx,
+    deleteSfx,
+    resetSfxForm,
+    handleSfxFileUpload,
+    bgmLibrary,
+    bgmForm,
+    isEditingBgm,
+    saveBgm,
+    editBgm,
+    deleteBgm,
+    resetBgmForm,
+    handleBgmFileUpload,
+    filterLibrary,
+    filterForm,
+    isEditingFilter,
+    saveFilter,
+    editFilter,
+    deleteFilter,
+    resetFilterForm
+} = useResourceLibraries({
+    getLocalFileMap: () => localFileMap.value,
+    loadAudioBuffer: (filename) => loadAudioBuffer(filename),
+    triggerAutoSave,
+    currentTtsConfig,
+    currentTtsConfigId,
+    ttsConfigs
 });
-
-// 表单状态
-const form = ref({ id: '', name: '', baseUrl: '', model: '', key: '', params: '' });
-const isEditing = ref(false);
-
-// TTS 配置状态
-const ttsConfigs = ref([]);
-const ttsForm = ref({ id: '', name: '', baseUrl: '' });
-const isEditingTts = ref(false);
-
-// 角色库状态
-const characters = ref([]);
-
-// 音色库状态
-const timbres = ref([]);
-const timbreForm = ref({ id: '', name: '', description: '', refPath: '' });
-const isEditingTimbre = ref(false);
-const selectedTimbreId = ref('');
-const timbreFile = ref(null); // ADDED: To store the selected timbre file object
-
-// 情绪预设状态
-const emotionPresets = ref([]);
-const emotionForm = ref({ id: '', name: '', vector: [0, 0, 0, 0, 0, 0, 0, 0] });
-const isEditingEmotion = ref(false);
-// 音效库状态
-const sfxLibrary = ref([]);
-const sfxForm = ref({ id: '', name: '', description: '', filename: '', trimStart: 0, trimEnd: 1, volume: 0.3 });
-const isEditingSfx = ref(false);
-
-// BGM库状态
-const bgmLibrary = ref([]);
-const bgmForm = ref({ id: '', name: '', description: '', filename: '', trimStart: 0, trimEnd: 1, volume: 0.3 });
-const isEditingBgm = ref(false);
-
-// 滤波器库状态
-const filterLibrary = ref([]);
-const filterForm = ref({ id: '', name: '', description: '', type: 'lowpass', frequency: 1000, Q: 1, gain: 0 });
-const isEditingFilter = ref(false);
 
 // 聊天状态
 const prompt = ref('');
@@ -162,13 +193,6 @@ const reasoning = ref('');
 const error = ref('');
 const loading = ref(false);
 const abortController = ref(null);
-
-// TTS 状态
-const currentTtsConfigId = ref('');
-
-watch(currentTtsConfigId, (newId) => {
-    if (newId) localStorage.setItem('unitale_ttsConfigId', newId);
-});
 
 const ttsRefFile = ref(null);
 const ttsRefPath = ref('uploaded/ref.wav'); // 默认路径示例
@@ -253,141 +277,23 @@ const isRestoring = ref(false); // 新增：恢复数据时的锁
 // 剪辑拖拽状态
 const draggingTrimState = ref(null);
 
-// 计算当前选中的配置
-const currentConfig = computed(() => {
-    return llmConfigs.value.find(c => c.id === currentConfigId.value) || null;
-});
-
-// Prompt Template
-const defaultPromptTemplate = `你的任务是将给定小说内容拆分为台词和旁白，并自动识别每一句台词的角色和情绪。
-**注意：生成的结果将直接用于 IndexTTS 语音合成系统，请严格从指定的情绪列表中选择，不要自行生成情绪描述文本。**
-
-\${sfxSection}
-
-\${bgmSection}
-
-\${filterSection}
-
-# 情绪与强度设置 (Emotion & Intensity)
-请为每一句台词（包括旁白）选择一个最合适的情绪和强度。
-
-1. **可选情绪 (Emotion)**: \${emotionList}
-   - **注意**: 必须严格从上述列表中选择，**严禁**编造列表之外的情绪名称。
-   - 旁白通常选择 "平静"，也可根据氛围选择其他情绪。
-
-2. **可选强度 (Intensity)**: 微弱, 稍弱, 中等, 较强, 强烈
-   - 请根据上下文判断情绪的强烈程度。
-   - **旁白强度**: 如果旁白有情绪（如伤心、害怕），强度必须很弱（建议选择 "微弱" 或 "稍弱"）。如果旁白是 "平静" 情绪，强度应为 "中等"。
-
-# 规则
-
-## 1. 拆分与识别
-- **完整保留**: 必须完整保留原文内容，不得遗漏、删改或省略任何字句。
-- **严禁删改**: **绝对禁止**删除原文中的说话人提示语（如“他低声说”、“笑着问道”）。这些内容必须作为“旁白”单独提取出来。
-- **内容提取**: 提取对话内容和所有非对话的旁白。
-- **角色识别**: 根据小说内容分析说话人。旁白的角色名统一标记为“旁白”。
-- **长度控制**: 文本拆分长度要适中。**避免过碎**（不要把每一句短句都拆成独立一行），也**避免过长**（单行文本建议不超过 50-80 字，过长的旁白请在句号处适当拆分）。
-- **旁白处理**: 连续的旁白内容应优先合并，除非中间需要插入音效、有明显的时间跳跃，或合并后长度过长。
-
-## 3. 音效插入 (sfx)
-- 如果情节需要（如“摔门而去”、“雷声大作”），且音效库中有对应素材，请在 JSON 对象中添加 \`sfx\` 字段。
-- **严格限制**: 只能使用【音效库】中列出的名称。如果库为空或没有匹配项，**绝对不要**添加此字段。
-- **禁止混用**: **绝对禁止**在 \`sfx\` 字段中使用【背景音乐库】中的名称。SFX 只能使用【音效库】的内容。
-- **支持多音效**: 一句台词中可以插入多个音效，只要位置合理（如开头关门，中间脚步声）。
-- 格式: \`"sfx": [{"name": "音效名称", "position": 0.5}, {"name": "另一音效", "position": 0.9}]\`
-- \`position\`: 0.0-1.0 之间的浮点数，表示音效在**台词念白时长内**的插入位置（例如 0.0 为开始，1.0 为念白结束）。
-- **重要**: \`position\` 计算**不包含** \`break_duration\`（停顿时间）。即 1.0 代表台词说完的那一刻，而不是停顿结束的那一刻。
-- **间隔音效**: 如果音效发生在台词后的停顿期间，请将其加入该台词的 \`sfx\` 列表，位置设为 1.0。
-- **特别重要** 尽量给每句都配上合适的SFX音效，如果有的话
-
-## 4. 背景音乐控制 (BGM Control)
-- **开头BGM**: 请**务必**在脚本的最开始尝试匹配并插入一个适合当前氛围的 BGM。只要【背景音乐库】中有合适的，就**必须**插入。
-- 当剧情氛围发生变化，需要切换或停止背景音乐时，请插入一个独立的 BGM 控制对象。
-- **格式**: \`{"type": "bgm", "action": "play", "name": "BGM名称"}\` 或 \`{"type": "bgm", "action": "stop"}\`
-- **严格限制**:
-  - \`name\` 字段**必须完全等于**【背景音乐库】中列出的某一个名称。
-  - **禁止混用**: **绝对禁止**在 BGM 控制块中使用【音效库】中的名称。BGM 只能使用【背景音乐库】的内容。
-  - 如果【背景音乐库】为空，或者没有匹配的音乐，**绝对不要**生成 action="play" 的控制块。
-  - 禁止使用 "MysteriousBGM", "SadPiano" 等示例中出现但库里没有的名称。
-- **注意**: 不要将 bgm 字段放在台词对象中。
-- 请多切换BGM，体现多样性
-
-- **停顿时间**: 分析台词后的剧情节奏，设置该台词结束后的停顿时间（秒）。
-- 默认为 0。如果有动作描写或心理活动暗示停顿，请设置相应时长（如 0.5, 1.0, 2.0）。
-- 示例: 两人对话间的尴尬沉默，或动作描写（如“他喝了一口茶”）需要的时间。
-
-## 5. 音频滤波器 (Filter)
-- 如果剧情环境特殊（如“在水下说话”、“电话通话中”、“回忆/内心独白”），且【滤波器库】中有对应效果，请在台词对象中添加 \`filter\` 字段。
-- **格式**: \`"filter": "滤波器名称"\`
-- **严格限制**: 必须使用【滤波器库】中存在的名称。如果没有匹配项，**不要**生成此字段。
-- **特别提醒**: 如果角色是“旁白”，**千万不要**使用滤波器功能。
-
-## 6. 输出格式
-- **严格 JSON**: 输出格式必须是严格的 JSON 数组，不包含任何额外说明或代码块标记。
-- **数组元素**: 必须是以下两种对象之一：
-  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "...", "emotion": "...", "intensity": "...", "break_duration": 0, "filter": "...", "sfx": [...]}\`
-  2. **BGM对象**: \`{"type": "bgm", "action": "play", "name": "..."}\` 或 \`{"type": "bgm", "action": "stop"}\`
-  - **严禁生成** \`{"type": "sfx", ...}\` 这种独立音效块。音效必须包含在台词对象的 \`sfx\` 字段中。
-
-
-## 7. 背景图片块 (bgImage)
-- **插入时机**: 当场景氛围、地点、时间（白天/夜晚）、或叙事视角发生变化时，请在相邻的台词对象之间插入一个背景图片对象。
-- **插入位置**: 背景图片对象必须出现在“某个台词对象之后”并且“紧接着下一个台词对象之前”（不要插到台词组的内部）。
-- **对象格式**: \`{"type":"bgImage","image_prompt":"..."}\`
-  - \`image_prompt\` 必须是用于生成图片的**中文提示词**，并且必须根据当前小说上下文生成（包含：场景/地点、人物外观与表情（如果画面中需要人物）、衣着风格、光线、画面构图、镜头感、氛围与情绪、画风偏好等）。
-  - **提示词质量**: \`image_prompt\` 只输出中文、不要输出任何 JSON/代码/多余解释，尽量是一段可直接用于“生成图片”的提示文本（越具体越好，避免“可能/也许/看起来”之类不确定词）。
-  - **人物一致性（严格统一）**: 如果 \`image_prompt\` 中出现人物（包括面部/身体/衣着等可识别外观），则必须对每个出现人物给出“统一人物外观设定”，并且同一人物在所有 \`bgImage\` 块中必须保持完全一致：性别、年龄（或年龄段）、服装款式/颜色/材质、发型（发色/发长）、标志性特征/配饰（如有）。为保证一致性，你必须把人物外观设定写成同一种中文短句模板，并且对同名人物要求“逐字不变”（不要同义改写）：
-    - 模板示例：\`人物外观设定：{角色名}（性别=...，年龄=...，服装=...，发型=...，标志=...，主要配色=...）\`
-  - 角色名判定规则：\`{角色名}\` 必须使用当前背景图片所处场景中最近一次出现的 \`dialogue\` 对象的 \`role_name\`（例如“老李”“我”“旁白”等），同一 \`role_name\` 即视为同一人物。
-  - 除非当场景完全不出现该人物，否则不要省略其外观设定；否则可能导致不同图片出现“同一个人物外观不一致”。
-  - 提示词只需要中文，不需要输出图片数据或链接。
-- **字段限制**: \`bgImage\` 对象只输出上述必要字段（至少必须有 \`type\` 与 \`image_prompt\`）。
-- **与第 6 点兼容**: 即使第 6 点列出了两种对象，本规则要求你额外输出 \`type":"bgImage"\` 的第三种对象；最终仍然是一个严格 JSON 数组。
-- **type 字段严格性**: \`type\` 字段必须严格等于 \`bgImage\`（大小写不要改）。
-- **数量约束（严格遵守）**: 请在整个 JSON 数组中严格插入且仅插入 \${bgImageCount} 个 \`type":"bgImage"\` 对象，并且它们必须全部与剧情相关（不能随便凑数）。
-- **开场强制**: 第一个 \`bgImage\` 对象必须出现在“第一个 dialogue 对象之前”，用于视频开场背景；允许开头存在 \`bgm\` 控制块，但 \`bgImage\` 仍必须早于第一个 \`dialogue\`。
-- **分布要求**: 除开场第一张外，其余 \`bgImage\` 必须按照剧情节奏插入在台词之间（至少间隔一个 \`dialogue\`），避免连续出现多个 \`bgImage\`。
-- **例外开场**: 允许第一个 \`bgImage\` 作为开场背景，放在第一个 \`dialogue\` 之前；其余 \`bgImage\` 仍按“某个台词对象之后并紧接着下一个台词对象之前”的相邻插入规则执行。
-
-
-## 小说原文:
-<novel_content>
-“别接那个电话！”老李猛地按住了我的手，脸色惨白，“那是昨晚值班的小张打来的。”
-我愣住了，看着办公桌上疯狂震动的座机：“可是……小张不是今早已经确认死亡了吗？”
-“对，”老李的声音在发抖，“所以，别接。如果你接了，他会问你为什么不救他。”
-</novel_content>
-
-## 输出:
-[
-\${bgmExampleLine}
-  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion": "害怕", "intensity": "强烈", "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "平静", "intensity": "中等", "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion": "害怕", "intensity": "较强", "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "平静", "intensity": "中等", "break_duration": 0\${sfxExample}},
-  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion": "惊喜", "intensity": "微弱", "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion": "低落", "intensity": "中等", "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "平静", "intensity": "中等", "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion": "害怕", "intensity": "强烈", "break_duration": 0}
-]
-
-# 输入内容
-
-## 小说原文:
-<novel_content>
-\${rawScript}
-</novel_content>`;
-
-const customPromptTemplate = ref(defaultPromptTemplate);
-const useCustomPrompt = ref(false);
-
-const defaultVoicePromptTemplate = `请根据以下小说片段，简要描述角色“\${charName}”的音色特征。\n要求：必须要带上性别，对音色的描述文本非常精炼，控制在20字以内。重点描述声音的物理质感（如声线粗细、年龄感、沙哑/清脆等），不要包含过多的性格或情绪描写。直接输出描述，不要废话。\n\n小说片段：\n\${rawScript}`;
-
-const customVoicePromptTemplate = ref(defaultVoicePromptTemplate);
-const useCustomVoicePrompt = ref(false);
-
-const defaultQwenVoiceTextTemplate = "我是${charName}，初次见面，请多多指教。正在进行声线校准测试，一，二，三。这段音频将作为我的基准音色，希望能完美演绎接下来的故事，请多关照。";
-const customQwenVoiceTextTemplate = ref(defaultQwenVoiceTextTemplate);
-const useCustomQwenVoiceText = ref(false);
+const {
+    customPromptTemplate,
+    useCustomPrompt,
+    scriptPromptTemplate,
+    customVoicePromptTemplate,
+    useCustomVoicePrompt,
+    voicePromptTemplate,
+    customQwenVoiceTextTemplate,
+    useCustomQwenVoiceText,
+    qwenVoiceTextTemplate,
+    savePrompt,
+    saveVoicePrompt,
+    resetPrompt,
+    resetVoicePrompt,
+    saveQwenVoiceText,
+    resetQwenVoiceText
+} = usePromptTemplates();
 
 // ==================== Audio Engine & Cache ====================
 
@@ -646,68 +552,6 @@ watch(bgImageCount, () => {
 
 // 读取持久化配置
 onMounted(async () => {
-
-     // 仅保留 LLM 和 TTS 的配置持久化 (API Key 等)
-     const savedList = localStorage.getItem('storyforge_configs');
-     if (savedList) {
-         llmConfigs.value = JSON.parse(savedList);
-     } else {
-         // 迁移旧数据或初始化默认
-         const oldSingle = localStorage.getItem('storyforge_universal_v2');
-         if (oldSingle) {
-             const c = JSON.parse(oldSingle);
-             llmConfigs.value.push({ ...c, id: Date.now().toString(), name: '默认配置' });
-             localStorage.removeItem('storyforge_universal_v2');
-         }
-     }
- 
-     const savedLlmId = localStorage.getItem('unitale_llmConfigId');
-     if (savedLlmId && llmConfigs.value.some(c => c.id === savedLlmId)) {
-         currentConfigId.value = savedLlmId;
-     } else if (llmConfigs.value.length > 0) {
-         currentConfigId.value = llmConfigs.value[0].id;
-     }
- 
-     // 读取 TTS 配置
-     const savedTts = localStorage.getItem('storyforge_tts_configs');
-     if (savedTts) ttsConfigs.value = JSON.parse(savedTts);
- 
-     const savedTtsId = localStorage.getItem('unitale_ttsConfigId');
-     if (savedTtsId && ttsConfigs.value.some(c => c.id === savedTtsId)) {
-         currentTtsConfigId.value = savedTtsId;
-     } else if (ttsConfigs.value.length > 0) {
-         currentTtsConfigId.value = ttsConfigs.value[0].id;
-     }
- 
-     // 初始化默认滤波器
-     filterLibrary.value = [
-         { id: 'f1', name: '电话音', description: '模拟电话通话时的窄频带声音', type: 'bandpass', frequency: 1700, Q: 1.5, gain: 0, enabled: true },
-         { id: 'f2', name: '水下', description: '模拟在水下听到的闷声', type: 'lowpass', frequency: 400, Q: 1, gain: 0, enabled: true },
-         { id: 'f3', name: '老广播', description: '模拟老式收音机或广播的尖锐声音', type: 'highpass', frequency: 1500, Q: 1, gain: 0, enabled: true },
-         { id: 'f4', name: '机械失真', description: '模拟机器人或设备损坏时的失真声音', type: 'distortion', frequency: 1000, Q: 1, gain: 50, enabled: true }
-     ];
- 
-     // 初始化默认情绪
-     emotionPresets.value = [...SYSTEM_EMOTIONS];
- 
-     const savedPrompt = localStorage.getItem('storyforge_prompt_template');
-     if (savedPrompt) customPromptTemplate.value = savedPrompt;
- 
-     const savedUseCustom = localStorage.getItem('storyforge_use_custom_prompt');
-     if (savedUseCustom) useCustomPrompt.value = JSON.parse(savedUseCustom);
- 
-     const savedVoicePrompt = localStorage.getItem('storyforge_voice_prompt_template');
-     if (savedVoicePrompt) customVoicePromptTemplate.value = savedVoicePrompt;
- 
-     const savedUseCustomVoice = localStorage.getItem('storyforge_use_custom_voice_prompt');
-     if (savedUseCustomVoice) useCustomVoicePrompt.value = JSON.parse(savedUseCustomVoice);
- 
-     const savedQwenText = localStorage.getItem('storyforge_qwen_voice_text_template');
-     if (savedQwenText) customQwenVoiceTextTemplate.value = savedQwenText;
- 
-     const savedUseCustomQwen = localStorage.getItem('storyforge_use_custom_qwen_voice_text');
-     if (savedUseCustomQwen) useCustomQwenVoiceText.value = JSON.parse(savedUseCustomQwen);
-
      const savedBgImageCount = localStorage.getItem('unitale_bgImageCount');
      if (savedBgImageCount !== null) {
          const parsedBgImageCount = Number(savedBgImageCount);
@@ -838,111 +682,7 @@ onMounted(async () => {
      }
 });
 
-const currentTtsConfig = computed(() => {
-    return ttsConfigs.value.find(c => c.id === currentTtsConfigId.value) || null;
-});
-
-// --- 配置管理逻辑 ---
-const saveConfigsToLocal = () => {
-    localStorage.setItem('storyforge_configs', JSON.stringify(llmConfigs.value));
-};
-
-const saveConfig = () => {
-    if (!form.value.name || !form.value.baseUrl || !form.value.key) {
-        return alert('请填写完整信息');
-    }
-
-    form.value.baseUrl = form.value.baseUrl.trim();
-    form.value.key = form.value.key.trim();
-
-    if (isEditing.value) {
-        const index = llmConfigs.value.findIndex(c => c.id === form.value.id);
-        if (index !== -1) llmConfigs.value[index] = { ...form.value };
-    } else {
-        llmConfigs.value.push({ ...form.value, id: Date.now().toString() });
-    }
-
-    saveConfigsToLocal();
-    resetForm();
-
-    // 如果是第一个，自动选中
-    if (llmConfigs.value.length === 1) {
-        currentConfigId.value = llmConfigs.value[0].id;
-    }
-};
-
-const editConfig = (conf) => {
-    form.value = { ...conf };
-    isEditing.value = true;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-
-const deleteConfig = (id) => {
-    if (!confirm('确定删除此配置吗？')) return;
-    llmConfigs.value = llmConfigs.value.filter(c => c.id !== id);
-    saveConfigsToLocal();
-    if (currentConfigId.value === id) currentConfigId.value = '';
-};
-
-const resetForm = () => {
-    form.value = { id: '', name: '', baseUrl: '', model: '', key: '', params: '' };
-    isEditing.value = false;
-};
-
-// --- TTS 配置管理逻辑 ---
-const saveTtsConfigsToLocal = () => {
-    localStorage.setItem('storyforge_tts_configs', JSON.stringify(ttsConfigs.value));
-};
-
-const saveTtsConfig = () => {
-    if (!ttsForm.value.name || !ttsForm.value.baseUrl) {
-        return alert('请填写完整信息');
-    }
-
-    ttsForm.value.baseUrl = ttsForm.value.baseUrl.trim();
-
-    if (isEditingTts.value) {
-        const index = ttsConfigs.value.findIndex(c => c.id === ttsForm.value.id);
-        if (index !== -1) ttsConfigs.value[index] = { ...ttsForm.value };
-    } else {
-        ttsConfigs.value.push({ ...ttsForm.value, id: Date.now().toString() });
-    }
-
-    saveTtsConfigsToLocal();
-    resetTtsForm();
-};
-
-const editTtsConfig = (conf) => {
-    ttsForm.value = { ...conf };
-    isEditingTts.value = true;
-};
-
-const deleteTtsConfig = (id) => {
-    if (!confirm('确定删除此 TTS 配置吗？')) return;
-    ttsConfigs.value = ttsConfigs.value.filter(c => c.id !== id);
-    saveTtsConfigsToLocal();
-};
-
-const resetTtsForm = () => {
-    ttsForm.value = { id: '', name: '', baseUrl: '' };
-    isEditingTts.value = false;
-};
-
-// ==================== Character & Timbre Workflow ====================
-
-const addCharacter = () => {
-    characters.value.push({
-        id: Date.now().toString(),
-        name: '新角色',
-        voiceFile: '', // Path for both display and synthesis
-        volume: 1.0
-    });
-};
-
-const deleteCharacter = (id) => {
-    if (!confirm('确定删除此角色吗？')) return;
-    characters.value = characters.value.filter(c => c.id !== id);
-};
+// ==================== Character Voice Workflow ====================
 
 /**
  * 调用 LLM 为角色生成音色描述文本。
@@ -963,8 +703,7 @@ const analyzeCharacterVoice = async (char) => {
     char.abortController = controller;
 
     try {
-        const templateToUse = useCustomVoicePrompt.value ? customVoicePromptTemplate.value : defaultVoicePromptTemplate;
-        const promptText = templateToUse
+        const promptText = voicePromptTemplate.value
             .replace(/\${charName}/g, char.name)
             .replace(/\${rawScript}/g, rawScript.value.substring(0, 3000));
 
@@ -1015,8 +754,7 @@ const generateQwenVoice = async (char) => {
         const cfg = currentTtsConfig.value;
         const baseUrl = toTtsBaseUrl(cfg.baseUrl);
 
-        const template = useCustomQwenVoiceText.value ? customQwenVoiceTextTemplate.value : defaultQwenVoiceTextTemplate;
-        const textToUse = template.replace(/\${charName}/g, char.name).replace(/\${char\.name}/g, char.name);
+        const textToUse = qwenVoiceTextTemplate.value.replace(/\${charName}/g, char.name).replace(/\${char\.name}/g, char.name);
 
         const payload = {
             voice_description: char.voiceDescription,
@@ -1089,321 +827,6 @@ const generateQwenVoice = async (char) => {
         delete char.abortController;
     }
 };
-
-
-const handleTimbreFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-        timbreForm.value.refPath = file.name;
-        timbreFile.value = file; // Store the file object
-        localFileMap.value.set(file.name, file);
-        saveAssetToDB(file.name, file); // Save to DB
-        triggerAutoSave();
-    }
-    event.target.value = ''; // Reset file input
-};
-
-// --- 音色库管理逻辑 ---
-
-/**
- * 将本地音色资源同步到当前 TTS 服务端。
- * @returns {Promise<void>}
- */
-const syncTimbresWithServer = async () => {
-    // 尝试获取可用的 TTS 配置
-    let cfg = currentTtsConfig.value;
-    if (!cfg && ttsConfigs.value.length > 0) {
-        // 如果当前未选中，默认使用第一个
-        currentTtsConfigId.value = ttsConfigs.value[0].id;
-        cfg = ttsConfigs.value[0];
-    }
-
-    if (!cfg) {
-        console.warn("未找到可用的 TTS 配置，无法同步音色文件。");
-        return;
-    }
-
-    const baseUrl = toTtsBaseUrl(cfg.baseUrl);
-    console.log(`正在同步音色文件到服务器: ${baseUrl}`);
-
-    for (const t of timbres.value) {
-        if (!t.refPath) continue;
-
-        // 检查内存中是否有该文件
-        const file = localFileMap.value.get(t.refPath);
-        if (!file) {
-            console.warn(`音色文件未在内存中找到 (可能未导入或丢失): ${t.refPath}`);
-            continue;
-        }
-
-        try {
-            // 1. 检查服务器是否存在
-            const checkUrl = `${baseUrl}/v1/check/audio?file_name=${encodeURIComponent(t.refPath)}`;
-            const checkData = await getJson(checkUrl);
-            const exists = Boolean(checkData.exists);
-
-            // 2. 如果不存在，则上传
-            if (!exists) {
-                console.log(`正在上传缺失的音色文件: ${t.name} (${t.refPath})`);
-                const formData = new FormData();
-                formData.append('audio', file);
-                formData.append('full_path', t.refPath);
-
-                await postForm(`${baseUrl}/v1/upload_audio`, formData);
-            } else {
-                console.log(`音色文件已存在: ${t.name}`);
-            }
-        } catch (e) {
-            console.error(`同步音色 ${t.name} 失败:`, e);
-        }
-    }
-    console.log("音色同步完成。");
-};
-
-const saveTimbre = async () => {
-    if (!timbreForm.value.name || !timbreForm.value.refPath) {
-        return alert('请填写音色名称并选择一个参考音频文件');
-    }
-
-    // A file MUST be selected when creating a NEW timbre.
-    if (!isEditingTimbre.value && !timbreFile.value) {
-        return alert('创建新音色时，必须选择一个参考音频文件。');
-    }
-
-    const filename = timbreForm.value.refPath;
-
-    // 确定 ID (如果是新建，提前生成 ID 以便保存文件到本地存储)
-    let targetId = timbreForm.value.id;
-    if (!targetId) {
-        targetId = Date.now().toString();
-    }
-
-    try {
-        const newTimbreData = { ...timbreForm.value, id: targetId };
-
-        // After a potential upload, save the metadata.
-        if (isEditingTimbre.value) {
-            const index = timbres.value.findIndex(c => c.id === targetId);
-            if (index !== -1) {
-                timbres.value[index] = newTimbreData;
-            }
-        } else {
-            timbres.value.push(newTimbreData);
-        }
-        // saveTimbresToLocal(); // 不再持久化到 localStorage
-        resetTimbreForm();
-
-    } catch (e) {
-        console.error("保存音色时出错:", e);
-        alert(`保存音色失败: ${e.message}`);
-    }
-};
-
-const editTimbre = (timbre) => {
-    timbreForm.value = { ...timbre };
-    isEditingTimbre.value = true;
-    timbreFile.value = null; // Important: reset file on edit start
-};
-
-const deleteTimbre = async (id) => {
-    if (!confirm('确定删除此音色吗？')) return;
-    timbres.value = timbres.value.filter(c => c.id !== id);
-    // saveTimbresToLocal();
-    if (selectedTimbreId.value === id) selectedTimbreId.value = '';
-};
-
-const resetTimbreForm = () => {
-    timbreForm.value = { id: '', name: '', description: '', refPath: '' };
-    isEditingTimbre.value = false;
-    timbreFile.value = null; // Reset the stored file
-};
-
-// --- 音效库管理逻辑 ---
-// 移除 saveSfxToLocal
-
-const saveSfx = async () => {
-    if (!sfxForm.value.name || !sfxForm.value.filename) {
-        return alert('请填写音效名称和文件路径');
-    }
-
-    try {
-        if (isEditingSfx.value) {
-            const index = sfxLibrary.value.findIndex(s => s.id === sfxForm.value.id);
-            if (index !== -1) sfxLibrary.value[index] = { ...sfxForm.value };
-        } else {
-            sfxLibrary.value.push({ ...sfxForm.value, id: Date.now().toString(), enabled: true });
-        }
-        if (sfxForm.value.filename) loadAudioBuffer(sfxForm.value.filename);
-        // saveSfxToLocal();
-        resetSfxForm();
-    } catch (e) {
-        alert(`保存音效失败: ${e.message}`);
-    }
-};
-
-const editSfx = (sfx) => {
-    sfxForm.value = { trimStart: 0, trimEnd: 1, volume: 1.0, ...sfx };
-    isEditingSfx.value = true;
-};
-
-const deleteSfx = (id) => {
-    if (!confirm('确定删除？')) return;
-    sfxLibrary.value = sfxLibrary.value.filter(s => s.id !== id);
-};
-
-const resetSfxForm = () => {
-    sfxForm.value = { id: '', name: '', description: '', filename: '', trimStart: 0, trimEnd: 1, volume: 0.3 };
-    isEditingSfx.value = false;
-};
-
-const handleSfxFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-        sfxForm.value.filename = file.name;
-        sfxForm.value.trimStart = 0;
-        sfxForm.value.trimEnd = 1;
-        sfxForm.value.volume = 0.3;
-        localFileMap.value.set(file.name, file);
-        saveAssetToDB(file.name, file); // Save to DB
-        triggerAutoSave();
-        loadAudioBuffer(file.name);
-    }
-    event.target.value = '';
-};
-
-// --- BGM库管理逻辑 ---
-const saveBgmToLocal = () => {
-    localStorage.setItem('storyforge_bgm', JSON.stringify(bgmLibrary.value));
-};
-
-const saveBgm = async () => {
-    if (!bgmForm.value.name || !bgmForm.value.filename) {
-        return alert('请填写 BGM 名称和文件路径');
-    }
-
-    try {
-        if (isEditingBgm.value) {
-            const index = bgmLibrary.value.findIndex(s => s.id === bgmForm.value.id);
-            if (index !== -1) bgmLibrary.value[index] = { ...bgmForm.value };
-        } else {
-            bgmLibrary.value.push({ ...bgmForm.value, id: Date.now().toString(), enabled: true });
-        }
-        if (bgmForm.value.filename) loadAudioBuffer(bgmForm.value.filename);
-        // saveBgmToLocal();
-        resetBgmForm();
-    } catch (e) {
-        alert(`保存 BGM 失败: ${e.message}`);
-    }
-};
-
-const editBgm = (bgm) => {
-    bgmForm.value = { trimStart: 0, trimEnd: 1, volume: 1.0, ...bgm };
-    isEditingBgm.value = true;
-};
-
-const deleteBgm = (id) => {
-    if (!confirm('确定删除？')) return;
-    bgmLibrary.value = bgmLibrary.value.filter(s => s.id !== id);
-};
-
-const resetBgmForm = () => {
-    bgmForm.value = { id: '', name: '', description: '', filename: '', trimStart: 0, trimEnd: 1, volume: 0.3 };
-    isEditingBgm.value = false;
-};
-
-const handleBgmFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-        bgmForm.value.filename = file.name;
-        bgmForm.value.trimStart = 0;
-        bgmForm.value.trimEnd = 1;
-        bgmForm.value.volume = 0.3;
-        localFileMap.value.set(file.name, file);
-        saveAssetToDB(file.name, file); // Save to DB
-        triggerAutoSave();
-        loadAudioBuffer(file.name);
-    }
-    event.target.value = '';
-};
-
-// --- 滤波器库管理逻辑 ---
-const saveFiltersToLocal = () => {
-    localStorage.setItem('storyforge_filters', JSON.stringify(filterLibrary.value));
-};
-
-const saveFilter = () => {
-    if (!filterForm.value.name) return alert('请填写滤波器名称');
-
-    const newFilter = { ...filterForm.value };
-    // Ensure numbers
-    newFilter.frequency = Number(newFilter.frequency);
-    newFilter.Q = Number(newFilter.Q);
-    newFilter.gain = Number(newFilter.gain);
-
-    if (isEditingFilter.value) {
-        const index = filterLibrary.value.findIndex(f => f.id === filterForm.value.id);
-        if (index !== -1) filterLibrary.value[index] = newFilter;
-    } else {
-        filterLibrary.value.push({ ...newFilter, id: Date.now().toString(), enabled: true });
-    }
-    // saveFiltersToLocal();
-    resetFilterForm();
-};
-
-const editFilter = (filter) => {
-    filterForm.value = { ...filter };
-    isEditingFilter.value = true;
-};
-
-const deleteFilter = (id) => {
-    if (!confirm('确定删除此滤波器？')) return;
-    filterLibrary.value = filterLibrary.value.filter(f => f.id !== id);
-    // saveFiltersToLocal();
-};
-
-const resetFilterForm = () => {
-    filterForm.value = { id: '', name: '', description: '', type: 'lowpass', frequency: 1000, Q: 1, gain: 0 };
-    isEditingFilter.value = false;
-};
-
-// --- 情绪预设管理逻辑 ---
-// 移除 saveEmotionPresetsToLocal
-
-const saveEmotion = () => {
-    if (!emotionForm.value.name) return alert('请填写情绪名称');
-    if (isSystemEmotion(emotionForm.value.name)) return alert('无法修改或覆盖系统预设情绪');
-    if (isEditingEmotion.value) {
-        const index = emotionPresets.value.findIndex(e => e.id === emotionForm.value.id);
-        if (index !== -1) emotionPresets.value[index] = { ...emotionForm.value };
-    } else {
-        emotionPresets.value.push({ ...emotionForm.value, id: Date.now().toString(), enabled: true });
-    }
-    // saveEmotionPresetsToLocal();
-    resetEmotionForm();
-};
-
-const editEmotion = (emo) => {
-    emotionForm.value = { ...emo };
-    isEditingEmotion.value = true;
-};
-
-const deleteEmotion = (id) => {
-    if (!confirm('确定删除？')) return;
-    emotionPresets.value = emotionPresets.value.filter(e => e.id !== id);
-    // saveEmotionPresetsToLocal();
-};
-
-const resetEmotionForm = () => {
-    emotionForm.value = { id: '', name: '', vector: [0, 0, 0, 0, 0, 0, 0, 0] };
-    isEditingEmotion.value = false;
-};
-
-const resetEmotionsToDefault = () => {
-    if (!confirm('确定要重置所有情绪预设为默认值吗？这将清除自定义的情绪。')) return;
-    emotionPresets.value = [...SYSTEM_EMOTIONS];
-    // saveEmotionPresetsToLocal();
-};
-
 const availableRoles = computed(() => {
     const roles = new Set(characters.value.map(c => c.name));
     return Array.from(roles);
@@ -3532,8 +2955,7 @@ const analyzeScript = async () => {
         ? `, "sfx": [{"name": "${enabledSfx[0].name}", "position": 0.2}]`
         : '';
 
-    const templateToUse = useCustomPrompt.value ? customPromptTemplate.value : defaultPromptTemplate;
-    let finalPrompt = templateToUse
+    let finalPrompt = scriptPromptTemplate.value
         .replace(/\${emotionList}/g, emotionList)
         .replace(/\${sfxSection}/g, sfxSection)
         .replace(/\${bgmSection}/g, bgmSection)
@@ -3903,59 +3325,6 @@ const synthesizeAudio = async () => {
     }
 };
 
-const savePrompt = () => {
-    localStorage.setItem('storyforge_prompt_template', customPromptTemplate.value);
-    localStorage.setItem('storyforge_use_custom_prompt', JSON.stringify(useCustomPrompt.value));
-    localStorage.setItem('storyforge_voice_prompt_template', customVoicePromptTemplate.value);
-    localStorage.setItem('storyforge_use_custom_voice_prompt', JSON.stringify(useCustomVoicePrompt.value));
-    alert('Prompt 设置已保存');
-};
-
-const saveVoicePrompt = () => {
-    localStorage.setItem('storyforge_voice_prompt_template', customVoicePromptTemplate.value);
-    localStorage.setItem('storyforge_use_custom_voice_prompt', JSON.stringify(useCustomVoicePrompt.value));
-    alert('音色分析 Prompt 设置已保存');
-};
-
-const resetPrompt = () => {
-    if (confirm('确定要恢复默认 Prompt 吗？')) {
-        customPromptTemplate.value = defaultPromptTemplate;
-        customVoicePromptTemplate.value = defaultVoicePromptTemplate;
-    }
-};
-
-const resetVoicePrompt = () => {
-    if (confirm('确定要恢复默认的音色分析 Prompt 吗？')) {
-        customVoicePromptTemplate.value = defaultVoicePromptTemplate;
-        localStorage.setItem('storyforge_voice_prompt_template', defaultVoicePromptTemplate);
-    }
-};
-
-const saveQwenVoiceText = () => {
-    localStorage.setItem('storyforge_qwen_voice_text_template', customQwenVoiceTextTemplate.value);
-    localStorage.setItem('storyforge_use_custom_qwen_voice_text', JSON.stringify(useCustomQwenVoiceText.value));
-    alert('Qwen 生成文本设置已保存');
-};
-
-const resetQwenVoiceText = () => {
-    if (confirm('确定要恢复默认文本吗？')) {
-        customQwenVoiceTextTemplate.value = defaultQwenVoiceTextTemplate;
-    }
-};
-
-// 监听开关状态，实时保存
-watch(useCustomPrompt, (newVal) => {
-    localStorage.setItem('storyforge_use_custom_prompt', JSON.stringify(newVal));
-});
-
-watch(useCustomVoicePrompt, (newVal) => {
-    localStorage.setItem('storyforge_use_custom_voice_prompt', JSON.stringify(newVal));
-});
-
-watch(useCustomQwenVoiceText, (newVal) => {
-    localStorage.setItem('storyforge_use_custom_qwen_voice_text', JSON.stringify(newVal));
-});
-
 provide(workbenchContextKey, {
     activeTab,
     exportScriptState,
@@ -4102,10 +3471,11 @@ provide(workbenchContextKey, {
 <div id="app" class="w-full max-w-[96%] mx-auto p-6 rounded-2xl shadow-2xl">
     <div v-if="previewImageUrl" @click="closeImagePreview"
         class="fixed inset-0 z-[10000] bg-slate-950/78 backdrop-blur-sm flex items-center justify-center p-4">
-        <button @click.stop="closeImagePreview"
-            class="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-white/15 text-white text-sm font-bold hover:bg-white/25 transition-all">
+        <el-button @click.stop="closeImagePreview"
+            class="absolute top-4 right-4">
+            <el-icon><Close /></el-icon>
             关闭
-        </button>
+        </el-button>
         <img :src="previewImageUrl" alt="背景图片大图预览" @click.stop
             class="max-w-[95vw] max-h-[92vh] object-contain rounded-xl shadow-2xl bg-white">
     </div>

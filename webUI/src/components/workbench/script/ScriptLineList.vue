@@ -45,10 +45,10 @@ const registerScriptListContainer = (element: any): void => {
 
 <template>
   <div>
-    <div v-if="hasScriptLines" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm" :style="scriptStageStyle">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-sm font-bold text-slate-700">2. 脚本台词列表 ({{ scriptLines.length }} 行)</h3>
-      </div>
+    <el-card v-if="hasScriptLines" shadow="never" :style="scriptStageStyle">
+      <template #header>
+        <div class="font-bold text-slate-700">2. 脚本台词列表 ({{ scriptLines.length }} 行)</div>
+      </template>
       <div class="space-y-3 max-h-[600px] overflow-y-auto px-2 pb-10" :ref="registerScriptListContainer">
         <div
           v-for="(line, index) in scriptLines"
@@ -62,11 +62,13 @@ const registerScriptListContainer = (element: any): void => {
           <DialogueLineBlock v-else :line="line" :index="Number(index)" />
         </div>
       </div>
-    </div>
+    </el-card>
 
-    <div v-if="rawAnalysisResult" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mt-6">
-      <h3 class="text-sm font-bold text-slate-700 mb-2">3. AI 原始输出 (调试用)</h3>
+    <el-card v-if="rawAnalysisResult" shadow="never" class="mt-6">
+      <template #header>
+        <div class="font-bold text-slate-700">3. AI 原始输出 (调试用)</div>
+      </template>
       <pre class="bg-slate-800 text-slate-200 p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap max-h-64">{{ rawAnalysisResult }}</pre>
-    </div>
+    </el-card>
   </div>
 </template>

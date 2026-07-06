@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @fileoverview 脚本页签栏
- * @description 负责多脚本切换、重命名、新增与删除入口
+ * @description 使用 Element Plus Tabs 负责多脚本切换、重命名、新增与删除入口
  * @module src/components/workbench/script/ScriptTabBar
  */
 import { useWorkbenchContext } from '../../../composables/useWorkbenchContext'
@@ -26,26 +26,41 @@ const registerScriptNameInput = (element: any, scriptId: string): void => {
 </script>
 
 <template>
-  <div class="flex items-center gap-2 overflow-x-auto pb-2 mb-6">
-    <div
-      v-for="script in scriptList"
-      :key="script.id"
-      :class="['flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-xs font-bold transition-colors min-w-[100px] flex-shrink-0 justify-between group', currentScriptId === script.id ? 'bg-white border border-slate-200 text-blue-600' : 'bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200']"
-      @click="switchScript(script.id)"
-      @dblclick="startEditingScript(script.id)"
+  <div class="flex items-start gap-3 mb-6">
+    <el-tabs
+      :model-value="currentScriptId"
+      type="card"
+      class="flex-1 min-w-0 script-tabs"
+      @tab-change="switchScript"
+      @tab-remove="deleteScriptTab"
     >
-      <span v-if="editingScriptId !== script.id" class="whitespace-nowrap">{{ script.name }}</span>
-      <input
-        v-else
-        v-model="script.name"
-        class="bg-transparent outline-none w-full"
-        @click.stop
-        @blur="stopEditingScript"
-        @keyup.enter="stopEditingScript"
-        :ref="(el) => registerScriptNameInput(el, script.id)"
-      />
-      <button class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500" @click.stop="deleteScriptTab(script.id)">x</button>
-    </div>
-    <button class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold text-xs" @click="addScript">+</button>
+      <el-tab-pane v-for="script in scriptList" :key="script.id" :name="script.id" closable>
+        <template #label>
+          <span v-if="editingScriptId !== script.id" class="inline-flex items-center" @dblclick.stop="startEditingScript(script.id)">
+            {{ script.name }}
+          </span>
+          <el-input
+            v-else
+            v-model="script.name"
+            size="small"
+            class="w-[120px]"
+            @click.stop
+            @blur="stopEditingScript"
+            @keyup.enter="stopEditingScript"
+            :ref="(el) => registerScriptNameInput(el, script.id)"
+          />
+        </template>
+      </el-tab-pane>
+    </el-tabs>
+    <el-button type="primary" plain @click="addScript">
+      <el-icon><Plus /></el-icon>
+      <span>新增脚本</span>
+    </el-button>
   </div>
 </template>
+
+<style scoped>
+.script-tabs {
+  --el-tabs-header-height: 36px;
+}
+</style>
