@@ -1,0 +1,2 @@
+你先阅读index.html的实现
+然后重构，这个项目未来要作为一个企业级应用的。技术栈使用vue3+vite+pinia,样式使用tailwind,请求使用axios,要求完整复现原有功能，项目代码放到webUI
