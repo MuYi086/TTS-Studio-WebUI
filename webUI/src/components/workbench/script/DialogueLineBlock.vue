@@ -5,9 +5,10 @@
  * @module src/components/workbench/script/DialogueLineBlock
  */
 import { useWorkbenchContext } from '../../../composables/useWorkbenchContext'
+import type { DialogueLine } from '../../../types/workbench'
 
 const { line, index } = defineProps<{
-  line: any
+  line: DialogueLine
   index: number
 }>()
 

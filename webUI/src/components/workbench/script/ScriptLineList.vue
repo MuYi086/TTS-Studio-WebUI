@@ -5,6 +5,7 @@
  * @module src/components/workbench/script/ScriptLineList
  */
 import { computed } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { useWorkbenchContext } from '../../../composables/useWorkbenchContext'
 import BgmLineBlock from './BgmLineBlock.vue'
 import BgImageLineBlock from './BgImageLineBlock.vue'
@@ -32,14 +33,14 @@ const scriptStageStyle = computed(() =>
 
 const hasScriptLines = computed(() => scriptLines.value.length > 0)
 
-const registerLineRef = (element: any, index: string | number): void => {
-  if (element) {
+const registerLineRef = (element: Element | ComponentPublicInstance | null, index: string | number): void => {
+  if (element instanceof HTMLElement) {
     lineRefs.value[Number(index)] = element
   }
 }
 
-const registerScriptListContainer = (element: any): void => {
-  scriptListContainer.value = element
+const registerScriptListContainer = (element: Element | ComponentPublicInstance | null): void => {
+  scriptListContainer.value = element instanceof HTMLElement ? element : null
 }
 </script>
 

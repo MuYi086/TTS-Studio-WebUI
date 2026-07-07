@@ -5,9 +5,10 @@
  * @module src/components/workbench/script/BgImageLineBlock
  */
 import { useWorkbenchContext } from '../../../composables/useWorkbenchContext'
+import type { BgImageLine } from '../../../types/workbench'
 
 const { line, index } = defineProps<{
-  line: any
+  line: BgImageLine
   index: number
 }>()
 

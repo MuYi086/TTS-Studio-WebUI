@@ -5,6 +5,8 @@
  * @module src/components/workbench/script/ScriptTabBar
  */
 import { useWorkbenchContext } from '../../../composables/useWorkbenchContext'
+import type { ComponentPublicInstance } from 'vue'
+import type { FocusableInput } from '../../../types/workbench'
 
 const {
   scriptList,
@@ -18,8 +20,14 @@ const {
   addScript
 } = useWorkbenchContext()
 
-const registerScriptNameInput = (element: any, scriptId: string): void => {
-  if (element) {
+const isFocusableInput = (element: unknown): element is FocusableInput =>
+  Boolean(element && typeof (element as FocusableInput).focus === 'function')
+
+const registerScriptNameInput = (
+  element: Element | ComponentPublicInstance | null,
+  scriptId: string
+): void => {
+  if (isFocusableInput(element)) {
     scriptNameInputRefs.value[scriptId] = element
   }
 }

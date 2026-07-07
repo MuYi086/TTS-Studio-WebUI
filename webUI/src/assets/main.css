@@ -30,11 +30,6 @@
 /* 页面背景与毛玻璃容器。 */
 body {
     background-color: #f1f5f9;
-    /* Fallback color */
-    background-image: url('https://picsum.photos/1920/1080');
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
 }
 
 #app {

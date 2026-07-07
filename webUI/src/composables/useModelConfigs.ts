@@ -4,21 +4,9 @@
  * @module src/composables/useModelConfigs
  */
 import { computed, ref, watch } from 'vue'
-
-export interface LlmConfig {
-  id: string
-  name: string
-  baseUrl: string
-  model: string
-  key: string
-  params: string
-}
-
-export interface TtsConfig {
-  id: string
-  name: string
-  baseUrl: string
-}
+import { STORAGE_KEYS } from '../constants/storageKeys'
+import type { LlmConfig, TtsConfig } from '../types/workbench'
+import { readLocalJson, readLocalText, removeLocalValue, writeLocalJson, writeLocalText } from '../utils/storage'
 
 const emptyLlmConfig = (): LlmConfig => ({
   id: '',
@@ -34,16 +22,6 @@ const emptyTtsConfig = (): TtsConfig => ({
   name: '',
   baseUrl: ''
 })
-
-const safeJsonParse = <T>(raw: string | null, fallback: T): T => {
-  if (!raw) return fallback
-
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
 
 /**
  * 创建 LLM 与 TTS 配置管理器。
@@ -69,11 +47,11 @@ export function useModelConfigs() {
   })
 
   const saveConfigsToLocal = (): void => {
-    localStorage.setItem('storyforge_configs', JSON.stringify(llmConfigs.value))
+    writeLocalJson(STORAGE_KEYS.llmConfigs, llmConfigs.value)
   }
 
   const saveTtsConfigsToLocal = (): void => {
-    localStorage.setItem('storyforge_tts_configs', JSON.stringify(ttsConfigs.value))
+    writeLocalJson(STORAGE_KEYS.ttsConfigs, ttsConfigs.value)
   }
 
   const resetForm = (): void => {
@@ -157,14 +135,11 @@ export function useModelConfigs() {
   }
 
   const loadConfigsFromLocal = (): void => {
-    llmConfigs.value = safeJsonParse<LlmConfig[]>(
-      localStorage.getItem('storyforge_configs'),
-      []
-    )
+    llmConfigs.value = readLocalJson<LlmConfig[]>(STORAGE_KEYS.llmConfigs, [])
 
     if (llmConfigs.value.length === 0) {
-      const legacyConfig = safeJsonParse<Partial<LlmConfig> | null>(
-        localStorage.getItem('storyforge_universal_v2'),
+      const legacyConfig = readLocalJson<Partial<LlmConfig> | null>(
+        STORAGE_KEYS.legacyUniversalConfig,
         null
       )
 
@@ -175,12 +150,12 @@ export function useModelConfigs() {
           id: Date.now().toString(),
           name: legacyConfig.name || '默认配置'
         })
-        localStorage.removeItem('storyforge_universal_v2')
+        removeLocalValue(STORAGE_KEYS.legacyUniversalConfig)
         saveConfigsToLocal()
       }
     }
 
-    const savedLlmId = localStorage.getItem('unitale_llmConfigId')
+    const savedLlmId = readLocalText(STORAGE_KEYS.currentLlmConfigId)
     if (savedLlmId && llmConfigs.value.some(config => config.id === savedLlmId)) {
       currentConfigId.value = savedLlmId
     } else if (llmConfigs.value.length > 0) {
@@ -189,12 +164,9 @@ export function useModelConfigs() {
   }
 
   const loadTtsConfigsFromLocal = (): void => {
-    ttsConfigs.value = safeJsonParse<TtsConfig[]>(
-      localStorage.getItem('storyforge_tts_configs'),
-      []
-    )
+    ttsConfigs.value = readLocalJson<TtsConfig[]>(STORAGE_KEYS.ttsConfigs, [])
 
-    const savedTtsId = localStorage.getItem('unitale_ttsConfigId')
+    const savedTtsId = readLocalText(STORAGE_KEYS.currentTtsConfigId)
     if (savedTtsId && ttsConfigs.value.some(config => config.id === savedTtsId)) {
       currentTtsConfigId.value = savedTtsId
     } else if (ttsConfigs.value.length > 0) {
@@ -203,11 +175,11 @@ export function useModelConfigs() {
   }
 
   watch(currentConfigId, newId => {
-    if (newId) localStorage.setItem('unitale_llmConfigId', newId)
+    if (newId) writeLocalText(STORAGE_KEYS.currentLlmConfigId, newId)
   })
 
   watch(currentTtsConfigId, newId => {
-    if (newId) localStorage.setItem('unitale_ttsConfigId', newId)
+    if (newId) writeLocalText(STORAGE_KEYS.currentTtsConfigId, newId)
   })
 
   loadConfigsFromLocal()

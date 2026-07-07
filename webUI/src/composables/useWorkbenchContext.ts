@@ -7,16 +7,18 @@
  * @module src/composables/useWorkbenchContext
  */
 import { inject } from 'vue'
+import type { InjectionKey } from 'vue'
+import type { WorkbenchContext } from '../types/workbench'
 
 /** 工作台上下文注入键。 */
-export const workbenchContextKey = Symbol('workbench-context')
+export const workbenchContextKey: InjectionKey<WorkbenchContext> = Symbol('workbench-context')
 
 /**
  * 读取工作台上下文。
- * @returns {any} 当前工作台暴露的状态与动作集合。
+ * @returns 当前工作台暴露的状态与动作集合。
  * @throws {Error} 未在上层提供上下文时抛出错误。
  */
-export function useWorkbenchContext(): any {
+export function useWorkbenchContext(): WorkbenchContext {
   const context = inject(workbenchContextKey)
 
   if (!context) {

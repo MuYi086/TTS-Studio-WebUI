@@ -5,9 +5,10 @@
  * @module src/components/workbench/script/BgmLineBlock
  */
 import { useWorkbenchContext } from '../../../composables/useWorkbenchContext'
+import type { BgmLine } from '../../../types/workbench'
 
 const { line, index } = defineProps<{
-  line: any
+  line: BgmLine
   index: number
 }>()
 

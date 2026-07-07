@@ -9,17 +9,8 @@ import {
   DEFAULT_QWEN_VOICE_TEXT_TEMPLATE,
   DEFAULT_VOICE_PROMPT_TEMPLATE
 } from '../constants/promptTemplates'
-
-const readBoolean = (key: string, fallback = false): boolean => {
-  const raw = localStorage.getItem(key)
-  if (raw === null) return fallback
-
-  try {
-    return Boolean(JSON.parse(raw))
-  } catch {
-    return fallback
-  }
-}
+import { STORAGE_KEYS } from '../constants/storageKeys'
+import { readLocalBoolean, readLocalText, writeLocalBoolean, writeLocalText } from '../utils/storage'
 
 /**
  * 创建 Prompt 模板管理器。
@@ -27,19 +18,19 @@ const readBoolean = (key: string, fallback = false): boolean => {
  */
 export function usePromptTemplates() {
   const customPromptTemplate = ref(
-    localStorage.getItem('storyforge_prompt_template') || DEFAULT_PROMPT_TEMPLATE
+    readLocalText(STORAGE_KEYS.promptTemplate) || DEFAULT_PROMPT_TEMPLATE
   )
-  const useCustomPrompt = ref(readBoolean('storyforge_use_custom_prompt'))
+  const useCustomPrompt = ref(readLocalBoolean(STORAGE_KEYS.useCustomPrompt))
 
   const customVoicePromptTemplate = ref(
-    localStorage.getItem('storyforge_voice_prompt_template') || DEFAULT_VOICE_PROMPT_TEMPLATE
+    readLocalText(STORAGE_KEYS.voicePromptTemplate) || DEFAULT_VOICE_PROMPT_TEMPLATE
   )
-  const useCustomVoicePrompt = ref(readBoolean('storyforge_use_custom_voice_prompt'))
+  const useCustomVoicePrompt = ref(readLocalBoolean(STORAGE_KEYS.useCustomVoicePrompt))
 
   const customQwenVoiceTextTemplate = ref(
-    localStorage.getItem('storyforge_qwen_voice_text_template') || DEFAULT_QWEN_VOICE_TEXT_TEMPLATE
+    readLocalText(STORAGE_KEYS.qwenVoiceTextTemplate) || DEFAULT_QWEN_VOICE_TEXT_TEMPLATE
   )
-  const useCustomQwenVoiceText = ref(readBoolean('storyforge_use_custom_qwen_voice_text'))
+  const useCustomQwenVoiceText = ref(readLocalBoolean(STORAGE_KEYS.useCustomQwenVoiceText))
 
   const scriptPromptTemplate = computed(() => {
     return useCustomPrompt.value ? customPromptTemplate.value : DEFAULT_PROMPT_TEMPLATE
@@ -58,16 +49,16 @@ export function usePromptTemplates() {
   })
 
   const savePrompt = (): void => {
-    localStorage.setItem('storyforge_prompt_template', customPromptTemplate.value)
-    localStorage.setItem('storyforge_use_custom_prompt', JSON.stringify(useCustomPrompt.value))
-    localStorage.setItem('storyforge_voice_prompt_template', customVoicePromptTemplate.value)
-    localStorage.setItem('storyforge_use_custom_voice_prompt', JSON.stringify(useCustomVoicePrompt.value))
+    writeLocalText(STORAGE_KEYS.promptTemplate, customPromptTemplate.value)
+    writeLocalBoolean(STORAGE_KEYS.useCustomPrompt, useCustomPrompt.value)
+    writeLocalText(STORAGE_KEYS.voicePromptTemplate, customVoicePromptTemplate.value)
+    writeLocalBoolean(STORAGE_KEYS.useCustomVoicePrompt, useCustomVoicePrompt.value)
     alert('Prompt 设置已保存')
   }
 
   const saveVoicePrompt = (): void => {
-    localStorage.setItem('storyforge_voice_prompt_template', customVoicePromptTemplate.value)
-    localStorage.setItem('storyforge_use_custom_voice_prompt', JSON.stringify(useCustomVoicePrompt.value))
+    writeLocalText(STORAGE_KEYS.voicePromptTemplate, customVoicePromptTemplate.value)
+    writeLocalBoolean(STORAGE_KEYS.useCustomVoicePrompt, useCustomVoicePrompt.value)
     alert('音色分析 Prompt 设置已保存')
   }
 
@@ -82,12 +73,12 @@ export function usePromptTemplates() {
     if (!confirm('确定要恢复默认的音色分析 Prompt 吗？')) return
 
     customVoicePromptTemplate.value = DEFAULT_VOICE_PROMPT_TEMPLATE
-    localStorage.setItem('storyforge_voice_prompt_template', DEFAULT_VOICE_PROMPT_TEMPLATE)
+    writeLocalText(STORAGE_KEYS.voicePromptTemplate, DEFAULT_VOICE_PROMPT_TEMPLATE)
   }
 
   const saveQwenVoiceText = (): void => {
-    localStorage.setItem('storyforge_qwen_voice_text_template', customQwenVoiceTextTemplate.value)
-    localStorage.setItem('storyforge_use_custom_qwen_voice_text', JSON.stringify(useCustomQwenVoiceText.value))
+    writeLocalText(STORAGE_KEYS.qwenVoiceTextTemplate, customQwenVoiceTextTemplate.value)
+    writeLocalBoolean(STORAGE_KEYS.useCustomQwenVoiceText, useCustomQwenVoiceText.value)
     alert('Qwen 生成文本设置已保存')
   }
 
@@ -98,15 +89,15 @@ export function usePromptTemplates() {
   }
 
   watch(useCustomPrompt, newValue => {
-    localStorage.setItem('storyforge_use_custom_prompt', JSON.stringify(newValue))
+    writeLocalBoolean(STORAGE_KEYS.useCustomPrompt, newValue)
   })
 
   watch(useCustomVoicePrompt, newValue => {
-    localStorage.setItem('storyforge_use_custom_voice_prompt', JSON.stringify(newValue))
+    writeLocalBoolean(STORAGE_KEYS.useCustomVoicePrompt, newValue)
   })
 
   watch(useCustomQwenVoiceText, newValue => {
-    localStorage.setItem('storyforge_use_custom_qwen_voice_text', JSON.stringify(newValue))
+    writeLocalBoolean(STORAGE_KEYS.useCustomQwenVoiceText, newValue)
   })
 
   return {

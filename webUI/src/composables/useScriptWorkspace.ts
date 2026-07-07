@@ -7,17 +7,18 @@
  * @module src/composables/useScriptWorkspace
  */
 import { ref, type Ref } from 'vue'
+import type { Character, FocusableInput, ScriptLine, ScriptWorkspaceItem } from '../types/workbench'
 
 /** 脚本工作区输入依赖。 */
 export interface UseScriptWorkspaceOptions {
   /** 原文内容。 */
   rawScript: Ref<string>
   /** 脚本行列表。 */
-  scriptLines: Ref<any[]>
+  scriptLines: Ref<ScriptLine[]>
   /** AI 原始分析结果。 */
   rawAnalysisResult: Ref<string>
   /** 当前脚本角色列表。 */
-  characters: Ref<any[]>
+  characters: Ref<Character[]>
   /** 是否正在分析脚本。 */
   isAnalyzingScript: Ref<boolean>
   /** 是否正在批量生成。 */
@@ -49,7 +50,7 @@ export function useScriptWorkspace(options: UseScriptWorkspaceOptions) {
   } = options
 
   /** 脚本页签列表。 */
-  const scriptList = ref([
+  const scriptList = ref<ScriptWorkspaceItem[]>([
     { id: 'default', name: '脚本 1', data: { rawScript: '', scriptLines: [], rawAnalysisResult: '', characters: [] } }
   ])
   /** 当前激活脚本 ID。 */
@@ -57,7 +58,7 @@ export function useScriptWorkspace(options: UseScriptWorkspaceOptions) {
   /** 正在编辑名称的脚本 ID。 */
   const editingScriptId = ref<string | null>(null)
   /** 脚本名称输入框引用集合。 */
-  const scriptNameInputRefs = ref<Record<string, HTMLInputElement>>({})
+  const scriptNameInputRefs = ref<Record<string, FocusableInput>>({})
 
   /**
    * 判断当前是否允许修改脚本页签结构。

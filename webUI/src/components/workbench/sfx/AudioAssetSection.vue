@@ -6,6 +6,7 @@
  */
 import { computed, useTemplateRef } from 'vue'
 import { useWorkbenchContext } from '../../../composables/useWorkbenchContext'
+import type { AudioAsset } from '../../../types/workbench'
 
 const props = defineProps<{
   kind: 'sfx' | 'bgm'
@@ -51,8 +52,8 @@ const filePlaceholder = computed(() => (props.kind === 'sfx' ? '例如: door_sla
 const saveLabel = computed(() => (props.kind === 'sfx' ? '保存音效' : '保存 BGM'))
 const emptyLabel = computed(() => (props.kind === 'sfx' ? '暂无音效素材' : '暂无 BGM 素材'))
 const isEditing = computed(() => (props.kind === 'sfx' ? isEditingSfx.value : isEditingBgm.value))
-const assetForm = computed<any>(() => (props.kind === 'sfx' ? sfxForm.value : bgmForm.value))
-const assetLibrary = computed<any[]>(() => (props.kind === 'sfx' ? sfxLibrary.value : bgmLibrary.value))
+const assetForm = computed<AudioAsset>(() => (props.kind === 'sfx' ? sfxForm.value : bgmForm.value))
+const assetLibrary = computed<AudioAsset[]>(() => (props.kind === 'sfx' ? sfxLibrary.value : bgmLibrary.value))
 
 const openFileDialog = (): void => {
   fileInput.value?.click()
@@ -85,7 +86,7 @@ const resetAssetForm = (): void => {
   resetBgmForm()
 }
 
-const editAsset = (asset: any): void => {
+const editAsset = (asset: AudioAsset): void => {
   if (props.kind === 'sfx') {
     editSfx(asset)
     return

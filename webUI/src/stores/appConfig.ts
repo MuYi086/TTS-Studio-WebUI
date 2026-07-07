@@ -7,6 +7,7 @@
  * @module src/stores/appConfig
  */
 import { defineStore } from 'pinia'
+import type { WorkbenchTab } from '../types/workbench'
 
 /**
  * 应用级配置 Store。
@@ -16,17 +17,17 @@ import { defineStore } from 'pinia'
  */
 export const useAppConfigStore = defineStore('appConfig', {
   state: () => ({
-    appName: 'Unitale AI',
+    appName: 'TTS',
     version: '1.5',
-    defaultTab: 'script'
+    defaultTab: 'script' as WorkbenchTab
   }),
   actions: {
     /**
      * 更新默认激活的工作台标签页。
-     * @param {string} tab - 标签页标识。
+     * @param {WorkbenchTab} tab - 工作台标签页标识。
      * @returns {void}
      */
-    setDefaultTab(tab: string) {
+    setDefaultTab(tab: WorkbenchTab) {
       this.defaultTab = tab
     }
   }

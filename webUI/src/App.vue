@@ -14,16 +14,27 @@ import * as Mp4Muxer from 'mp4-muxer'
 import { useAppConfigStore } from './stores/appConfig'
 import { INTENSITY_VALUE_MAP, SYSTEM_EMOTIONS, isSystemEmotion } from './constants/emotions'
 import { useImagePreview } from './composables/useImagePreview'
+import { useActiveWorkbenchTab } from './composables/useActiveWorkbenchTab'
 import { useModelConfigs } from './composables/useModelConfigs'
+import { usePersistentNumber } from './composables/usePersistentNumber'
 import { usePromptTemplates } from './composables/usePromptTemplates'
 import { useResourceLibraries } from './composables/useResourceLibraries'
 import { useScriptWorkspace } from './composables/useScriptWorkspace'
 import { useStageBackground } from './composables/useStageBackground'
+import { STORAGE_KEYS } from './constants/storageKeys'
 import { getJson, postBlob, postForm, postJson } from './utils/http'
 import { buildLlmBody, toChatCompletionsUrl } from './utils/llm'
 import { toTtsBaseUrl } from './utils/tts'
 import { base64ToBlob, blobToBase64 } from './utils/blob'
 import { audioBufferToWaveBlob as bufferToWave, makeDistortionCurve } from './utils/audio'
+import {
+    createBgmLine,
+    createBgImageLine,
+    createDialogueLine,
+    insertScriptLineAfterSelection,
+    removeScriptLineAt,
+    splitRawScriptToDialogueLines
+} from './utils/scriptLines'
 import {
     deleteAssetFromDB,
     initUnitaleDB,
@@ -108,11 +119,7 @@ const triggerAutoSave = () => {
 };
 
 // 状态
-const activeTab = ref(appConfigStore.defaultTab);
-
-watch(activeTab, (newValue) => {
-    localStorage.setItem('storyforge_activeTab', newValue);
-});
+const { activeTab } = useActiveWorkbenchTab(appConfigStore.defaultTab);
 const {
     llmConfigs,
     currentConfigId,
@@ -263,7 +270,7 @@ const {
     setStageBgUrlWithFade,
     clearStageBgWithFade
 } = useStageBackground();
-const bgImageCount = ref(0); // 背景图片块数量（bgImage 对象个数）
+const bgImageCount = usePersistentNumber(STORAGE_KEYS.bgImageCount, 0, { min: 0 }); // 背景图片块数量（bgImage 对象个数）
 const bgImagePickerRef = ref(null);
 const {
     previewImageUrl,
@@ -546,18 +553,8 @@ watch(scriptLines, () => {
     triggerAutoSave();
 }, { deep: true });
 
-watch(bgImageCount, () => {
-    localStorage.setItem('unitale_bgImageCount', String(Math.max(0, Number(bgImageCount.value) || 0)));
-});
-
 // 读取持久化配置
 onMounted(async () => {
-     const savedBgImageCount = localStorage.getItem('unitale_bgImageCount');
-     if (savedBgImageCount !== null) {
-         const parsedBgImageCount = Number(savedBgImageCount);
-         bgImageCount.value = Number.isFinite(parsedBgImageCount) ? Math.max(0, parsedBgImageCount) : 0;
-     }
- 
      // --- Restore from IndexedDB ---
      try {
          await initUnitaleDB();
@@ -2255,102 +2252,26 @@ const exportSRT = async () => {
 const splitScript = () => {
     if (!rawScript.value.trim()) return alert('请输入原文内容');
 
-    let text = rawScript.value.replace(/\r\n/g, '\n');
-    const splitRegex = /\n+|(?<=[。！？!?])(?=["']?)\s*/;
-
-    const lines = text.split(splitRegex)
-        .map(l => l.trim())
-        .filter(l => l.length > 0);
-
-    scriptLines.value = lines.map(text => ({
-        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
-        type: 'dialogue',
-        role: '旁白',
-        emotion: '平静',
-        intensity: '中等',
-        filter: '',
-        text: text,
-        trimStart: 0,
-        trimEnd: 1,
-        sfxVolume: 1.0,
-        dialogueVolume: 1.0,
-        speed: 1.0,
-        audioUrl: '',
-        isGenerating: false
-    }));
+    scriptLines.value = splitRawScriptToDialogueLines(rawScript.value);
 };
 
 const addBgmBlock = () => {
-    const newBlock = {
-        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
-        type: 'bgm',
-        action: 'play',
-        volume: 1.0,
-        bgmName: bgmLibrary.value.length > 0 ? bgmLibrary.value[0].name : ''
-    };
-    if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
-        scriptLines.value.splice(selectedLineIndex.value + 1, 0, newBlock);
-        selectedLineIndex.value++;
-    } else {
-        scriptLines.value.push(newBlock);
-        selectedLineIndex.value = scriptLines.value.length - 1;
-    }
+    const newBlock = createBgmLine(bgmLibrary.value.length > 0 ? bgmLibrary.value[0].name : '');
+    selectedLineIndex.value = insertScriptLineAfterSelection(scriptLines.value, selectedLineIndex.value, newBlock);
 };
 
 const addBgImageBlock = () => {
-    const newId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
-    const newBlock = {
-        id: newId,
-        type: 'bgImage',
-        bgImagePrompt: '',
-        // selected background will be saved into assets store and restored via bgImageAssetKey
-        bgImageAssetKey: '',
-        imageUrl: ''
-    };
-    if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
-        scriptLines.value.splice(selectedLineIndex.value + 1, 0, newBlock);
-        selectedLineIndex.value++;
-    } else {
-        scriptLines.value.push(newBlock);
-        selectedLineIndex.value = scriptLines.value.length - 1;
-    }
+    const newBlock = createBgImageLine();
+    selectedLineIndex.value = insertScriptLineAfterSelection(scriptLines.value, selectedLineIndex.value, newBlock);
 };
 
 const addDialogueBlock = () => {
-    const newBlock = {
-        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
-        type: 'dialogue',
-        role: '旁白',
-        emotion: '平静',
-        intensity: '中等',
-        filter: '',
-        text: '',
-        trimStart: 0,
-        trimEnd: 1,
-        sfx: [],
-        break_duration: 0,
-        sfxVolume: 1.0,
-        dialogueVolume: 1.0,
-        speed: 1.0,
-        audioUrl: '',
-        isGenerating: false
-    };
-    if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
-        scriptLines.value.splice(selectedLineIndex.value + 1, 0, newBlock);
-        selectedLineIndex.value++;
-    } else {
-        scriptLines.value.push(newBlock);
-        selectedLineIndex.value = scriptLines.value.length - 1;
-    }
+    const newBlock = createDialogueLine();
+    selectedLineIndex.value = insertScriptLineAfterSelection(scriptLines.value, selectedLineIndex.value, newBlock);
 };
 
 const removeScriptLine = (index) => {
-    scriptLines.value.splice(index, 1);
-    if (selectedLineIndex.value === index) {
-        selectedLineIndex.value = -1;
-    } else if (selectedLineIndex.value > index) {
-        selectedLineIndex.value--;
-    }
+    selectedLineIndex.value = removeScriptLineAt(scriptLines.value, index, selectedLineIndex.value);
 };
 
 const openBgImagePicker = (lineIndex) => {
@@ -3440,6 +3361,7 @@ provide(workbenchContextKey, {
     currentSequenceIndex,
     moveLineUp,
     moveLineDown,
+    removeScriptLine,
     openImagePreview,
     openBgImagePicker,
     copyBgImagePrompt,
@@ -3491,13 +3413,5 @@ provide(workbenchContextKey, {
 
     <!-- 页面 7: Prompt 管理 -->
     <PromptTab v-if="activeTab === 'prompt'" />
-
-    <p style="text-align: left; color: #888; font-size: 12px;">
-        <a href="https://space.bilibili.com/11354448" target="_blank"
-            style="color: inherit; text-decoration: none;">
-            本网站由sdsds222制作，点击此处访问个人主页
-        </a>
-    </p>
-
 </div>
 </template>

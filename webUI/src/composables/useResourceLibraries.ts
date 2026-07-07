@@ -6,6 +6,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 import { SYSTEM_EMOTIONS, isSystemEmotion } from '../constants/emotions'
+import type { AudioAsset, Character, EmotionPreset, FilterConfig, Timbre, TtsConfig } from '../types/workbench'
 import { getJson, postForm } from '../utils/http'
 import { toTtsBaseUrl } from '../utils/tts'
 import { saveAssetToDB } from '../utils/unitaleDb'
@@ -14,9 +15,9 @@ interface UseResourceLibrariesOptions {
   getLocalFileMap: () => Map<string, File>
   loadAudioBuffer: (filename: string) => Promise<AudioBuffer | null>
   triggerAutoSave: () => void
-  currentTtsConfig: Readonly<Ref<any>>
+  currentTtsConfig: Readonly<Ref<TtsConfig | null>>
   currentTtsConfigId: Ref<string>
-  ttsConfigs: Ref<any[]>
+  ttsConfigs: Ref<TtsConfig[]>
 }
 
 /**
@@ -34,28 +35,28 @@ export function useResourceLibraries(options: UseResourceLibrariesOptions) {
     ttsConfigs
   } = options
 
-  const characters = ref<any[]>([])
+  const characters = ref<Character[]>([])
 
-  const timbres = ref<any[]>([])
-  const timbreForm = ref({ id: '', name: '', description: '', refPath: '' })
+  const timbres = ref<Timbre[]>([])
+  const timbreForm = ref<Timbre>({ id: '', name: '', description: '', refPath: '' })
   const isEditingTimbre = ref(false)
   const selectedTimbreId = ref('')
   const timbreFile = ref<File | null>(null)
 
-  const emotionPresets = ref<any[]>([])
-  const emotionForm = ref({ id: '', name: '', vector: [0, 0, 0, 0, 0, 0, 0, 0] })
+  const emotionPresets = ref<EmotionPreset[]>([])
+  const emotionForm = ref<EmotionPreset>({ id: '', name: '', vector: [0, 0, 0, 0, 0, 0, 0, 0] })
   const isEditingEmotion = ref(false)
 
-  const sfxLibrary = ref<any[]>([])
-  const sfxForm = ref({ id: '', name: '', description: '', filename: '', trimStart: 0, trimEnd: 1, volume: 0.3 })
+  const sfxLibrary = ref<AudioAsset[]>([])
+  const sfxForm = ref<AudioAsset>({ id: '', name: '', description: '', filename: '', trimStart: 0, trimEnd: 1, volume: 0.3 })
   const isEditingSfx = ref(false)
 
-  const bgmLibrary = ref<any[]>([])
-  const bgmForm = ref({ id: '', name: '', description: '', filename: '', trimStart: 0, trimEnd: 1, volume: 0.3 })
+  const bgmLibrary = ref<AudioAsset[]>([])
+  const bgmForm = ref<AudioAsset>({ id: '', name: '', description: '', filename: '', trimStart: 0, trimEnd: 1, volume: 0.3 })
   const isEditingBgm = ref(false)
 
-  const filterLibrary = ref<any[]>([])
-  const filterForm = ref({ id: '', name: '', description: '', type: 'lowpass', frequency: 1000, Q: 1, gain: 0 })
+  const filterLibrary = ref<FilterConfig[]>([])
+  const filterForm = ref<FilterConfig>({ id: '', name: '', description: '', type: 'lowpass', frequency: 1000, Q: 1, gain: 0 })
   const isEditingFilter = ref(false)
 
   const initializeDefaultLibraries = (): void => {
@@ -166,13 +167,13 @@ export function useResourceLibraries(options: UseResourceLibrariesOptions) {
         timbres.value.push(newTimbreData)
       }
       resetTimbreForm()
-    } catch (error: any) {
+    } catch (error) {
       console.error('保存音色时出错:', error)
-      alert(`保存音色失败: ${error.message}`)
+      alert(`保存音色失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  const editTimbre = (timbre: any): void => {
+  const editTimbre = (timbre: Timbre): void => {
     timbreForm.value = { ...timbre }
     isEditingTimbre.value = true
     timbreFile.value = null
@@ -205,12 +206,12 @@ export function useResourceLibraries(options: UseResourceLibrariesOptions) {
       }
       if (sfxForm.value.filename) loadAudioBuffer(sfxForm.value.filename)
       resetSfxForm()
-    } catch (error: any) {
-      alert(`保存音效失败: ${error.message}`)
+    } catch (error) {
+      alert(`保存音效失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  const editSfx = (sfx: any): void => {
+  const editSfx = (sfx: AudioAsset): void => {
     sfxForm.value = { trimStart: 0, trimEnd: 1, volume: 1.0, ...sfx }
     isEditingSfx.value = true
   }
@@ -256,12 +257,12 @@ export function useResourceLibraries(options: UseResourceLibrariesOptions) {
       }
       if (bgmForm.value.filename) loadAudioBuffer(bgmForm.value.filename)
       resetBgmForm()
-    } catch (error: any) {
-      alert(`保存 BGM 失败: ${error.message}`)
+    } catch (error) {
+      alert(`保存 BGM 失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  const editBgm = (bgm: any): void => {
+  const editBgm = (bgm: AudioAsset): void => {
     bgmForm.value = { trimStart: 0, trimEnd: 1, volume: 1.0, ...bgm }
     isEditingBgm.value = true
   }
@@ -314,7 +315,7 @@ export function useResourceLibraries(options: UseResourceLibrariesOptions) {
     resetFilterForm()
   }
 
-  const editFilter = (filter: any): void => {
+  const editFilter = (filter: FilterConfig): void => {
     filterForm.value = { ...filter }
     isEditingFilter.value = true
   }
@@ -348,7 +349,7 @@ export function useResourceLibraries(options: UseResourceLibrariesOptions) {
     resetEmotionForm()
   }
 
-  const editEmotion = (emotion: any): void => {
+  const editEmotion = (emotion: EmotionPreset): void => {
     emotionForm.value = { ...emotion }
     isEditingEmotion.value = true
   }

@@ -32,7 +32,7 @@ const {
 <template>
   <header class="mb-6 flex justify-between items-end">
     <div>
-      <h1 class="text-2xl font-bold text-slate-800">Unitale AI <span class="text-blue-600">1.5</span></h1>
+      <h1 class="text-2xl font-bold text-slate-800">TTS <span class="text-blue-600">1.5</span></h1>
       <p style="color: rgb(39, 92, 120);" class="text-slate-400 text-xs mt-1">多角色音效合成有声书生成工具</p>
     </div>
     <el-tag size="small" type="info" effect="plain">v1.5</el-tag>
