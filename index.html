@@ -730,6 +730,15 @@
             <!-- 左侧：角色与音色绑定栏 -->
             <div class="w-full lg:w-60 flex-shrink-0 space-y-4">
                 <div class="bg-slate-100 p-4 rounded-xl border border-slate-200">
+                    <div class="mb-4 pb-4 border-b border-slate-200">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">音色模型</label>
+                        <select v-model="selectedVoiceDesignUrl"
+                            class="w-full px-2 py-1.5 border rounded-md text-xs bg-white outline-none focus:ring-1 focus:ring-blue-500">
+                            <option v-for="design in voiceDesigns" :key="design.url" :value="design.url">
+                                {{ design.name }}
+                            </option>
+                        </select>
+                    </div>
                     <h3 class="text-sm font-bold text-slate-700 mb-3 flex justify-between items-center">
                         角色列表
                         <button @click="addCharacter"
@@ -793,7 +802,7 @@
                                     </button>
                                     <button @click="generateQwenVoice(char)"
                                         :class="['flex-1 px-2 py-1.5 border rounded text-[10px] font-bold transition-colors flex justify-center items-center gap-1', char.isGeneratingVoice ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 'bg-pink-50 text-pink-600 border-pink-100 hover:bg-pink-100']">
-                                        <span v-if="char.isGeneratingVoice" class="animate-spin">⏳</span>{{ char.isGeneratingVoice ? '停止生成' : 'Qwen生成音色' }}
+                                        <span v-if="char.isGeneratingVoice" class="animate-spin">⏳</span>{{ char.isGeneratingVoice ? '停止生成' : selectedVoiceDesignButtonText }}
                                     </button>
                                 </div>
                             </div>
@@ -1381,6 +1390,7 @@
         </div>
     </div>
 
+    <script src="./voice-design.js"></script>
     <script>
         const { createApp, ref, onMounted, computed, watch, onBeforeUpdate } = Vue;
 
@@ -1595,6 +1605,16 @@
                 const ttsConfigs = ref([]);
                 const ttsForm = ref({ id: '', name: '', baseUrl: '' });
                 const isEditingTts = ref(false);
+                const fallbackVoiceDesigns = [
+                    { name: 'Qwen', url: 'http://127.0.0.1:8300/v1/qwen/design' },
+                    { name: 'MIMO', url: 'http://127.0.0.1:8300/v1/mimo/design' }
+                ];
+                const voiceDesigns = ref(
+                    Array.isArray(window.voiceDesigns) && window.voiceDesigns.length > 0
+                        ? window.voiceDesigns
+                        : fallbackVoiceDesigns
+                );
+                const selectedVoiceDesignUrl = ref(voiceDesigns.value[0]?.url || '');
 
                 // 角色库状态
                 const characters = ref([]);
@@ -1638,6 +1658,10 @@
 
                 watch(currentTtsConfigId, (newId) => {
                     if (newId) localStorage.setItem('unitale_ttsConfigId', newId);
+                });
+
+                watch(selectedVoiceDesignUrl, (newUrl) => {
+                    if (newUrl) localStorage.setItem('storyforge_voice_design_url', newUrl);
                 });
 
                 const ttsRefFile = ref(null);
@@ -2227,6 +2251,13 @@
                      const savedUseCustomQwen = localStorage.getItem('storyforge_use_custom_qwen_voice_text');
                      if (savedUseCustomQwen) useCustomQwenVoiceText.value = JSON.parse(savedUseCustomQwen);
 
+                     const savedVoiceDesignUrl = localStorage.getItem('storyforge_voice_design_url');
+                     if (savedVoiceDesignUrl && voiceDesigns.value.some(design => design.url === savedVoiceDesignUrl)) {
+                         selectedVoiceDesignUrl.value = savedVoiceDesignUrl;
+                     } else if (voiceDesigns.value.length > 0) {
+                         selectedVoiceDesignUrl.value = voiceDesigns.value[0].url;
+                     }
+
                      const savedBgImageCount = localStorage.getItem('unitale_bgImageCount');
                      if (savedBgImageCount !== null) {
                          const parsedBgImageCount = Number(savedBgImageCount);
@@ -2364,6 +2395,12 @@
 
                 const currentTtsConfig = computed(() => {
                     return ttsConfigs.value.find(c => c.id === currentTtsConfigId.value) || null;
+                });
+                const selectedVoiceDesign = computed(() => {
+                    return voiceDesigns.value.find(design => design.url === selectedVoiceDesignUrl.value) || voiceDesigns.value[0] || null;
+                });
+                const selectedVoiceDesignButtonText = computed(() => {
+                    return `${selectedVoiceDesign.value?.name || '当前'}生成音色`;
                 });
 
                 // --- 配置管理逻辑 ---
@@ -2523,6 +2560,7 @@
                     }
 
                     if (!currentTtsConfig.value) return alert('请先选择 TTS 服务');
+                    if (!selectedVoiceDesign.value?.url) return alert('请先选择音色模型');
                     if (!char.voiceDescription) return alert('请先填写音色描述');
 
                     char.isGeneratingVoice = true;
@@ -2547,9 +2585,11 @@
                             voice_description: char.voiceDescription,
                             text: textToUse
                         };
+                        const designModelName = selectedVoiceDesign.value?.name || 'voice';
+                        const filenamePrefix = designModelName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'voice';
 
-                        // 1. 调用 Qwen3 生成音频
-                        const genRes = await fetch(`${baseUrl}/v1/qwen/design`, {
+                        // 1. 调用当前选择的音色模型生成音频
+                        const genRes = await fetch(selectedVoiceDesign.value.url, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(payload),
@@ -2566,7 +2606,7 @@
                         }
 
                         const blob = await genRes.blob();
-                        const filename = `qwen_${char.name}_${Date.now()}.wav`;
+                        const filename = `${filenamePrefix}_${char.name}_${Date.now()}.wav`;
                         const file = new File([blob], filename, { type: 'audio/wav' });
 
                         // 2. 保存到本地资源管理
@@ -5608,6 +5648,7 @@ const generateVideo = async () => {
                     // Character Actions (New)
                     characters, addCharacter, deleteCharacter,
                     analyzeCharacterVoice, generateQwenVoice,
+                    voiceDesigns, selectedVoiceDesignUrl, selectedVoiceDesignButtonText,
 
                     // Timbre Actions
                     timbres, timbreForm, isEditingTimbre, selectedTimbreId,
@@ -5668,6 +5709,3 @@ const generateVideo = async () => {
 </body>
 
 </html>
-
-
-
