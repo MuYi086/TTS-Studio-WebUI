@@ -917,8 +917,19 @@
                         backgroundPosition: 'center center, center center',
                         backgroundSize: '100% 100%, contain'
                     } : {}">
-                    <div class="flex justify-between items-center mb-4">
+                    <div class="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
                         <h3 class="text-sm font-bold text-slate-700">2. 脚本台词列表 ({{ scriptLines.length }} 行)</h3>
+                        <div class="flex flex-col gap-1 md:min-w-[280px]">
+                            <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">当前 TTS 合成模型</label>
+                            <select v-model="currentTtsConfigId" :disabled="ttsConfigs.length === 0"
+                                class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                                title="选择当前脚本台词列表使用的 TTS 模型">
+                                <option value="" disabled>{{ ttsConfigs.length === 0 ? '-- 请先在模型配置中添加 TTS 配置 --' : '-- 选择 TTS 模型 --' }}</option>
+                                <option v-for="conf in ttsConfigs" :key="conf.id" :value="conf.id">
+                                    {{ conf.name }}
+                                </option>
+                            </select>
+                        </div>
                     </div>
                     <div ref="scriptListContainer" class="space-y-3 max-h-[600px] overflow-y-auto px-2 pb-10">
                         <div v-for="(line, index) in scriptLines" :key="line.id" @click="toggleLineSelection(index, $event)"
@@ -1652,6 +1663,7 @@
 
                 watch(currentTtsConfigId, (newId) => {
                     if (newId) localStorage.setItem('unitale_ttsConfigId', newId);
+                    else localStorage.removeItem('unitale_ttsConfigId');
                 });
 
                 watch(selectedVoiceDesignUrl, (newUrl) => {
@@ -2401,6 +2413,8 @@
                          currentTtsConfigId.value = savedTtsId;
                      } else if (ttsConfigs.value.length > 0) {
                          currentTtsConfigId.value = ttsConfigs.value[0].id;
+                     } else {
+                         currentTtsConfigId.value = '';
                      }
  
                      // 初始化默认滤波器
@@ -2487,6 +2501,16 @@
                 const currentTtsConfig = computed(() => {
                     return ttsConfigs.value.find(c => c.id === currentTtsConfigId.value) || null;
                 });
+                const ensureCurrentTtsConfigSelection = (preferredId = '') => {
+                    if (preferredId && ttsConfigs.value.some(c => c.id === preferredId)) {
+                        currentTtsConfigId.value = preferredId;
+                        return;
+                    }
+                    if (currentTtsConfigId.value && ttsConfigs.value.some(c => c.id === currentTtsConfigId.value)) {
+                        return;
+                    }
+                    currentTtsConfigId.value = ttsConfigs.value[0]?.id || '';
+                };
                 const selectedVoiceDesign = computed(() => {
                     return voiceDesigns.value.find(design => design.url === selectedVoiceDesignUrl.value) || voiceDesigns.value[0] || null;
                 });
@@ -2552,15 +2576,20 @@
                     }
 
                     ttsForm.value.baseUrl = ttsForm.value.baseUrl.trim();
+                    const savedConfigId = ttsForm.value.id || Date.now().toString();
+                    const shouldPreferSavedConfig = !currentTtsConfigId.value
+                        || currentTtsConfigId.value === savedConfigId
+                        || !ttsConfigs.value.some(c => c.id === currentTtsConfigId.value);
 
                     if (isEditingTts.value) {
                         const index = ttsConfigs.value.findIndex(c => c.id === ttsForm.value.id);
                         if (index !== -1) ttsConfigs.value[index] = { ...ttsForm.value };
                     } else {
-                        ttsConfigs.value.push({ ...ttsForm.value, id: Date.now().toString() });
+                        ttsConfigs.value.push({ ...ttsForm.value, id: savedConfigId });
                     }
 
                     saveTtsConfigsToLocal();
+                    ensureCurrentTtsConfigSelection(shouldPreferSavedConfig ? savedConfigId : '');
                     resetTtsForm();
                 };
 
@@ -2573,6 +2602,7 @@
                     if (!confirm('确定删除此 TTS 配置吗？')) return;
                     ttsConfigs.value = ttsConfigs.value.filter(c => c.id !== id);
                     saveTtsConfigsToLocal();
+                    ensureCurrentTtsConfigSelection();
                 };
 
                 const resetTtsForm = () => {
