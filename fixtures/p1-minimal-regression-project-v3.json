@@ -1,0 +1,227 @@
+{
+  "kind": "unitale-project",
+  "schemaVersion": 3,
+  "version": "3.0",
+  "savedAt": 1780800000000,
+  "libraries": {
+    "sfx": [
+      {
+        "id": "sfx_regression_click",
+        "name": "测试提示音",
+        "description": "P1 最小回归验收音效",
+        "filename": "regression_sfx.wav",
+        "assetKey": "sfx_regression_click_asset",
+        "trimStart": 0,
+        "trimEnd": 1,
+        "volume": 0.3,
+        "enabled": true,
+        "_fileData":"data:audio/wav;base64,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",
+        "_mimeType": "audio/wav"
+      }
+    ],
+    "bgm": [
+      {
+        "id": "bgm_regression_theme",
+        "name": "测试BGM",
+        "description": "P1 最小回归验收背景音乐",
+        "filename": "regression_bgm.wav",
+        "assetKey": "bgm_regression_theme_asset",
+        "trimStart": 0,
+        "trimEnd": 1,
+        "volume": 0.25,
+        "enabled": true,
+        "_fileData":"data:audio/wav;base64,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",
+        "_mimeType": "audio/wav"
+      }
+    ],
+    "timbres": [
+      {
+        "id": "timbre_regression_narrator",
+        "name": "旁白",
+        "description": "中性、清晰、稳定的测试旁白音色",
+        "refPath": "regression_narrator.wav",
+        "assetKey": "timbre_regression_narrator_asset",
+        "_fileData":"data:audio/wav;base64,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",
+        "_mimeType": "audio/wav"
+      }
+    ],
+    "filters": [
+      {
+        "id": "f1",
+        "name": "电话音",
+        "description": "模拟电话通话时的窄频带声音",
+        "type": "bandpass",
+        "frequency": 1700,
+        "Q": 1.5,
+        "gain": 0,
+        "enabled": true
+      },
+      {
+        "id": "f2",
+        "name": "水下",
+        "description": "模拟在水下听到的闷声",
+        "type": "lowpass",
+        "frequency": 400,
+        "Q": 1,
+        "gain": 0,
+        "enabled": true
+      },
+      {
+        "id": "f3",
+        "name": "老广播",
+        "description": "模拟老式收音机或广播的尖锐声音",
+        "type": "highpass",
+        "frequency": 1500,
+        "Q": 1,
+        "gain": 0,
+        "enabled": true
+      },
+      {
+        "id": "f4",
+        "name": "机械失真",
+        "description": "模拟机器人或设备损坏时的失真声音",
+        "type": "distortion",
+        "frequency": 1000,
+        "Q": 1,
+        "gain": 50,
+        "enabled": true
+      }
+    ],
+    "emotions": [
+      {
+        "id": "sys_1",
+        "name": "高兴",
+        "vector": [1, 0, 0, 0, 0, 0, 0, 0],
+        "enabled": true
+      },
+      {
+        "id": "sys_2",
+        "name": "生气",
+        "vector": [0, 1, 0, 0, 0, 0, 0, 0],
+        "enabled": true
+      },
+      {
+        "id": "sys_3",
+        "name": "伤心",
+        "vector": [0, 0, 1, 0, 0, 0, 0, 0],
+        "enabled": true
+      },
+      {
+        "id": "sys_4",
+        "name": "害怕",
+        "vector": [0, 0, 0, 1, 0, 0, 0, 0],
+        "enabled": true
+      },
+      {
+        "id": "sys_5",
+        "name": "厌恶",
+        "vector": [0, 0, 0, 0, 1, 0, 0, 0],
+        "enabled": true
+      },
+      {
+        "id": "sys_6",
+        "name": "低落",
+        "vector": [0, 0, 0, 0, 0, 1, 0, 0],
+        "enabled": true
+      },
+      {
+        "id": "sys_7",
+        "name": "惊喜",
+        "vector": [0, 0, 0, 0, 0, 0, 1, 0],
+        "enabled": true
+      },
+      {
+        "id": "sys_8",
+        "name": "平静",
+        "vector": [0, 0, 0, 0, 0, 0, 0, 1],
+        "enabled": true
+      }
+    ]
+  },
+  "project": {
+    "currentScriptId": "regression-main",
+    "scriptList": [
+      {
+        "id": "regression-main",
+        "name": "P1 最小回归验收工程",
+        "data": {
+          "rawScript": "回归验收开始，先确认导入后能恢复第一句音频。\n然后检查背景图、BGM 和导出链路是否仍然可用。",
+          "rawAnalysisResult": "P1 最小回归验收样例",
+          "characters": [
+            {
+              "id": "char_regression_narrator",
+              "name": "旁白",
+              "voiceFile": "regression_narrator.wav",
+              "voiceAssetKey": "timbre_regression_narrator_asset",
+              "voiceDescription": "中性、清晰、稳定",
+              "volume": 1
+            }
+          ],
+          "scriptLines": [
+            {
+              "id": "regression_bgm_play",
+              "type": "bgm",
+              "action": "play",
+              "bgmName": "测试BGM",
+              "volume": 0.4
+            },
+            {
+              "id": "regression_bg_1",
+              "type": "bgImage",
+              "bgImagePrompt": "深夜录音棚，冷色台灯照亮桌面，显示器微光，安静而略带悬疑，电影感构图",
+              "bgImageAssetKey": "bgImage_regression_cover_asset",
+              "imageMimeType": "image/png",
+              "imageBase64":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF9sAAAAASUVORK5CYII="
+            },
+            {
+              "id": "regression_line_1",
+              "type": "dialogue",
+              "role": "旁白",
+              "text": "回归验收开始，先确认导入后能恢复第一句音频。",
+              "emotion": "平静",
+              "intensity": "中等",
+              "break_duration": 0,
+              "filter": "",
+              "sfx": [
+                {
+                  "name": "测试提示音",
+                  "position": 0.35
+                }
+              ],
+              "trimStart": 0,
+              "trimEnd": 1,
+              "sfxVolume": 1,
+              "dialogueVolume": 1,
+              "speed": 1,
+              "audioAssetKey": "line_audio_regression_line_1",
+              "audioBase64":"data:audio/wav;base64,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"
+            },
+            {
+              "id": "regression_line_2",
+              "type": "dialogue",
+              "role": "旁白",
+              "text": "然后检查背景图、BGM 和导出链路是否仍然可用。",
+              "emotion": "平静",
+              "intensity": "中等",
+              "break_duration": 0.2,
+              "filter": "",
+              "sfx": [],
+              "trimStart": 0,
+              "trimEnd": 1,
+              "sfxVolume": 1,
+              "dialogueVolume": 1,
+              "speed": 1,
+              "audioAssetKey": "line_audio_regression_line_2",
+              "audioBase64":"data:audio/wav;base64,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"
+            },
+            {
+              "id": "regression_bgm_stop",
+              "type": "bgm",
+              "action": "stop"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
