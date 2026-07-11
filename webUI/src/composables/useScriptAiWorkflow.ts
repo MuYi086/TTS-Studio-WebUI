@@ -30,7 +30,8 @@ import { useSettingsStore } from '../stores/settings.store';
 import {
   DEFAULT_PROMPT_TEMPLATE,
   DEFAULT_QWEN_VOICE_TEXT_TEMPLATE,
-  DEFAULT_VOICE_PROMPT_TEMPLATE
+  DEFAULT_VOICE_PROMPT_TEMPLATE,
+  ttsProtocolUsesReferenceText
 } from '../stores/settings.defaults';
 
 const assetRepository = new AssetRepository();
@@ -158,7 +159,9 @@ const createAnalysisScriptLines = (items: unknown[], options: {
 
 const buildCharacterList = (lines: ScriptLine[], characters: CharacterBinding[], timbres: {
   assetKey: string;
+  description?: string;
   name: string;
+  promptText?: string;
   refPath: string;
 }[]): CharacterBinding[] => {
   const roleNames = new Set<string>();
@@ -577,6 +580,7 @@ export const useScriptAiWorkflow = (options: {
         baseUrl: currentTtsConfig.value.baseUrl,
         file,
         fileName,
+        includePromptText: ttsProtocolUsesReferenceText(currentTtsConfig.value.protocol),
         promptText: generationText,
         signal: controller.signal
       });
@@ -592,6 +596,7 @@ export const useScriptAiWorkflow = (options: {
 
       character.voiceFile = saved.refPath;
       character.voiceAssetKey = saved.assetKey;
+      character.voicePromptText = generationText;
       jobsStore.updateJob(
         'voiceDesign',
         'success',
@@ -638,6 +643,7 @@ export const useScriptAiWorkflow = (options: {
           baseUrl: currentTtsConfig.value.baseUrl,
           file: blob,
           fileName: timbre.refPath,
+          includePromptText: ttsProtocolUsesReferenceText(currentTtsConfig.value.protocol),
           promptText: timbre.promptText
         });
         uploadedCount += 1;

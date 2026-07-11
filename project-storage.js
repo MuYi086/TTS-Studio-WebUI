@@ -76,6 +76,7 @@
         if (isTimbre) {
             normalized.name = normalized.name || '未命名音色';
             normalized.description = normalized.description || '';
+            normalized.promptText = normalized.promptText || '';
             normalized.refPath = normalized.refPath || '';
             if (!normalized.assetKey && normalized.refPath && !/^(https?:\/\/|blob:|data:)/.test(normalized.refPath)) {
                 normalized.assetKey = createAssetKey('legacy_timbre', normalized.refPath);
@@ -110,7 +111,8 @@
             voiceFile: source.voiceFile || (matchedByName ? matchedByName.refPath : ''),
             voiceAssetKey: source.voiceAssetKey || matchedByPath || (matchedByName ? matchedByName.assetKey || '' : ''),
             volume: toNumber(source.volume, 1.0),
-            voiceDescription: source.voiceDescription || ''
+            voiceDescription: source.voiceDescription || (matchedByName ? matchedByName.description || '' : ''),
+            voicePromptText: source.voicePromptText || (matchedByName ? matchedByName.promptText || '' : '')
         };
     }
 
@@ -130,6 +132,8 @@
                 name: roleName,
                 voiceFile: matched ? matched.refPath : '',
                 voiceAssetKey: matched ? matched.assetKey || '' : '',
+                voiceDescription: matched ? matched.description || '' : '',
+                voicePromptText: matched ? matched.promptText || '' : '',
                 volume: 1.0
             }, lookup);
         });

@@ -25,7 +25,10 @@ import { useJobsStore } from '../stores/jobs.store';
 import { useLibraryStore } from '../stores/library.store';
 import { usePlaybackStore } from '../stores/playback.store';
 import { useProjectStore } from '../stores/project.store';
-import type { TtsConfigItem } from '../stores/settings.defaults';
+import {
+  ttsProtocolUsesReferenceText,
+  type TtsConfigItem
+} from '../stores/settings.defaults';
 
 const assetRepository = new AssetRepository();
 const workflowPreferenceRepository = new ScriptWorkflowPreferenceRepository();
@@ -444,35 +447,28 @@ export const useScriptAudioRuntime = (options: {
       : '';
   };
 
-  const resolveCharacterStylePrompt = (character: CharacterBinding): string => {
-    const timbre = resolveCharacterTimbre(character);
-    const timbreDescription = timbre?.description?.trim();
-
-    if (timbreDescription) {
-      return timbreDescription;
-    }
-
-    return character.voiceDescription.trim();
-  };
-
   const createSynthesisPayload = (
     line: DialogueLine,
-    character: CharacterBinding
+    character: CharacterBinding,
+    ttsConfig: TtsConfigItem
   ): Record<string, unknown> => {
-    const promptText = resolveCharacterPromptText(character);
-    const stylePrompt = resolveCharacterStylePrompt(character);
     const payload: Record<string, unknown> = {
       audio_path: character.voiceFile,
-      emo_vector: resolveEmotionVector(line),
       text: line.text
     };
 
-    if (promptText) {
-      payload.prompt_text = promptText;
-    }
+    if (ttsProtocolUsesReferenceText(ttsConfig.protocol)) {
+      const promptText = resolveCharacterPromptText(character);
 
-    if (stylePrompt) {
-      payload.style_prompt = stylePrompt;
+      if (!promptText) {
+        throw new Error(
+          `TTS 配置「${ttsConfig.name}」需要参考音频文本，请在绑定音色中填写。`
+        );
+      }
+
+      payload.prompt_text = promptText;
+    } else {
+      payload.emo_vector = resolveEmotionVector(line);
     }
 
     return payload;
@@ -498,11 +494,18 @@ export const useScriptAudioRuntime = (options: {
     character: CharacterBinding,
     signal?: AbortSignal
   ) => {
-    if (!currentTtsConfig.value || !character.voiceFile || !character.voiceAssetKey) {
+    const timbre = resolveCharacterTimbre(character);
+    const assetKey = character.voiceAssetKey || timbre?.assetKey || '';
+
+    if (!currentTtsConfig.value || !character.voiceFile || !assetKey) {
       return;
     }
 
-    const blob = await loadAssetBlob(character.voiceAssetKey);
+    if (!character.voiceAssetKey) {
+      character.voiceAssetKey = assetKey;
+    }
+
+    const blob = await loadAssetBlob(assetKey);
 
     if (!blob) {
       return;
@@ -512,6 +515,7 @@ export const useScriptAudioRuntime = (options: {
       baseUrl: currentTtsConfig.value.baseUrl,
       file: blob,
       fileName: character.voiceFile,
+      includePromptText: ttsProtocolUsesReferenceText(currentTtsConfig.value.protocol),
       promptText: resolveCharacterPromptText(character),
       signal
     });
@@ -825,7 +829,7 @@ export const useScriptAudioRuntime = (options: {
       const response = await fetch(
         `${normalizeTtsServiceBaseUrl(currentTtsConfig.value.baseUrl)}/v2/synthesize`,
         {
-          body: JSON.stringify(createSynthesisPayload(line, character)),
+          body: JSON.stringify(createSynthesisPayload(line, character, currentTtsConfig.value)),
           headers: {
             'Content-Type': 'application/json'
           },

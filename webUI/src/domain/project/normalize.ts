@@ -91,14 +91,18 @@ const normalizeCharacter = (
   const source = cloneData(asObject(character));
   const name = typeof source.name === 'string' && source.name ? source.name : '旁白';
   const voiceFile = typeof source.voiceFile === 'string' ? source.voiceFile : '';
-  const voiceDescription =
-    typeof source.voiceDescription === 'string' ? source.voiceDescription : '';
-  const voicePromptText =
-    typeof source.voicePromptText === 'string' ? source.voicePromptText : '';
   const matchedByPath = voiceFile && options.voiceKeyByPath
     ? options.voiceKeyByPath.get(voiceFile) ?? ''
     : '';
   const matchedByName = options.voiceKeyByName?.get(name);
+  const voiceDescription =
+    typeof source.voiceDescription === 'string'
+      ? source.voiceDescription
+      : matchedByName?.description ?? '';
+  const voicePromptText =
+    typeof source.voicePromptText === 'string'
+      ? source.voicePromptText
+      : matchedByName?.promptText ?? '';
 
   return {
     ...source,

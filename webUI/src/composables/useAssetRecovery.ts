@@ -28,10 +28,12 @@ const normalizeKeys = (value: string[]): string[] => {
   );
 };
 
-const readAssetStatus = async (key: string): Promise<void> => {
+const readAssetStatus = async (key: string, force = false): Promise<void> => {
   if (pendingStatusTasks.has(key)) {
     await pendingStatusTasks.get(key);
-    return;
+    if (!force) {
+      return;
+    }
   }
 
   const task = (async () => {
@@ -45,10 +47,12 @@ const readAssetStatus = async (key: string): Promise<void> => {
   await task;
 };
 
-const readImageAsset = async (key: string): Promise<void> => {
+const readImageAsset = async (key: string, force = false): Promise<void> => {
   if (pendingImageTasks.has(key)) {
     await pendingImageTasks.get(key);
-    return;
+    if (!force) {
+      return;
+    }
   }
 
   const task = (async () => {
@@ -106,7 +110,7 @@ export const useAssetRecovery = (options: {
   return {
     assetStatusByKey: readonly(assetStatusState),
     assetUrlByKey: readonly(assetUrlState),
-    refreshAssetStatus: readAssetStatus,
-    refreshImageAsset: readImageAsset
+    refreshAssetStatus: (key: string) => readAssetStatus(key, true),
+    refreshImageAsset: (key: string) => readImageAsset(key, true)
   };
 };

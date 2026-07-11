@@ -9,17 +9,19 @@ export const ensureReferenceAudioUploaded = async (options: {
   baseUrl: string;
   file: Blob;
   fileName: string;
+  includePromptText?: boolean;
   promptText?: string;
   signal?: AbortSignal;
   ttsClient?: TtsClient;
 }): Promise<void> => {
-  const { baseUrl, file, fileName, promptText, signal } = options;
+  const { baseUrl, file, fileName, includePromptText = false, promptText, signal } = options;
   const ttsClient = options.ttsClient ?? new TtsClient();
   const normalizedBaseUrl = normalizeTtsServiceBaseUrl(baseUrl);
-  const normalizedPromptText = promptText?.trim() ?? '';
+  const normalizedPromptText = includePromptText ? promptText?.trim() ?? '' : '';
 
   let exists = false;
   let hasPromptText = false;
+  let supportsPromptTextStatus = false;
 
   try {
     const checkResponse = await ttsClient.checkAudio(normalizedBaseUrl, fileName, signal);
@@ -31,6 +33,7 @@ export const ensureReferenceAudioUploaded = async (options: {
       };
       exists = payload.exists === true;
       hasPromptText = payload.has_prompt_text === true;
+      supportsPromptTextStatus = 'has_prompt_text' in payload;
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
@@ -38,7 +41,10 @@ export const ensureReferenceAudioUploaded = async (options: {
     }
   }
 
-  if (exists && (!normalizedPromptText || hasPromptText)) {
+  if (
+    exists &&
+    (!normalizedPromptText || !supportsPromptTextStatus || hasPromptText)
+  ) {
     return;
   }
 

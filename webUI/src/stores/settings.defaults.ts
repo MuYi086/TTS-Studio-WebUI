@@ -7,10 +7,39 @@ export interface LlmConfigItem {
   params: string;
 }
 
+export const TTS_PROTOCOLS = {
+  indextts2: 'indextts2',
+  referenceTextClone: 'reference-text-clone'
+} as const;
+
+export type TtsProtocol = (typeof TTS_PROTOCOLS)[keyof typeof TTS_PROTOCOLS];
+
+export const DEFAULT_TTS_PROTOCOL: TtsProtocol = TTS_PROTOCOLS.indextts2;
+
+export const TTS_PROTOCOL_OPTIONS: Array<{ label: string; value: TtsProtocol }> = [
+  {
+    value: TTS_PROTOCOLS.indextts2,
+    label: 'IndexTTS2（仅传音频与情绪向量）'
+  },
+  {
+    value: TTS_PROTOCOLS.referenceTextClone,
+    label: '参考文本克隆（传 prompt_text）'
+  }
+];
+
+export const normalizeTtsProtocol = (value: unknown): TtsProtocol =>
+  value === TTS_PROTOCOLS.referenceTextClone
+    ? TTS_PROTOCOLS.referenceTextClone
+    : DEFAULT_TTS_PROTOCOL;
+
+export const ttsProtocolUsesReferenceText = (protocol: TtsProtocol): boolean =>
+  protocol === TTS_PROTOCOLS.referenceTextClone;
+
 export interface TtsConfigItem {
   id: string;
   name: string;
   baseUrl: string;
+  protocol: TtsProtocol;
 }
 
 export const STORAGE_KEYS = {

@@ -6,6 +6,7 @@ import {
   DEFAULT_PROMPT_TEMPLATE,
   DEFAULT_QWEN_VOICE_TEXT_TEMPLATE,
   DEFAULT_VOICE_PROMPT_TEMPLATE,
+  normalizeTtsProtocol,
   STORAGE_KEYS,
   type LlmConfigItem,
   type TtsConfigItem
@@ -133,7 +134,14 @@ export const useSettingsStore = defineStore('settings', () => {
       preferenceRepository.getString(STORAGE_KEYS.currentLlmConfigId) ?? '';
     ensureCurrentLlmSelection();
 
-    ttsConfigs.value = readJsonArray<TtsConfigItem>(STORAGE_KEYS.ttsConfigs);
+    const savedTtsConfigs = readJsonArray<TtsConfigItem>(STORAGE_KEYS.ttsConfigs);
+    ttsConfigs.value = savedTtsConfigs.map((item) => ({
+      ...item,
+      protocol: normalizeTtsProtocol(item.protocol)
+    }));
+    if (savedTtsConfigs.some((item) => item.protocol !== normalizeTtsProtocol(item.protocol))) {
+      persistTtsConfigs();
+    }
     currentTtsConfigId.value =
       preferenceRepository.getString(STORAGE_KEYS.currentTtsConfigId) ?? '';
     ensureCurrentTtsSelection();
@@ -197,7 +205,8 @@ export const useSettingsStore = defineStore('settings', () => {
     const nextValue: TtsConfigItem = {
       id: savedId,
       name: payload.name,
-      baseUrl: payload.baseUrl.trim()
+      baseUrl: payload.baseUrl.trim(),
+      protocol: normalizeTtsProtocol(payload.protocol)
     };
     const existingIndex = ttsConfigs.value.findIndex((item) => item.id === savedId);
 

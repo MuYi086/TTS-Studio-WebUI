@@ -2,7 +2,12 @@
 import { computed, ref } from 'vue';
 
 import { useSettingsStore } from '../stores/settings.store';
-import type { LlmConfigItem, TtsConfigItem } from '../stores/settings.defaults';
+import {
+  DEFAULT_TTS_PROTOCOL,
+  TTS_PROTOCOL_OPTIONS,
+  type LlmConfigItem,
+  type TtsConfigItem
+} from '../stores/settings.defaults';
 
 const settingsStore = useSettingsStore();
 
@@ -18,7 +23,8 @@ const llmForm = ref<Omit<LlmConfigItem, 'id'> & { id: string }>({
 const ttsForm = ref<Omit<TtsConfigItem, 'id'> & { id: string }>({
   id: '',
   name: '',
-  baseUrl: ''
+  baseUrl: '',
+  protocol: DEFAULT_TTS_PROTOCOL
 });
 
 const isEditingLlm = ref(false);
@@ -52,7 +58,8 @@ const resetTtsForm = () => {
   ttsForm.value = {
     id: '',
     name: '',
-    baseUrl: ''
+    baseUrl: '',
+    protocol: DEFAULT_TTS_PROTOCOL
   };
   isEditingTts.value = false;
 };
@@ -221,6 +228,14 @@ const removeTts = (id: string) => {
           <span>Base URL</span>
           <input v-model="ttsForm.baseUrl" type="text" placeholder="http://127.0.0.1:8300" />
         </label>
+        <label class="field field--wide">
+          <span>合成协议</span>
+          <select v-model="ttsForm.protocol">
+            <option v-for="option in TTS_PROTOCOL_OPTIONS" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
       </div>
 
       <div class="actions">
@@ -263,6 +278,9 @@ const removeTts = (id: string) => {
               <span v-if="item.id === settingsStore.currentTtsConfigId" class="badge">当前默认</span>
             </div>
             <p class="mono">{{ item.baseUrl }}</p>
+            <p class="note">
+              {{ TTS_PROTOCOL_OPTIONS.find((option) => option.value === item.protocol)?.label }}
+            </p>
           </div>
           <div class="list-actions">
             <button type="button" class="ghost" @click="startEditTts(item)">编辑</button>
