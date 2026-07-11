@@ -232,6 +232,14 @@
                             class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             placeholder="http://127.0.0.1:8300">
                     </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">合成协议</label>
+                        <select v-model="ttsForm.protocol"
+                            class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="indextts2">IndexTTS2（仅传音频与情绪向量）</option>
+                            <option value="reference-text-clone">参考文本克隆（传 prompt_text）</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="flex gap-2">
                     <button type="button" @click.prevent="saveTtsConfig"
@@ -248,6 +256,7 @@
                     <div>
                         <div class="font-bold text-slate-800 text-sm">{{ conf.name }}</div>
                         <div class="text-xs text-slate-400 mt-1">{{ conf.baseUrl }}</div>
+                        <div class="text-xs text-slate-400 mt-1">{{ ttsProtocolLabel(conf.protocol) }}</div>
                     </div>
                     <div class="flex gap-2">
                         <button @click="editTtsConfig(conf)"
@@ -285,6 +294,12 @@
                                 placeholder="例如: 声音低沉，适合反派或中年男性">
                         </div>
                         <div class="md:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">参考音频文本</label>
+                            <textarea v-model="timbreForm.promptText" rows="2"
+                                class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+                                placeholder="可选：参考音频中实际说出的文字，用于 VoxCPM2 / Qwen3-TTS 等克隆模型"></textarea>
+                        </div>
+                        <div class="md:col-span-2">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">参考音频文件</label>
                             <div class="flex gap-2 items-center">
                                 <input type="file" ref="timbreFileRef" @change="handleTimbreFileUpload"
@@ -319,6 +334,8 @@
                                 <div class="font-bold text-slate-800 text-sm">{{ timbre.name }}</div>
                                 <div v-if="timbre.description" class="text-xs text-slate-500 mt-0.5">{{
                                     timbre.description }}</div>
+                                <div v-if="timbre.promptText" class="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap">{{
+                                    timbre.promptText }}</div>
                                 <div class="text-xs text-slate-400 mt-1">{{ timbre.refPath }}</div>
                             </div>
                         </div>
@@ -1607,8 +1624,22 @@
                 const isEditing = ref(false);
 
                 // TTS 配置状态
+                const TTS_PROTOCOLS = {
+                    indextts2: 'indextts2',
+                    referenceTextClone: 'reference-text-clone'
+                };
+                const normalizeTtsProtocol = (value) =>
+                    value === TTS_PROTOCOLS.referenceTextClone
+                        ? TTS_PROTOCOLS.referenceTextClone
+                        : TTS_PROTOCOLS.indextts2;
+                const usesReferenceText = (config) =>
+                    normalizeTtsProtocol(config?.protocol) === TTS_PROTOCOLS.referenceTextClone;
+                const ttsProtocolLabel = (protocol) =>
+                    normalizeTtsProtocol(protocol) === TTS_PROTOCOLS.referenceTextClone
+                        ? '参考文本克隆（传 prompt_text）'
+                        : 'IndexTTS2（仅传音频与情绪向量）';
                 const ttsConfigs = ref([]);
-                const ttsForm = ref({ id: '', name: '', baseUrl: '' });
+                const ttsForm = ref({ id: '', name: '', baseUrl: '', protocol: TTS_PROTOCOLS.indextts2 });
                 const isEditingTts = ref(false);
                 const fallbackVoiceDesigns = [
                     { name: 'Qwen', url: 'http://127.0.0.1:8300/v1/qwen/design' },
@@ -1626,7 +1657,7 @@
 
                 // 音色库状态
                 const timbres = ref([]);
-                const timbreForm = ref({ id: '', name: '', description: '', refPath: '', assetKey: '' });
+                const timbreForm = ref({ id: '', name: '', description: '', promptText: '', refPath: '', assetKey: '' });
                 const isEditingTimbre = ref(false);
                 const selectedTimbreId = ref('');
                 const timbreFile = ref(null); // ADDED: To store the selected timbre file object
@@ -2406,7 +2437,16 @@
  
                      // 读取 TTS 配置
                      const savedTts = localStorage.getItem('storyforge_tts_configs');
-                     if (savedTts) ttsConfigs.value = JSON.parse(savedTts);
+                     if (savedTts) {
+                         const parsedTtsConfigs = JSON.parse(savedTts);
+                         ttsConfigs.value = Array.isArray(parsedTtsConfigs)
+                             ? parsedTtsConfigs.map((config) => ({
+                                 ...config,
+                                 protocol: normalizeTtsProtocol(config?.protocol)
+                             }))
+                             : [];
+                         localStorage.setItem('storyforge_tts_configs', JSON.stringify(ttsConfigs.value));
+                     }
  
                      const savedTtsId = localStorage.getItem('unitale_ttsConfigId');
                      if (savedTtsId && ttsConfigs.value.some(c => c.id === savedTtsId)) {
@@ -2576,6 +2616,7 @@
                     }
 
                     ttsForm.value.baseUrl = ttsForm.value.baseUrl.trim();
+                    ttsForm.value.protocol = normalizeTtsProtocol(ttsForm.value.protocol);
                     const savedConfigId = ttsForm.value.id || Date.now().toString();
                     const shouldPreferSavedConfig = !currentTtsConfigId.value
                         || currentTtsConfigId.value === savedConfigId
@@ -2594,7 +2635,7 @@
                 };
 
                 const editTtsConfig = (conf) => {
-                    ttsForm.value = { ...conf };
+                    ttsForm.value = { ...conf, protocol: normalizeTtsProtocol(conf.protocol) };
                     isEditingTts.value = true;
                 };
 
@@ -2606,7 +2647,7 @@
                 };
 
                 const resetTtsForm = () => {
-                    ttsForm.value = { id: '', name: '', baseUrl: '' };
+                    ttsForm.value = { id: '', name: '', baseUrl: '', protocol: TTS_PROTOCOLS.indextts2 };
                     isEditingTts.value = false;
                 };
 
@@ -2619,9 +2660,26 @@
                     return fallbackMatch ? fallbackMatch.assetKey : (char.voiceAssetKey || '');
                 };
 
+                const resolveCharacterTimbre = (char) => {
+                    if (!char || !char.voiceFile) return null;
+                    return timbres.value.find(t => char.voiceAssetKey && t.assetKey === char.voiceAssetKey)
+                        || timbres.value.find(t => t.refPath === char.voiceFile)
+                        || null;
+                };
+
+                const resolveCharacterPromptText = (char) => {
+                    const timbre = resolveCharacterTimbre(char);
+                    return (timbre?.promptText || char?.voicePromptText || '').trim();
+                };
+
                 const syncCharacterVoiceSelection = (char) => {
                     if (!char) return;
                     char.voiceAssetKey = resolveCharacterVoiceAssetKey(char);
+                    const timbre = resolveCharacterTimbre(char);
+                    if (timbre) {
+                        char.voiceDescription = timbre.description || char.voiceDescription || '';
+                        char.voicePromptText = timbre.promptText || char.voicePromptText || '';
+                    }
                 };
 
                 const addCharacter = () => {
@@ -2630,6 +2688,8 @@
                         name: '新角色',
                         voiceFile: '', // Path for both display and synthesis
                         voiceAssetKey: '',
+                        voiceDescription: '',
+                        voicePromptText: '',
                         volume: 1.0
                     });
                 };
@@ -2757,6 +2817,9 @@
                         const formData = new FormData();
                         formData.append('audio', file);
                         formData.append('full_path', filename);
+                        if (usesReferenceText(cfg)) {
+                            formData.append('prompt_text', textToUse);
+                        }
 
                         const upRes = await fetch(`${baseUrl}/v1/upload_audio`, {
                             method: 'POST',
@@ -2769,6 +2832,7 @@
                         if (existingIndex !== -1) {
                             // 更新已有音色
                             timbres.value[existingIndex].description = char.voiceDescription;
+                            timbres.value[existingIndex].promptText = textToUse;
                             timbres.value[existingIndex].refPath = filename;
                             timbres.value[existingIndex].assetKey = assetKey;
                         } else {
@@ -2777,6 +2841,7 @@
                                 id: Date.now().toString(),
                                 name: timbreName,
                                 description: char.voiceDescription,
+                                promptText: textToUse,
                                 refPath: filename,
                                 assetKey
                             });
@@ -2785,6 +2850,7 @@
                         // 5. 选中该音色
                         char.voiceFile = filename;
                         char.voiceAssetKey = assetKey;
+                        char.voicePromptText = textToUse;
 
                         // 6. 自动保存
                         triggerAutoSave();
@@ -2842,6 +2908,7 @@
 
                     let baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '');
                     if (baseUrl.endsWith('/v1')) baseUrl = baseUrl.slice(0, -3);
+                    const includePromptText = usesReferenceText(cfg);
                     console.log(`正在同步音色文件到服务器: ${baseUrl}`);
 
                     for (const t of timbres.value) {
@@ -2858,17 +2925,26 @@
                             const checkUrl = `${baseUrl}/v1/check/audio?file_name=${encodeURIComponent(t.refPath)}`;
                             const checkRes = await fetch(checkUrl);
                             let exists = false;
+                            let hasPromptText = false;
+                            let supportsPromptTextStatus = false;
                             if (checkRes.ok) {
                                 const checkData = await checkRes.json();
                                 exists = checkData.exists;
+                                hasPromptText = checkData.has_prompt_text === true;
+                                supportsPromptTextStatus = Object.prototype.hasOwnProperty.call(checkData, 'has_prompt_text');
                             }
 
-                            // 2. 如果不存在，则上传
-                            if (!exists) {
+                            const promptText = includePromptText ? (t.promptText || '').trim() : '';
+
+                            // 2. 仅参考文本协议在服务端声明缺少参考文本时重新上传
+                            if (!exists || (promptText && supportsPromptTextStatus && !hasPromptText)) {
                                 console.log(`正在上传缺失的音色文件: ${t.name} (${t.refPath})`);
                                 const formData = new FormData();
                                 formData.append('audio', file);
                                 formData.append('full_path', t.refPath);
+                                if (promptText) {
+                                    formData.append('prompt_text', promptText);
+                                }
 
                                 await fetch(`${baseUrl}/v1/upload_audio`, {
                                     method: 'POST',
@@ -2906,6 +2982,7 @@
                         const newTimbreData = {
                             ...timbreForm.value,
                             id: targetId,
+                            promptText: timbreForm.value.promptText || '',
                             assetKey: timbreForm.value.assetKey || ''
                         };
 
@@ -2941,7 +3018,7 @@
                 };
 
                 const resetTimbreForm = () => {
-                    timbreForm.value = { id: '', name: '', description: '', refPath: '', assetKey: '' };
+                    timbreForm.value = { id: '', name: '', description: '', promptText: '', refPath: '', assetKey: '' };
                     isEditingTimbre.value = false;
                     timbreFile.value = null; // Reset the stored file
                 };
@@ -3220,6 +3297,7 @@
                         if (!char || !char.voiceFile) {
                             throw new Error(`角色 "${line.role}" 未绑定音色文件路径。\n\n请在左侧的角色列表中为该角色选择一个音色文件，或手动输入路径。`);
                         }
+                        syncCharacterVoiceSelection(char);
 
                         let finalVector = [0, 0, 0, 0, 0, 0, 0, 0];
                         const preset = emotionPresets.value.find(e => e.name === line.emotion);
@@ -3232,30 +3310,43 @@
                             }
                         }
 
+                        const cfg = currentTtsConfig.value;
+                        const includePromptText = usesReferenceText(cfg);
+                        const promptText = includePromptText ? resolveCharacterPromptText(char) : '';
+                        if (includePromptText && !promptText) {
+                            throw new Error(`TTS 配置「${cfg.name}」需要参考音频文本，请在绑定音色中填写。`);
+                        }
                         const payload = {
                             text: line.text,
-                            audio_path: char.voiceFile,
-                            emo_vector: finalVector
+                            audio_path: char.voiceFile
                         };
+                        if (includePromptText) payload.prompt_text = promptText;
+                        else payload.emo_vector = finalVector;
 
-                        const cfg = currentTtsConfig.value;
                         let baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '');
                         if (baseUrl.endsWith('/v1')) baseUrl = baseUrl.slice(0, -3);
 
-                        syncCharacterVoiceSelection(char);
                         const voiceFile = await loadStoredAssetBlob(char, char.voiceFile);
                         if (voiceFile) {
                             try {
                                 const checkUrl = `${baseUrl}/v1/check/audio?file_name=${encodeURIComponent(char.voiceFile)}`;
                                 const checkRes = await fetch(checkUrl, { signal: internalSignal });
                                 let exists = false;
+                                let hasPromptText = false;
+                                let supportsPromptTextStatus = false;
                                 if (checkRes.ok) {
-                                    exists = (await checkRes.json()).exists;
+                                    const checkData = await checkRes.json();
+                                    exists = checkData.exists;
+                                    hasPromptText = checkData.has_prompt_text === true;
+                                    supportsPromptTextStatus = Object.prototype.hasOwnProperty.call(checkData, 'has_prompt_text');
                                 }
-                                if (!exists) {
+                                if (!exists || (includePromptText && promptText && supportsPromptTextStatus && !hasPromptText)) {
                                     const formData = new FormData();
                                     formData.append('audio', voiceFile, char.voiceFile);
                                     formData.append('full_path', char.voiceFile);
+                                    if (includePromptText && promptText) {
+                                        formData.append('prompt_text', promptText);
+                                    }
                                     await fetch(`${baseUrl}/v1/upload_audio`, { method: 'POST', body: formData, signal: internalSignal });
                                 }
                             } catch (e) {
@@ -3277,6 +3368,14 @@
                         }
 
                         const blob = await synthRes.blob();
+                        const contentType = synthRes.headers.get('content-type') || blob.type;
+                        if (blob.size === 0) {
+                            throw new Error('TTS 服务返回了空音频。');
+                        }
+                        if (/json|text/i.test(contentType)) {
+                            const text = await blob.text();
+                            throw new Error(`TTS 服务未返回音频: ${text.slice(0, 500) || contentType}`);
+                        }
                         line.audioAssetKey = line.audioAssetKey || `line_audio_${line.id}`;
                         await saveAssetToDB(line.audioAssetKey, blob);
                         registerLocalAsset(line, blob, `${line.id}.wav`);
@@ -5178,17 +5277,23 @@ const generateVideo = async () => {
                                 let voiceAssetKey = '';
                                 let id = Date.now() + Math.random().toString();
                                 let volume = 1.0;
+                                let voiceDescription = '';
+                                let voicePromptText = '';
 
                                 if (existing) {
                                     voiceFile = existing.voiceFile;
                                     voiceAssetKey = existing.voiceAssetKey || '';
                                     id = existing.id;
                                     volume = existing.volume ?? 1.0;
+                                    voiceDescription = existing.voiceDescription || '';
+                                    voicePromptText = existing.voicePromptText || '';
                                 } else {
                                     const matchingTimbre = timbres.value.find(t => t.name === rName);
                                     if (matchingTimbre) {
                                         voiceFile = matchingTimbre.refPath;
                                         voiceAssetKey = matchingTimbre.assetKey || '';
+                                        voiceDescription = matchingTimbre.description || '';
+                                        voicePromptText = matchingTimbre.promptText || '';
                                     }
                                 }
 
@@ -5197,6 +5302,8 @@ const generateVideo = async () => {
                                     name: rName,
                                     voiceFile: voiceFile,
                                     voiceAssetKey: voiceAssetKey,
+                                    voiceDescription: voiceDescription,
+                                    voicePromptText: voicePromptText,
                                     volume: volume
                                 });
                             });
@@ -5462,7 +5569,12 @@ const generateVideo = async () => {
                             throw new Error(`服务端未找到音频 "${ttsRefPath.value}"，且未选择本地文件进行上传。`);
                         }
 
-                        // 3. 合成语音
+                        // 3. 此旧测试工具只覆盖 IndexTTS2 的情绪文本协议。
+                        if (usesReferenceText(cfg)) {
+                            throw new Error('参考文本克隆请在脚本工作台中使用已绑定的音色；此测试工具未提供参考音频文本输入。');
+                        }
+
+                        // 4. 合成语音
                         const synthPayload = {
                             text: textToSpeak,
                             audio_path: ttsRefPath.value,
@@ -5563,6 +5675,7 @@ const generateVideo = async () => {
                     // TTS State
                     currentTtsConfigId, ttsConfigs, ttsRefPath, ttsEmoText,
                     audioUrl, ttsLoading, ttsError,
+                    ttsProtocolLabel,
 
                     // TTS Actions
                     handleFileUpload, synthesizeAudio, stopTtsGeneration,
