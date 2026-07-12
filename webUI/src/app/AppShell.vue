@@ -26,41 +26,36 @@ const migratedCount = 5;
 <template>
   <main class="shell">
     <section class="hero-card">
-      <div class="hero-copy">
-        <p class="eyebrow">P2 核心工作流</p>
-        <h1>Unitale WebUI</h1>
-        <p class="hero-text">
-          新工程已经接入五个主标签页，并完成脚本分析、角色音色分析、单行/批量生成、顺序播放以及
-          <code>SRT / WAV / MP4</code>
-          导出。旧版
-          <code>index.html</code>
-          继续保留为行为回归对照物。
-        </p>
+      <div class="hero-copy brand-lockup">
+        <p class="eyebrow">TTS STUDIO / MULTI-TRACK AUDIOBOOK</p>
+        <h1>TTS <span>1.5</span></h1>
+        <p class="hero-text">多角色音效合成有声书生成工具</p>
       </div>
       <div class="hero-status">
         <span class="status-dot"></span>
-        <span>已完成 {{ migratedCount }}/{{ appStore.tabs.length }} 个主标签页迁移</span>
+        <span>本地工作台已就绪 · {{ migratedCount }}/{{ appStore.tabs.length }} 个核心模块</span>
       </div>
     </section>
 
     <section class="workspace-card">
       <header class="workspace-header">
         <div>
-          <p class="section-label">应用壳层</p>
-          <h2>完整工作流入口</h2>
+          <p class="section-label">创作工作台</p>
+          <h2>{{ activePanel.label }}</h2>
         </div>
-        <p class="section-note">保持旧信息架构和协议兼容，不额外改视觉和 schema。</p>
+        <p class="section-note">{{ activePanel.description }}</p>
       </header>
 
       <nav class="tab-nav" aria-label="主标签页">
         <button
-          v-for="tab in appStore.tabs"
+          v-for="(tab, index) in appStore.tabs"
           :key="tab.id"
           type="button"
           class="tab-button"
           :class="{ 'tab-button--active': activeTab === tab.id }"
           @click="appStore.setActiveTab(tab.id)"
         >
+          <span class="tab-index">0{{ index + 1 }}</span>
           <span class="tab-name">{{ tab.label }}</span>
           <span class="tab-caption">{{ tab.caption }}</span>
         </button>
@@ -68,26 +63,26 @@ const migratedCount = 5;
 
       <section class="summary-strip">
         <article class="panel-card">
-          <p class="panel-kicker">当前页签</p>
+          <p class="panel-kicker">当前模块</p>
           <h3>{{ activePanel.label }}</h3>
           <p class="panel-body">{{ activePanel.description }}</p>
         </article>
 
         <article class="panel-card panel-card--secondary">
-          <p class="panel-kicker">迁移基线</p>
+          <p class="panel-kicker">工作流能力</p>
           <ul class="check-list">
-            <li>新工程骨架已可 `dev/build/typecheck`</li>
-            <li>`project-storage.js` 的稳定纯逻辑已迁入 `domain/project`</li>
-            <li>配置、资源库、脚本工作台已接入新 store 与旧存储兼容层</li>
+            <li>模型连接、音色资源、音效滤波与脚本制作</li>
+            <li>AI 角色分析、单句试听、批量合成和顺序播放</li>
+            <li>完整工程、SRT 字幕、音频与视频导出</li>
           </ul>
         </article>
 
         <article class="panel-card panel-card--secondary">
-          <p class="panel-kicker">P2 已接入</p>
+          <p class="panel-kicker">设计基准</p>
           <ul class="check-list">
-            <li>LLM 分析、角色音色分析与音色生成流程</li>
-            <li>单行试听、顺序播放、批量生成和背景图预扫描</li>
-            <li>`SRT / WAV / MP4` 导出与完整工程恢复链路</li>
+            <li>蓝紫深色工作台与波形光效</li>
+            <li>1920 × 1080 桌面端主视图优先</li>
+            <li>保留既有存储键、协议与业务行为</li>
           </ul>
         </article>
       </section>
