@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 
 import ConfigPanel from '../components/ConfigPanel.vue';
+import ProjectTransferPanel from '../components/ProjectTransferPanel.vue';
 import PromptPanel from '../components/PromptPanel.vue';
 import ScriptPanel from '../components/ScriptPanel.vue';
 import SfxPanel from '../components/SfxPanel.vue';
@@ -76,11 +77,14 @@ const migratedCount = 5;
         正在恢复本地配置...
       </section>
 
-      <ConfigPanel v-else-if="activeTab === 'config'" />
-      <PromptPanel v-else-if="activeTab === 'prompt'" />
-      <TimbresPanel v-else-if="activeTab === 'timbres'" />
-      <SfxPanel v-else-if="activeTab === 'sfx'" />
-      <ScriptPanel v-else />
+      <template v-else>
+        <ProjectTransferPanel compact />
+        <ConfigPanel v-if="activeTab === 'config'" />
+        <PromptPanel v-else-if="activeTab === 'prompt'" />
+        <TimbresPanel v-else-if="activeTab === 'timbres'" />
+        <SfxPanel v-else-if="activeTab === 'sfx'" />
+        <ScriptPanel v-else />
+      </template>
     </section>
   </main>
 </template>

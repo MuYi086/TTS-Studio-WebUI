@@ -3,7 +3,6 @@ import { computed } from 'vue';
 
 import { useScriptAiWorkflow } from '../composables/useScriptAiWorkflow';
 import { useScriptAudioRuntime } from '../composables/useScriptAudioRuntime';
-import ProjectTransferPanel from './ProjectTransferPanel.vue';
 import ScriptLineEditorPanel from './script/ScriptLineEditorPanel.vue';
 import ScriptMetadataPanel from './script/ScriptMetadataPanel.vue';
 import ScriptRuntimeStatusPanel from './script/ScriptRuntimeStatusPanel.vue';
@@ -166,8 +165,6 @@ const handleUpdateVideoResolution = (value: string) => {
 
 <template>
   <section v-if="currentScript" class="stack">
-    <ProjectTransferPanel />
-
     <ScriptTabsBar
       :current-script-id="projectStore.projectState.currentScriptId"
       :scripts="projectStore.projectState.scriptList"
