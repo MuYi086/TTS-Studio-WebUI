@@ -155,7 +155,7 @@ const remove = async (id: string) => {
             <textarea
               v-model="form.promptText"
               placeholder="可选：参考音频中实际说出的文字，用于 VoxCPM2 / Qwen3-TTS 等克隆模型"
-            />
+            ></textarea>
           </label>
           <label class="field field--wide">
             <span>参考音频文件</span>
@@ -458,3 +458,5 @@ const remove = async (id: string) => {
   display: flex;
   justify-content: space-between;
   gap: 16px;
+}
+</style>
