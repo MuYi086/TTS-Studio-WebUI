@@ -65,8 +65,36 @@ const resetQwenVoiceText = () => {
 </script>
 
 <template>
-  <section class="stack">
-    <article class="card">
+  <section class="prompt-workbench">
+    <aside class="prompt-sidebar" aria-label="Prompt 模板导航">
+      <div class="prompt-sidebar-heading">
+        <p class="eyebrow">Prompt 模板库</p>
+        <span>3 个模板</span>
+      </div>
+      <section class="prompt-nav-card prompt-nav-card--active">
+        <span class="prompt-nav-index">1</span>
+        <div>
+          <strong>剧本拆分与分析</strong>
+          <p>角色、情绪、BGM 与音效</p>
+        </div>
+      </section>
+      <section class="prompt-nav-card">
+        <span class="prompt-nav-index">2</span>
+        <div>
+          <strong>角色音色分析</strong>
+          <p>为角色匹配音色资源</p>
+        </div>
+      </section>
+      <section class="prompt-nav-card">
+        <span class="prompt-nav-index">3</span>
+        <div>
+          <strong>Qwen 参考文本</strong>
+          <p>生成音色参考音频文本</p>
+        </div>
+      </section>
+    </aside>
+
+    <article class="card prompt-editor-card">
       <header class="card-header">
         <div>
           <p class="eyebrow">Prompt 管理</p>
@@ -128,7 +156,7 @@ const resetQwenVoiceText = () => {
       </div>
     </article>
 
-    <article class="card">
+    <article class="card prompt-qwen-card">
       <header class="card-header">
         <div>
           <p class="eyebrow">Qwen 模板</p>
@@ -163,9 +191,77 @@ const resetQwenVoiceText = () => {
 </template>
 
 <style scoped>
-.stack {
+.prompt-workbench {
   display: grid;
+  grid-template-columns: minmax(190px, 0.38fr) minmax(0, 1.55fr) minmax(280px, 0.72fr);
   gap: 18px;
+  align-items: start;
+}
+
+.prompt-sidebar {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 22px;
+  background: rgba(248, 250, 252, 0.52);
+}
+
+.prompt-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.prompt-sidebar-heading span {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.prompt-nav-card {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.prompt-nav-card--active {
+  border-color: rgba(79, 70, 229, 0.38);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.11), rgba(56, 189, 248, 0.08));
+}
+
+.prompt-nav-index {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(79, 70, 229, 0.12);
+  color: #4f46e5;
+  font-weight: 800;
+}
+
+.prompt-nav-card strong,
+.prompt-nav-card p {
+  display: block;
+  margin: 0;
+}
+
+.prompt-nav-card strong {
+  color: #1e293b;
+  font-size: 0.82rem;
+}
+
+.prompt-nav-card p {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 .card {
@@ -277,6 +373,10 @@ const resetQwenVoiceText = () => {
 }
 
 @media (max-width: 720px) {
+  .prompt-workbench {
+    grid-template-columns: 1fr;
+  }
+
   .card-header,
   .sub-header,
   .actions {

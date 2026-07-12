@@ -172,6 +172,19 @@ code {
 }
 .workspace-card .project-transfer--compact .compact-kicker { color: var(--tts-accent-cyan); }
 .workspace-card .project-transfer--compact .compact-note { color: var(--tts-text-muted); }
+.workspace-card .prompt-sidebar,
+.workspace-card .prompt-nav-card {
+  border-color: rgba(104, 159, 255, 0.18) !important;
+  background: rgba(6, 15, 36, 0.66) !important;
+}
+.workspace-card .prompt-nav-card--active {
+  border-color: rgba(66, 232, 255, 0.48) !important;
+  background: linear-gradient(135deg, rgba(20, 153, 255, 0.16), rgba(128, 87, 255, 0.13)) !important;
+}
+.workspace-card .prompt-nav-card strong { color: var(--tts-text-primary) !important; }
+.workspace-card .prompt-nav-card p,
+.workspace-card .prompt-sidebar-heading span { color: var(--tts-text-muted) !important; }
+.workspace-card .prompt-nav-index { background: rgba(20, 153, 255, 0.16) !important; color: var(--tts-accent-cyan) !important; }
 
 @media (max-width: 1100px) { .tab-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } .summary-strip { grid-template-columns: 1fr; } .workspace-header { align-items: flex-start; flex-direction: column; } .section-note { text-align: left; } }
 @media (max-width: 720px) { .shell { width: min(100% - 20px, 100%); padding: 14px 0 32px; } .hero-card { align-items: flex-start; flex-direction: column; padding: 22px; } .workspace-card { padding: 14px; border-radius: 18px; } .tab-nav { grid-template-columns: 1fr; } .hero-status { white-space: normal; } }
