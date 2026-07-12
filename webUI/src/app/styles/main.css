@@ -158,6 +158,11 @@ code {
 .workspace-card .progress-track, .workspace-card .progress-bar { background: rgba(104, 159, 255, 0.16) !important; }
 .workspace-card .progress-value { background: linear-gradient(90deg, var(--tts-accent-primary), var(--tts-accent-violet)) !important; }
 .workspace-card .stage-image, .workspace-card .preview-image { border-color: rgba(66, 232, 255, 0.24) !important; }
+.workspace-card .timbre-editor, .workspace-card .timbre-card {
+  border-color: rgba(104, 159, 255, 0.18) !important;
+  background: rgba(6, 15, 36, 0.68) !important;
+}
+.workspace-card .editor-kicker { color: var(--tts-accent-cyan) !important; }
 
 @media (max-width: 1100px) { .tab-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } .summary-strip { grid-template-columns: 1fr; } .workspace-header { align-items: flex-start; flex-direction: column; } .section-note { text-align: left; } }
 @media (max-width: 720px) { .shell { width: min(100% - 20px, 100%); padding: 14px 0 32px; } .hero-card { align-items: flex-start; flex-direction: column; padding: 22px; } .workspace-card { padding: 14px; border-radius: 18px; } .tab-nav { grid-template-columns: 1fr; } .hero-status { white-space: normal; } }
