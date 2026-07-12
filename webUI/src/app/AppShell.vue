@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 
 import ConfigPanel from '../components/ConfigPanel.vue';
+import ProjectTransferPanel from '../components/ProjectTransferPanel.vue';
 import PromptPanel from '../components/PromptPanel.vue';
 import ScriptPanel from '../components/ScriptPanel.vue';
 import SfxPanel from '../components/SfxPanel.vue';
@@ -30,7 +31,10 @@ const migratedCount = 5;
         <div class="studio-brand">
           <div>
             <p class="eyebrow">TTS STUDIO</p>
-            <h1>TTS <span>1.5</span></h1>
+            <div class="studio-title-row">
+              <h1>TTS <span>1.5</span></h1>
+              <span class="studio-revision">DESIGN R2</span>
+            </div>
             <p>多角色音效合成有声书生成工具</p>
           </div>
           <div class="studio-brand-wave" aria-hidden="true"></div>
@@ -73,11 +77,14 @@ const migratedCount = 5;
         正在恢复本地配置...
       </section>
 
-      <ConfigPanel v-else-if="activeTab === 'config'" />
-      <PromptPanel v-else-if="activeTab === 'prompt'" />
-      <TimbresPanel v-else-if="activeTab === 'timbres'" />
-      <SfxPanel v-else-if="activeTab === 'sfx'" />
-      <ScriptPanel v-else />
+      <template v-else>
+        <ProjectTransferPanel compact />
+        <ConfigPanel v-if="activeTab === 'config'" />
+        <PromptPanel v-else-if="activeTab === 'prompt'" />
+        <TimbresPanel v-else-if="activeTab === 'timbres'" />
+        <SfxPanel v-else-if="activeTab === 'sfx'" />
+        <ScriptPanel v-else />
+      </template>
     </section>
   </main>
 </template>

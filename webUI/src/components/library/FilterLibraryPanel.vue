@@ -51,72 +51,108 @@ const resetDefaults = async () => {
 </script>
 
 <template>
-  <article class="card">
+  <article class="card filter-library">
     <header class="card-header">
       <div>
         <p class="eyebrow">滤波器库</p>
-        <h3>场景滤波元数据</h3>
+        <h3>音频滤波器管理</h3>
       </div>
       <button type="button" class="secondary" @click="resetDefaults">恢复默认滤波器</button>
     </header>
 
-    <div class="form-grid">
-      <label class="field">
-        <span>滤波器名称</span>
-        <input v-model="form.name" type="text" placeholder="例如：电话音 / 水下" />
-      </label>
-      <label class="field">
-        <span>滤波器类型</span>
-        <select v-model="form.type">
-          <option value="lowpass">lowpass</option>
-          <option value="highpass">highpass</option>
-          <option value="bandpass">bandpass</option>
-          <option value="distortion">distortion</option>
-        </select>
-      </label>
-      <label class="field field--wide">
-        <span>滤波器描述</span>
-        <input v-model="form.description" type="text" placeholder="用于后续 AI 判断适用场景" />
-      </label>
-      <label class="field">
-        <span>频率</span>
-        <input v-model.number="form.frequency" type="number" min="0" max="20000" step="10" />
-      </label>
-      <label class="field">
-        <span>Q 值</span>
-        <input v-model.number="form.Q" type="number" min="0.1" max="20" step="0.1" />
-      </label>
-      <label class="field">
-        <span>Gain / Amount</span>
-        <input v-model.number="form.gain" type="number" min="0" max="1000" step="10" />
-      </label>
-    </div>
+    <section class="filter-analysis" aria-hidden="true">
+      <div class="analysis-heading">
+        <span>频谱响应预览</span>
+        <span>20 Hz — 20 kHz</span>
+      </div>
+      <svg viewBox="0 0 560 140" preserveAspectRatio="none" role="presentation">
+        <defs>
+          <linearGradient id="filterCurve" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stop-color="#22d3ee" />
+            <stop offset="0.55" stop-color="#3b82f6" />
+            <stop offset="1" stop-color="#a855f7" />
+          </linearGradient>
+        </defs>
+        <path class="analysis-grid" d="M0 28H560M0 70H560M0 112H560M70 0V140M180 0V140M300 0V140M420 0V140M520 0V140" />
+        <path class="analysis-fill" d="M0 92 C60 104 92 58 148 70 S246 100 305 57 S416 44 476 72 S532 88 560 50 L560 140 L0 140Z" />
+        <path class="analysis-line" d="M0 92 C60 104 92 58 148 70 S246 100 305 57 S416 44 476 72 S532 88 560 50" />
+      </svg>
+    </section>
 
-    <div class="actions">
-      <button type="button" class="primary" @click="submit">
-        {{ isEditing ? '更新滤波器' : '保存滤波器' }}
-      </button>
-      <button v-if="isEditing" type="button" class="secondary" @click="resetForm">
-        取消编辑
-      </button>
-      <span v-if="notice" class="notice">{{ notice }}</span>
-    </div>
-
-    <div v-if="libraryStore.filterLibrary.length" class="list">
-      <article v-for="item in libraryStore.filterLibrary" :key="item.id" class="list-item">
-        <div class="list-copy">
-          <h4>{{ item.name }}</h4>
-          <p>{{ item.description || '未填写描述' }}</p>
-          <p class="mono">{{ item.type }} · Freq={{ item.frequency }} · Q={{ item.Q }} · Gain={{ item.gain }}</p>
+    <section class="filter-catalog" aria-label="滤波器预设">
+      <article v-for="item in libraryStore.filterLibrary" :key="item.id" class="filter-item">
+        <div class="filter-item-heading">
+          <span class="filter-icon">⌁</span>
+          <div class="list-copy">
+            <h4>{{ item.name }}</h4>
+            <p>{{ item.description || '未填写描述' }}</p>
+          </div>
+          <span class="filter-type">{{ item.type }}</span>
         </div>
-        <div class="list-actions">
-          <button type="button" class="ghost" @click="startEdit(item)">编辑</button>
-          <button type="button" class="ghost ghost--danger" @click="remove(item.id)">
-            删除
-          </button>
+        <div class="filter-stat-grid">
+          <span><b>{{ item.frequency ?? 0 }}</b>Hz</span>
+          <span><b>{{ item.Q ?? 0 }}</b> Q</span>
+          <span><b>{{ item.gain ?? 0 }}</b> Gain</span>
+        </div>
+        <div class="filter-item-footer">
+          <span :class="['filter-state', { 'filter-state--off': item.enabled === false }]">
+            {{ item.enabled === false ? '已停用' : '已启用' }}
+          </span>
+          <div class="list-actions">
+            <button type="button" class="ghost" @click="startEdit(item)">编辑</button>
+            <button type="button" class="ghost ghost--danger" @click="remove(item.id)">删除</button>
+          </div>
         </div>
       </article>
-    </div>
+    </section>
+
+    <section class="filter-editor" aria-label="滤波器编辑器">
+      <p class="editor-kicker">{{ isEditing ? '正在编辑预设' : '新建滤波器预设' }}</p>
+      <div class="form-grid">
+        <label class="field">
+          <span>滤波器名称</span>
+          <input v-model="form.name" type="text" placeholder="例如：电话音 / 水下" />
+        </label>
+        <label class="field">
+          <span>滤波器类型</span>
+          <select v-model="form.type">
+            <option value="lowpass">lowpass</option>
+            <option value="highpass">highpass</option>
+            <option value="bandpass">bandpass</option>
+            <option value="distortion">distortion</option>
+          </select>
+        </label>
+        <label class="field field--wide">
+          <span>滤波器描述</span>
+          <input v-model="form.description" type="text" placeholder="用于后续 AI 判断适用场景" />
+        </label>
+        <label class="field">
+          <span>频率</span>
+          <input v-model.number="form.frequency" type="number" min="0" max="20000" step="10" />
+        </label>
+        <label class="field">
+          <span>Q 值</span>
+          <input v-model.number="form.Q" type="number" min="0.1" max="20" step="0.1" />
+        </label>
+        <label class="field">
+          <span>Gain / Amount</span>
+          <input v-model.number="form.gain" type="number" min="0" max="1000" step="10" />
+        </label>
+        <label class="field field--wide enabled-row">
+          <span>预设状态</span>
+          <input v-model="form.enabled" type="checkbox" />
+          <em>{{ form.enabled ? '允许脚本分析使用此预设' : '暂不参与脚本分析' }}</em>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="primary" @click="submit">
+          {{ isEditing ? '更新滤波器' : '保存滤波器' }}
+        </button>
+        <button v-if="isEditing" type="button" class="secondary" @click="resetForm">取消编辑</button>
+        <span v-if="notice" class="notice">{{ notice }}</span>
+      </div>
+    </section>
   </article>
 </template>
 
@@ -126,6 +162,150 @@ const resetDefaults = async () => {
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.94);
+}
+
+.filter-library {
+  display: grid;
+  gap: 14px;
+}
+
+.filter-analysis,
+.filter-editor {
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.46);
+}
+
+.analysis-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.filter-analysis svg {
+  display: block;
+  width: 100%;
+  height: 92px;
+  margin-top: 8px;
+}
+
+.analysis-grid {
+  stroke: rgba(100, 116, 139, 0.2);
+  stroke-width: 1;
+}
+
+.analysis-fill {
+  fill: rgba(56, 189, 248, 0.08);
+}
+
+.analysis-line {
+  fill: none;
+  stroke: url(#filterCurve);
+  stroke-width: 3;
+}
+
+.filter-catalog {
+  display: grid;
+  gap: 10px;
+}
+
+.filter-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.7);
+}
+
+.filter-item-heading,
+.filter-item-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-item-footer {
+  justify-content: space-between;
+}
+
+.filter-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(56, 189, 248, 0.34);
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #0891b2;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.filter-type,
+.filter-state {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(79, 70, 229, 0.1);
+  color: #4f46e5;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.filter-type {
+  margin-left: auto;
+}
+
+.filter-state {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  font-family: inherit;
+}
+
+.filter-state--off {
+  background: rgba(148, 163, 184, 0.16);
+  color: #64748b;
+}
+
+.filter-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.filter-stat-grid span {
+  padding: 7px 5px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.08);
+  color: #64748b;
+  font-size: 0.68rem;
+  text-align: center;
+}
+
+.filter-stat-grid b {
+  margin-right: 2px;
+  color: #334155;
+}
+
+.filter-editor {
+  margin-top: 2px;
+}
+
+.editor-kicker {
+  margin: 0 0 12px;
+  color: #4f46e5;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .card-header,
@@ -173,6 +353,24 @@ const resetDefaults = async () => {
 
 .field--wide {
   grid-column: 1 / -1;
+}
+
+.enabled-row {
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+}
+
+.enabled-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: #4f46e5;
+}
+
+.enabled-row em {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 500;
 }
 
 .field input,

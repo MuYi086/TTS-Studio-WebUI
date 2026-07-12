@@ -163,6 +163,28 @@ code {
   background: rgba(6, 15, 36, 0.68) !important;
 }
 .workspace-card .editor-kicker { color: var(--tts-accent-cyan) !important; }
+.workspace-card .project-transfer--compact {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 14px;
+  border-color: rgba(104, 159, 255, 0.2) !important;
+  background: rgba(5, 14, 35, 0.78) !important;
+}
+.workspace-card .project-transfer--compact .compact-kicker { color: var(--tts-accent-cyan); }
+.workspace-card .project-transfer--compact .compact-note { color: var(--tts-text-muted); }
+.workspace-card .prompt-sidebar,
+.workspace-card .prompt-nav-card {
+  border-color: rgba(104, 159, 255, 0.18) !important;
+  background: rgba(6, 15, 36, 0.66) !important;
+}
+.workspace-card .prompt-nav-card--active {
+  border-color: rgba(66, 232, 255, 0.48) !important;
+  background: linear-gradient(135deg, rgba(20, 153, 255, 0.16), rgba(128, 87, 255, 0.13)) !important;
+}
+.workspace-card .prompt-nav-card strong { color: var(--tts-text-primary) !important; }
+.workspace-card .prompt-nav-card p,
+.workspace-card .prompt-sidebar-heading span { color: var(--tts-text-muted) !important; }
+.workspace-card .prompt-nav-index { background: rgba(20, 153, 255, 0.16) !important; color: var(--tts-accent-cyan) !important; }
 
 @media (max-width: 1100px) { .tab-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } .summary-strip { grid-template-columns: 1fr; } .workspace-header { align-items: flex-start; flex-direction: column; } .section-note { text-align: left; } }
 @media (max-width: 720px) { .shell { width: min(100% - 20px, 100%); padding: 14px 0 32px; } .hero-card { align-items: flex-start; flex-direction: column; padding: 22px; } .workspace-card { padding: 14px; border-radius: 18px; } .tab-nav { grid-template-columns: 1fr; } .hero-status { white-space: normal; } }
@@ -207,6 +229,24 @@ code {
 .studio-brand h1 span {
   color: var(--tts-accent-cyan);
   text-shadow: 0 0 24px rgba(66, 232, 255, 0.42);
+}
+
+.studio-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studio-revision {
+  padding: 4px 7px;
+  border: 1px solid rgba(66, 232, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(20, 153, 255, 0.1);
+  color: var(--tts-accent-cyan);
+  font-family: Inter, 'Noto Sans SC', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
 .studio-brand p:not(.eyebrow) {
@@ -328,31 +368,52 @@ code {
 }
 
 /* 脚本制作：保留所有原有的脚本、导出和运行时组件，同时形成“左侧输入－中部编排－右侧状态”的工作区。 */
-.workspace-card[data-active-tab='script'] > .stack {
+.workspace-card[data-active-tab='script'] > .script-workbench {
   grid-template-columns: minmax(250px, 0.8fr) minmax(420px, 1.55fr) minmax(280px, 0.88fr);
   align-items: start;
 }
 
-.workspace-card[data-active-tab='script'] > .stack > :nth-child(1) { grid-column: 1; }
-.workspace-card[data-active-tab='script'] > .stack > :nth-child(2) { grid-column: 1 / -1; }
-.workspace-card[data-active-tab='script'] > .stack > :nth-child(3) { grid-column: 1 / -1; }
-.workspace-card[data-active-tab='script'] > .stack > :nth-child(4) { grid-column: 2 / -1; }
-.workspace-card[data-active-tab='script'] > .stack > :nth-child(5) { grid-column: 1; }
-.workspace-card[data-active-tab='script'] > .stack > :nth-child(6) { grid-column: 1 / -1; }
-
-.workspace-card[data-active-tab='script'] .top-grid {
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.72fr);
+.workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(1) { grid-column: 1 / -1; }
+.workspace-card[data-active-tab='script'] > .script-workbench > .top-grid { display: contents; }
+.workspace-card[data-active-tab='script'] > .script-workbench > .top-grid > :first-child {
+  grid-column: 1;
+  grid-row: 2 / span 3;
+}
+.workspace-card[data-active-tab='script'] > .script-workbench > .top-grid > :last-child {
+  grid-column: 3;
+  grid-row: 2;
+}
+.workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(3) {
+  grid-column: 3;
+  grid-row: 3;
+}
+.workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(4) {
+  grid-column: 3;
+  grid-row: 4;
+}
+.workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(5) {
+  grid-column: 2;
+  grid-row: 2 / span 3;
 }
 
 @media (max-width: 1320px) {
   .studio-header { grid-template-columns: 1fr; gap: 12px; padding: 18px 0; }
   .studio-header .tab-nav { width: 100%; }
   .workspace-card[data-active-tab='sfx'] > .stack,
-  .workspace-card[data-active-tab='script'] > .stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .workspace-card[data-active-tab='script'] > .stack > :nth-child(n) { grid-column: auto; }
-  .workspace-card[data-active-tab='script'] > .stack > :nth-child(2),
-  .workspace-card[data-active-tab='script'] > .stack > :nth-child(3),
-  .workspace-card[data-active-tab='script'] > .stack > :nth-child(6) { grid-column: 1 / -1; }
+  .workspace-card[data-active-tab='script'] > .script-workbench { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-card[data-active-tab='script'] > .script-workbench > .top-grid {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.72fr);
+  }
+  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(n),
+  .workspace-card[data-active-tab='script'] > .script-workbench > .top-grid > :nth-child(n) {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(1),
+  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(2),
+  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(5) { grid-column: 1 / -1; }
 }
 
 @media (max-width: 980px) {
@@ -363,6 +424,7 @@ code {
   .workspace-card[data-active-tab='timbres'] > .stack,
   .workspace-card[data-active-tab='sfx'] > .stack,
   .workspace-card[data-active-tab='prompt'] > .stack,
-  .workspace-card[data-active-tab='script'] > .stack { grid-template-columns: 1fr; }
-  .workspace-card[data-active-tab='script'] > .stack > :nth-child(n) { grid-column: 1; }
+  .workspace-card[data-active-tab='script'] > .script-workbench { grid-template-columns: 1fr; }
+  .workspace-card[data-active-tab='script'] > .script-workbench > .top-grid { grid-template-columns: 1fr; }
+  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(n) { grid-column: 1; }
 }

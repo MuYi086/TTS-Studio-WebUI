@@ -7,6 +7,15 @@ import { useLibraryStore } from '../stores/library.store';
 import { usePlaybackStore } from '../stores/playback.store';
 import { useProjectStore } from '../stores/project.store';
 
+const props = withDefaults(
+  defineProps<{
+    compact?: boolean;
+  }>(),
+  {
+    compact: false
+  }
+);
+
 const jobsStore = useJobsStore();
 const libraryStore = useLibraryStore();
 const playbackStore = usePlaybackStore();
@@ -17,6 +26,7 @@ const isImporting = ref(false);
 const isExporting = ref(false);
 const notice = ref('');
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const txtInputRef = ref<HTMLInputElement | null>(null);
 
 const buildCurrentEnvelope = () => ({
   savedAt: Date.now(),
@@ -76,6 +86,29 @@ const triggerImport = () => {
   fileInputRef.value?.click();
 };
 
+const triggerImportTxt = () => {
+  txtInputRef.value?.click();
+};
+
+const importTxt = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+
+  if (!file) {
+    return;
+  }
+
+  try {
+    projectStore.updateRawScript(await file.text());
+    notice.value = `已导入 TXT：${file.name}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '未知错误';
+    notice.value = `导入 TXT 失败：${message}`;
+  } finally {
+    input.value = '';
+  }
+};
+
 const importProject = async (event: Event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -118,14 +151,19 @@ const importProject = async (event: Event) => {
 </script>
 
 <template>
-  <article class="card">
-    <header class="header">
+  <article class="card" :class="{ 'project-transfer--compact': props.compact }">
+    <header v-if="!props.compact" class="header">
       <div>
         <p class="eyebrow">工程传输</p>
         <h3 class="title">导入与导出完整工程</h3>
       </div>
       <p class="note">完整工程 JSON 与旧版 `kind/schemaVersion/assets` 保持兼容，可用于回归恢复。</p>
     </header>
+
+    <div v-else class="compact-header">
+      <span class="compact-kicker">工程工具</span>
+      <span class="compact-note">JSON / TXT</span>
+    </div>
 
     <div class="actions">
       <button type="button" class="primary" :disabled="isExporting || isImporting" @click="exportProject">
@@ -134,12 +172,22 @@ const importProject = async (event: Event) => {
       <button type="button" class="secondary" :disabled="isExporting || isImporting" @click="triggerImport">
         {{ isImporting ? '导入中...' : '导入完整工程' }}
       </button>
+      <button type="button" class="secondary" :disabled="isImporting" @click="triggerImportTxt">
+        导入 TXT
+      </button>
       <input
         ref="fileInputRef"
         type="file"
         accept="application/json,.json"
         class="hidden-input"
         @change="importProject"
+      />
+      <input
+        ref="txtInputRef"
+        type="file"
+        accept="text/plain,.txt"
+        class="hidden-input"
+        @change="importTxt"
       />
       <span v-if="notice" class="notice">{{ notice }}</span>
     </div>
@@ -218,6 +266,37 @@ const importProject = async (event: Event) => {
 
 .notice {
   font-size: 0.92rem;
+}
+
+.compact-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compact-kicker {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.compact-note {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  font-size: 0.7rem;
+}
+
+.project-transfer--compact {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 58px;
+  padding: 10px 14px;
+}
+
+.project-transfer--compact .actions {
+  margin-left: auto;
 }
 
 @media (max-width: 780px) {
