@@ -25,66 +25,40 @@ const migratedCount = 5;
 
 <template>
   <main class="shell">
-    <section class="hero-card">
-      <div class="hero-copy brand-lockup">
-        <p class="eyebrow">TTS STUDIO / MULTI-TRACK AUDIOBOOK</p>
-        <h1>TTS <span>1.5</span></h1>
-        <p class="hero-text">多角色音效合成有声书生成工具</p>
-      </div>
-      <div class="hero-status">
-        <span class="status-dot"></span>
-        <span>本地工作台已就绪 · {{ migratedCount }}/{{ appStore.tabs.length }} 个核心模块</span>
-      </div>
-    </section>
+    <section class="workspace-card" :data-active-tab="activeTab">
+      <header class="studio-header">
+        <div class="studio-brand">
+          <div>
+            <p class="eyebrow">TTS STUDIO</p>
+            <h1>TTS <span>1.5</span></h1>
+            <p>多角色音效合成有声书生成工具</p>
+          </div>
+          <div class="studio-brand-wave" aria-hidden="true"></div>
+        </div>
 
-    <section class="workspace-card">
-      <header class="workspace-header">
+        <nav class="tab-nav" aria-label="主标签页">
+          <button
+            v-for="(tab, index) in appStore.tabs"
+            :key="tab.id"
+            type="button"
+            class="tab-button"
+            :class="{ 'tab-button--active': activeTab === tab.id }"
+            @click="appStore.setActiveTab(tab.id)"
+          >
+            <span class="tab-index">0{{ index + 1 }}</span>
+            <span class="tab-name">{{ tab.label }}</span>
+            <span class="tab-caption">{{ tab.caption }}</span>
+          </button>
+        </nav>
+      </header>
+
+      <section class="workspace-context">
         <div>
-          <p class="section-label">创作工作台</p>
+          <p class="section-label">创作工作台 / {{ activePanel.caption }}</p>
           <h2>{{ activePanel.label }}</h2>
         </div>
         <p class="section-note">{{ activePanel.description }}</p>
-      </header>
-
-      <nav class="tab-nav" aria-label="主标签页">
-        <button
-          v-for="(tab, index) in appStore.tabs"
-          :key="tab.id"
-          type="button"
-          class="tab-button"
-          :class="{ 'tab-button--active': activeTab === tab.id }"
-          @click="appStore.setActiveTab(tab.id)"
-        >
-          <span class="tab-index">0{{ index + 1 }}</span>
-          <span class="tab-name">{{ tab.label }}</span>
-          <span class="tab-caption">{{ tab.caption }}</span>
-        </button>
-      </nav>
-
-      <section class="summary-strip">
-        <article class="panel-card">
-          <p class="panel-kicker">当前模块</p>
-          <h3>{{ activePanel.label }}</h3>
-          <p class="panel-body">{{ activePanel.description }}</p>
-        </article>
-
-        <article class="panel-card panel-card--secondary">
-          <p class="panel-kicker">工作流能力</p>
-          <ul class="check-list">
-            <li>模型连接、音色资源、音效滤波与脚本制作</li>
-            <li>AI 角色分析、单句试听、批量合成和顺序播放</li>
-            <li>完整工程、SRT 字幕、音频与视频导出</li>
-          </ul>
-        </article>
-
-        <article class="panel-card panel-card--secondary">
-          <p class="panel-kicker">设计基准</p>
-          <ul class="check-list">
-            <li>蓝紫深色工作台与波形光效</li>
-            <li>1920 × 1080 桌面端主视图优先</li>
-            <li>保留既有存储键、协议与业务行为</li>
-          </ul>
-        </article>
+        <span class="workspace-ready"><i></i> {{ migratedCount }}/{{ appStore.tabs.length }} 模块已接入</span>
       </section>
 
       <section
