@@ -164,7 +164,7 @@ const handleUpdateVideoResolution = (value: string) => {
 </script>
 
 <template>
-  <section v-if="currentScript" class="stack">
+  <section v-if="currentScript" class="stack script-workbench">
     <ScriptTabsBar
       :current-script-id="projectStore.projectState.currentScriptId"
       :scripts="projectStore.projectState.scriptList"
