@@ -102,87 +102,100 @@ const remove = async (id: string) => {
       <p class="note">本页已接入 `IndexedDB currentState` 和 `assets` 仓库。</p>
     </header>
 
-    <div class="form-grid">
-      <label class="field">
-        <span>音色名称</span>
-        <input v-model="form.name" type="text" placeholder="例如：旁白 / 少年音" />
-      </label>
-      <label class="field">
-        <span>音色描述</span>
-        <input
-          v-model="form.description"
-          type="text"
-          placeholder="例如：低沉、冷静、适合中年男性"
-        />
-      </label>
-      <label class="field field--wide">
-        <span>参考音频文本</span>
-        <textarea
-          v-model="form.promptText"
-          placeholder="可选：参考音频中实际说出的文字，用于 VoxCPM2 / Qwen3-TTS 等克隆模型"
-        />
-      </label>
-      <label class="field field--wide">
-        <span>参考音频文件</span>
-        <div class="file-row">
-          <button type="button" class="secondary" @click="fileInputRef?.click()">
-            选择文件
-          </button>
-          <input
-            ref="fileInputRef"
-            type="file"
-            accept=".wav,.mp3"
-            class="hidden-input"
-            @change="onSelectFile"
-          />
-          <input
-            v-model="form.refPath"
-            type="text"
-            placeholder="选择一个音频文件作为音色参考"
-          />
+    <div class="timbre-workbench">
+      <section class="timbre-catalog" aria-label="音色列表">
+        <div v-if="libraryStore.timbres.length" class="timbre-grid">
+          <article v-for="item in libraryStore.timbres" :key="item.id" class="timbre-card">
+            <div class="timbre-card-top">
+              <span class="timbre-avatar">{{ item.name.slice(0, 1) }}</span>
+              <div class="list-copy">
+                <h4>{{ item.name }}</h4>
+                <p>{{ item.description || '未填写描述' }}</p>
+              </div>
+              <span class="asset-pill" :class="resolveAssetStatusClass(item.assetKey)">
+                {{ resolveAssetStatusLabel(item.assetKey) }}
+              </span>
+            </div>
+            <div class="wave-preview" aria-hidden="true">
+              <i v-for="index in 18" :key="index"></i>
+            </div>
+            <p v-if="item.promptText" class="prompt-text">{{ item.promptText }}</p>
+            <p class="mono">{{ item.refPath }}</p>
+            <div class="timbre-card-footer">
+              <span class="mono">{{ item.assetKey || '尚未生成 assetKey' }}</span>
+              <div class="list-actions">
+                <button type="button" class="ghost" @click="startEdit(item)">编辑</button>
+                <button type="button" class="ghost ghost--danger" @click="remove(item.id)">
+                  删除
+                </button>
+              </div>
+            </div>
+          </article>
         </div>
-        <div class="status-row">
-          <span class="asset-pill" :class="resolveAssetStatusClass(form.assetKey)">
-            {{ resolveAssetStatusLabel(form.assetKey) }}
-          </span>
-          <span class="mono">{{ form.assetKey || '保存后生成 assetKey' }}</span>
-        </div>
-      </label>
-    </div>
+        <p v-else class="empty">还没有音色资源，先在右侧添加一条参考音频。</p>
+      </section>
 
-    <div class="actions">
-      <button type="button" class="primary" @click="submit">
-        {{ isEditing ? '更新音色' : '保存音色' }}
-      </button>
-      <button v-if="isEditing" type="button" class="secondary" @click="resetForm">
-        取消编辑
-      </button>
-      <span v-if="notice" class="notice">{{ notice }}</span>
-    </div>
+      <section class="timbre-editor" aria-label="音色编辑器">
+        <p class="editor-kicker">音色管理</p>
+        <div class="form-grid">
+          <label class="field">
+            <span>音色名称</span>
+            <input v-model="form.name" type="text" placeholder="例如：旁白 / 少年音" />
+          </label>
+          <label class="field">
+            <span>音色描述</span>
+            <input
+              v-model="form.description"
+              type="text"
+              placeholder="例如：低沉、冷静、适合中年男性"
+            />
+          </label>
+          <label class="field field--wide">
+            <span>参考音频文本</span>
+            <textarea
+              v-model="form.promptText"
+              placeholder="可选：参考音频中实际说出的文字，用于 VoxCPM2 / Qwen3-TTS 等克隆模型"
+            />
+          </label>
+          <label class="field field--wide">
+            <span>参考音频文件</span>
+            <div class="file-row">
+              <button type="button" class="secondary" @click="fileInputRef?.click()">
+                选择文件
+              </button>
+              <input
+                ref="fileInputRef"
+                type="file"
+                accept=".wav,.mp3"
+                class="hidden-input"
+                @change="onSelectFile"
+              />
+              <input
+                v-model="form.refPath"
+                type="text"
+                placeholder="选择一个音频文件作为音色参考"
+              />
+            </div>
+            <div class="status-row">
+              <span class="asset-pill" :class="resolveAssetStatusClass(form.assetKey)">
+                {{ resolveAssetStatusLabel(form.assetKey) }}
+              </span>
+              <span class="mono">{{ form.assetKey || '保存后生成 assetKey' }}</span>
+            </div>
+          </label>
+        </div>
 
-    <div v-if="libraryStore.timbres.length" class="list">
-      <article v-for="item in libraryStore.timbres" :key="item.id" class="list-item">
-        <div class="list-copy">
-          <h4>{{ item.name }}</h4>
-          <p>{{ item.description || '未填写描述' }}</p>
-          <p v-if="item.promptText" class="prompt-text">{{ item.promptText }}</p>
-          <p class="mono">{{ item.refPath }}</p>
-          <div class="status-row">
-            <span class="asset-pill" :class="resolveAssetStatusClass(item.assetKey)">
-              {{ resolveAssetStatusLabel(item.assetKey) }}
-            </span>
-            <span class="mono">{{ item.assetKey || '尚未生成 assetKey' }}</span>
-          </div>
-        </div>
-        <div class="list-actions">
-          <button type="button" class="ghost" @click="startEdit(item)">编辑</button>
-          <button type="button" class="ghost ghost--danger" @click="remove(item.id)">
-            删除
+        <div class="actions">
+          <button type="button" class="primary" @click="submit">
+            {{ isEditing ? '更新音色' : '保存音色' }}
           </button>
+          <button v-if="isEditing" type="button" class="secondary" @click="resetForm">
+            取消编辑
+          </button>
+          <span v-if="notice" class="notice">{{ notice }}</span>
         </div>
-      </article>
+      </section>
     </div>
-    <p v-else class="empty">还没有音色资源，先添加一条参考音频。</p>
   </article>
 </template>
 
@@ -227,6 +240,101 @@ const remove = async (id: string) => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
+
+.timbre-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.78fr);
+  gap: 18px;
+}
+
+.timbre-catalog,
+.timbre-editor {
+  min-width: 0;
+}
+
+.timbre-editor {
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.56);
+}
+
+.editor-kicker {
+  margin: 0 0 14px;
+  color: #4f46e5;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.timbre-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.timbre-card {
+  display: grid;
+  gap: 12px;
+  min-height: 190px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.timbre-card-top,
+.timbre-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.timbre-card-top .asset-pill {
+  margin-left: auto;
+}
+
+.timbre-card-footer {
+  justify-content: space-between;
+}
+
+.timbre-card-footer .mono {
+  overflow: hidden;
+  max-width: 54%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timbre-avatar {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #38bdf8, #6366f1);
+  color: #fff;
+  font-weight: 800;
+}
+
+.wave-preview {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 28px;
+}
+
+.wave-preview i {
+  width: 3px;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #22d3ee, #6366f1);
+  opacity: 0.75;
+}
+
+.wave-preview i:nth-child(3n) { height: 26px; }
+.wave-preview i:nth-child(4n) { height: 20px; }
+.wave-preview i:nth-child(5n) { height: 9px; }
 
 .field {
   display: grid;
@@ -350,37 +458,3 @@ const remove = async (id: string) => {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
-  background: rgba(248, 250, 252, 0.72);
-}
-
-.mono {
-  font-family: 'JetBrains Mono', 'SFMono-Regular', monospace;
-  font-size: 0.84rem;
-}
-
-.prompt-text {
-  white-space: pre-wrap;
-}
-
-@media (max-width: 720px) {
-  .card-header,
-  .file-row,
-  .actions,
-  .list-item,
-  .list-actions {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .field--wide {
-    grid-column: auto;
-  }
-}
-</style>
