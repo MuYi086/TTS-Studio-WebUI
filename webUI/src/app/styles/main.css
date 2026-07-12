@@ -209,6 +209,24 @@ code {
   text-shadow: 0 0 24px rgba(66, 232, 255, 0.42);
 }
 
+.studio-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studio-revision {
+  padding: 4px 7px;
+  border: 1px solid rgba(66, 232, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(20, 153, 255, 0.1);
+  color: var(--tts-accent-cyan);
+  font-family: Inter, 'Noto Sans SC', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
 .studio-brand p:not(.eyebrow) {
   margin: 7px 0 0;
   color: var(--tts-text-secondary);

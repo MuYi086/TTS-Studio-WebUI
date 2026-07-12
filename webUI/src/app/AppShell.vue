@@ -30,7 +30,10 @@ const migratedCount = 5;
         <div class="studio-brand">
           <div>
             <p class="eyebrow">TTS STUDIO</p>
-            <h1>TTS <span>1.5</span></h1>
+            <div class="studio-title-row">
+              <h1>TTS <span>1.5</span></h1>
+              <span class="studio-revision">DESIGN R2</span>
+            </div>
             <p>多角色音效合成有声书生成工具</p>
           </div>
           <div class="studio-brand-wave" aria-hidden="true"></div>
