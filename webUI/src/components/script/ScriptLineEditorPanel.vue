@@ -3,6 +3,7 @@ import { computed, watch } from 'vue';
 
 import { useAssetRecovery } from '../../composables/useAssetRecovery';
 import type { DialogueSfxCue, ScriptLine } from '../../domain/project';
+import LibraryAudioPreview from '../library/LibraryAudioPreview.vue';
 
 const props = defineProps<{
   activePlaybackLineId: string;
@@ -125,7 +126,7 @@ const handleBgImageFileChange = (lineId: string, event: Event) => {
 </script>
 
 <template>
-  <article class="card">
+  <article class="card script-line-editor">
     <header class="header">
       <div>
         <p class="eyebrow">脚本块列表</p>
@@ -505,6 +506,29 @@ const handleBgImageFileChange = (lineId: string, event: Event) => {
           </section>
 
           <div
+            v-if="isAssetPresent(line.audioAssetKey)"
+            class="dialogue-waveform field--wide"
+            @click.stop
+          >
+            <span class="field-label">台词波形与裁剪</span>
+            <LibraryAudioPreview
+              :asset-key="line.audioAssetKey"
+              :trim-start="line.trimStart"
+              :trim-end="line.trimEnd"
+              :external-active="props.activePlaybackLineId === line.id"
+              :external-progress="props.playbackProgress"
+              :playable="false"
+              editable
+              @update:trim-start="
+                emit('updateLine', { lineId: line.id, patch: { trimStart: $event } })
+              "
+              @update:trim-end="
+                emit('updateLine', { lineId: line.id, patch: { trimEnd: $event } })
+              "
+            />
+          </div>
+
+          <div
             v-if="props.activePlaybackLineId === line.id"
             class="progress-card field--wide"
           >
@@ -815,6 +839,15 @@ const handleBgImageFileChange = (lineId: string, event: Event) => {
   display: grid;
   grid-template-columns: 1.5fr 1fr auto;
   gap: 10px;
+}
+
+.dialogue-waveform {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid rgba(104, 159, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(2, 10, 28, 0.38);
 }
 
 .progress-card {

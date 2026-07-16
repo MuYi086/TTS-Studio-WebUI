@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, shallowRef, useTemplateRef } from 'vue';
 
 import { useAssetRecovery } from '../../composables/useAssetRecovery';
+import { useLibraryAudioPreview } from '../../composables/useLibraryAudioPreview';
 import type { AudioLibraryItem } from '../../domain/project';
 import { useLibraryStore } from '../../stores/library.store';
+import LibraryAudioPreview from './LibraryAudioPreview.vue';
 
 const props = defineProps<{
   kind: 'sfx' | 'bgm';
@@ -13,10 +15,13 @@ const props = defineProps<{
 }>();
 
 const libraryStore = useLibraryStore();
-const notice = ref('');
-const isEditing = ref(false);
+const notice = shallowRef('');
+const isEditing = shallowRef(false);
+const isEditorOpen = shallowRef(false);
 const form = ref<AudioLibraryItem>(libraryStore.createEmptyAudioLibraryItem());
-const fileInputRef = ref<HTMLInputElement | null>(null);
+const fileInputRef = useTemplateRef<HTMLInputElement>('fileInput');
+const audioRevision = shallowRef(0);
+const { invalidateAsset } = useLibraryAudioPreview();
 
 const items = computed(() =>
   props.kind === 'sfx' ? libraryStore.sfxLibrary : libraryStore.bgmLibrary
@@ -59,6 +64,13 @@ const resolveAssetStatusClass = (assetKey: string) => {
 const resetForm = () => {
   form.value = libraryStore.createEmptyAudioLibraryItem();
   isEditing.value = false;
+  isEditorOpen.value = false;
+};
+
+const openFilePicker = async () => {
+  isEditorOpen.value = true;
+  await nextTick();
+  fileInputRef.value?.click();
 };
 
 const onSelectFile = async (event: Event) => {
@@ -72,6 +84,9 @@ const onSelectFile = async (event: Event) => {
   const saved = await libraryStore.saveLibraryAudioFile(props.kind, file, form.value.assetKey);
   form.value.assetKey = saved.assetKey;
   form.value.filename = saved.filename;
+  invalidateAsset(saved.assetKey, saved.filename);
+  audioRevision.value += 1;
+  await nextTick();
   notice.value = `已保存音频文件：${saved.filename}`;
   input.value = '';
 };
@@ -90,6 +105,15 @@ const submit = async () => {
 const startEdit = (item: AudioLibraryItem) => {
   form.value = { ...item };
   isEditing.value = true;
+  isEditorOpen.value = true;
+};
+
+const toggleEnabled = async (item: AudioLibraryItem) => {
+  await libraryStore.saveAudioLibraryItem(props.kind, {
+    ...item,
+    enabled: item.enabled === false
+  });
+  notice.value = item.enabled === false ? '资源已启用。' : '资源已停用。';
 };
 
 const remove = async (id: string) => {
@@ -110,6 +134,9 @@ const remove = async (id: string) => {
         <h3>{{ title }}</h3>
       </div>
       <p class="note">{{ description }}</p>
+      <button type="button" class="secondary editor-toggle" @click="isEditorOpen = !isEditorOpen">
+        {{ isEditorOpen ? '收起编辑器' : '新增资源' }}
+      </button>
     </header>
 
     <div class="audio-library-content">
@@ -133,15 +160,30 @@ const remove = async (id: string) => {
                 {{ resolveAssetStatusLabel(item.assetKey) }}
               </span>
             </div>
-            <div class="audio-wave" aria-hidden="true">
-              <i v-for="index in 26" :key="index"></i>
-            </div>
+            <LibraryAudioPreview
+              :asset-key="item.assetKey"
+              :fallback-key="item.filename"
+              :trim-start="item.trimStart"
+              :trim-end="item.trimEnd"
+              :volume="item.volume"
+              :accent="props.kind === 'bgm' ? 'violet' : 'cyan'"
+              :revision="audioRevision"
+              compact
+            />
             <p class="mono audio-meta">
               {{ item.filename }} · {{ Math.round(item.volume * 100) }}% · {{ item.trimStart }}~{{ item.trimEnd }}
             </p>
             <div class="audio-item-footer">
               <span class="mono">{{ item.assetKey || '未绑定 asset' }}</span>
               <div class="list-actions">
+                <button
+                  type="button"
+                  class="resource-state"
+                  :class="{ 'resource-state--off': item.enabled === false }"
+                  @click="toggleEnabled(item)"
+                >
+                  {{ item.enabled === false ? '已停用' : '已启用' }}
+                </button>
                 <button type="button" class="ghost" @click="startEdit(item)">编辑</button>
                 <button type="button" class="ghost ghost--danger" @click="remove(item.id)">删除</button>
               </div>
@@ -157,11 +199,11 @@ const remove = async (id: string) => {
             <strong>素材库暂为空</strong>
             <p>导入音频后即可在这里管理资源、裁剪区间和默认音量。</p>
           </div>
-          <button type="button" class="secondary" @click="fileInputRef?.click()">导入音频</button>
+          <button type="button" class="secondary" @click="openFilePicker">导入音频</button>
         </div>
       </section>
 
-      <section class="audio-editor" :aria-label="`${title} 编辑器`">
+      <section v-if="isEditorOpen" class="audio-editor" :aria-label="`${title} 编辑器`">
         <p class="editor-kicker">素材编辑器</p>
         <div class="form-grid">
           <label class="field">
@@ -181,7 +223,7 @@ const remove = async (id: string) => {
             <div class="file-row">
               <button type="button" class="secondary" @click="fileInputRef?.click()">选择文件</button>
               <input
-                ref="fileInputRef"
+                ref="fileInput"
                 type="file"
                 accept=".wav,.mp3"
                 class="hidden-input"
@@ -200,6 +242,22 @@ const remove = async (id: string) => {
               <span class="mono">{{ form.assetKey || '保存后生成 assetKey' }}</span>
             </div>
           </label>
+          <div v-if="form.assetKey || form.filename" class="field field--wide waveform-editor">
+            <span>试听与波形裁剪</span>
+            <LibraryAudioPreview
+              :asset-key="form.assetKey"
+              :fallback-key="form.filename"
+              :trim-start="form.trimStart"
+              :trim-end="form.trimEnd"
+              :volume="form.volume"
+              :accent="props.kind === 'bgm' ? 'violet' : 'cyan'"
+              :revision="audioRevision"
+              editable
+              @update:trim-start="form.trimStart = $event"
+              @update:trim-end="form.trimEnd = $event"
+            />
+            <em>拖动青色与紫色手柄设置有效区间；试听、脚本播放与导出会使用同一裁剪值。</em>
+          </div>
           <label class="field">
             <span>trimStart</span>
             <input v-model.number="form.trimStart" type="number" min="0" max="1" step="0.01" />
@@ -243,6 +301,10 @@ const remove = async (id: string) => {
 .audio-catalog,
 .audio-editor {
   min-width: 0;
+}
+
+.editor-toggle {
+  justify-self: start;
 }
 
 .audio-editor {
@@ -350,6 +412,23 @@ const remove = async (id: string) => {
   white-space: nowrap;
 }
 
+.resource-state {
+  padding: 5px 9px;
+  border: 1px solid rgba(50, 209, 140, 0.28);
+  border-radius: 999px;
+  background: rgba(50, 209, 140, 0.1);
+  color: #9df4c8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.resource-state--off {
+  border-color: rgba(131, 148, 184, 0.22);
+  background: rgba(131, 148, 184, 0.08);
+  color: var(--tts-text-muted);
+}
+
 .audio-glyph {
   display: inline-grid;
   width: 34px;
@@ -446,6 +525,20 @@ const remove = async (id: string) => {
 
 .field--wide {
   grid-column: 1 / -1;
+}
+
+.waveform-editor {
+  padding: 12px;
+  border: 1px solid rgba(104, 159, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(2, 10, 28, 0.4);
+}
+
+.waveform-editor > em {
+  color: var(--tts-text-muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 500;
 }
 
 .enabled-row {

@@ -185,6 +185,30 @@ code {
 .workspace-card .prompt-nav-card p,
 .workspace-card .prompt-sidebar-heading span { color: var(--tts-text-muted) !important; }
 .workspace-card .prompt-nav-index { background: rgba(20, 153, 255, 0.16) !important; color: var(--tts-accent-cyan) !important; }
+.workspace-card .audio-item,
+.workspace-card .audio-editor,
+.workspace-card .audio-empty,
+.workspace-card .waveform-editor,
+.workspace-card .reference-preview,
+.workspace-card .filter-analysis,
+.workspace-card .filter-editor,
+.workspace-card .filter-item {
+  border-color: rgba(104, 159, 255, 0.18) !important;
+  background: rgba(6, 15, 36, 0.72) !important;
+  color: var(--tts-text-primary) !important;
+}
+.workspace-card .filter-stat-grid span {
+  background: rgba(2, 10, 28, 0.54) !important;
+  color: var(--tts-text-muted) !important;
+}
+.workspace-card .filter-stat-grid b,
+.workspace-card .audio-empty strong { color: var(--tts-text-secondary) !important; }
+.workspace-card .catalog-meta,
+.workspace-card .analysis-heading,
+.workspace-card .audio-meta,
+.workspace-card .prompt-text,
+.workspace-card .mono,
+.workspace-card .enabled-row em { color: var(--tts-text-muted) !important; }
 
 @media (max-width: 1100px) { .tab-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); } .summary-strip { grid-template-columns: 1fr; } .workspace-header { align-items: flex-start; flex-direction: column; } .section-note { text-align: left; } }
 @media (max-width: 720px) { .shell { width: min(100% - 20px, 100%); padding: 14px 0 32px; } .hero-card { align-items: flex-start; flex-direction: column; padding: 22px; } .workspace-card { padding: 14px; border-radius: 18px; } .tab-nav { grid-template-columns: 1fr; } .hero-status { white-space: normal; } }
@@ -343,6 +367,12 @@ code {
   align-items: start;
 }
 
+.workspace-card[data-active-tab='timbres'] > .stack > :first-child { grid-column: 1 / -1; }
+.workspace-card[data-active-tab='timbres'] > .stack > :last-child { grid-column: 1; }
+.workspace-card[data-active-tab='timbres'] .timbre-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
 /* 音效：资源库、BGM 和滤波器按照设计图中的三列工作区排列。 */
 .workspace-card[data-active-tab='sfx'] > .stack {
   grid-template-columns: minmax(230px, 0.78fr) minmax(360px, 1.24fr) minmax(280px, 0.96fr);
@@ -353,9 +383,17 @@ code {
   min-width: 0;
 }
 
+.workspace-card[data-active-tab='sfx'] .audio-library .card-header {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+}
+
+.workspace-card[data-active-tab='sfx'] .audio-library .card-header .note { margin: 0; }
+
 /* Prompt：编辑器承担主视图，Qwen 模板作为右侧辅助面板。 */
-.workspace-card[data-active-tab='prompt'] > .stack {
-  grid-template-columns: minmax(0, 1.72fr) minmax(300px, 0.72fr);
+.workspace-card[data-active-tab='prompt'] > .prompt-workbench {
+  grid-template-columns: minmax(190px, 0.38fr) minmax(0, 1.55fr) minmax(280px, 0.72fr);
   align-items: start;
 }
 
@@ -370,50 +408,85 @@ code {
 /* 脚本制作：保留所有原有的脚本、导出和运行时组件，同时形成“左侧输入－中部编排－右侧状态”的工作区。 */
 .workspace-card[data-active-tab='script'] > .script-workbench {
   grid-template-columns: minmax(250px, 0.8fr) minmax(420px, 1.55fr) minmax(280px, 0.88fr);
-  align-items: start;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: stretch;
+  height: calc(100vh - 300px);
+  min-height: 610px;
+  overflow: hidden;
 }
 
-.workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(1) { grid-column: 1 / -1; }
-.workspace-card[data-active-tab='script'] > .script-workbench > .top-grid { display: contents; }
-.workspace-card[data-active-tab='script'] > .script-workbench > .top-grid > :first-child {
-  grid-column: 1;
-  grid-row: 2 / span 3;
+.workspace-card[data-active-tab='script'] > .script-workbench > :first-child {
+  grid-column: 1 / -1;
 }
-.workspace-card[data-active-tab='script'] > .script-workbench > .top-grid > :last-child {
-  grid-column: 3;
-  grid-row: 2;
+
+.workspace-card[data-active-tab='script'] .script-column,
+.workspace-card[data-active-tab='script'] .script-line-editor {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgba(66, 232, 255, 0.34) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
-.workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(3) {
-  grid-column: 3;
-  grid-row: 3;
-}
-.workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(4) {
-  grid-column: 3;
-  grid-row: 4;
-}
-.workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(5) {
-  grid-column: 2;
-  grid-row: 2 / span 3;
+
+.workspace-card[data-active-tab='script'] .script-column--left { grid-column: 1; grid-row: 2; }
+.workspace-card[data-active-tab='script'] .script-line-editor { grid-column: 2; grid-row: 2; }
+.workspace-card[data-active-tab='script'] .script-column--right { grid-column: 3; grid-row: 2; }
+
+@media (min-width: 1321px) {
+  .workspace-card[data-active-tab='timbres'] > .stack,
+  .workspace-card[data-active-tab='sfx'] > .stack,
+  .workspace-card[data-active-tab='prompt'] > .prompt-workbench {
+    height: calc(100vh - 300px);
+    min-height: 610px;
+  }
+
+  .workspace-card[data-active-tab='timbres'] > .stack {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .workspace-card[data-active-tab='sfx'] > .stack,
+  .workspace-card[data-active-tab='prompt'] > .prompt-workbench {
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  .workspace-card[data-active-tab='sfx'] > .stack > *,
+  .workspace-card[data-active-tab='prompt'] > .prompt-workbench > * {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .workspace-card[data-active-tab='timbres'] > .stack,
+  .workspace-card[data-active-tab='sfx'] > .stack > *,
+  .workspace-card[data-active-tab='prompt'] > .prompt-workbench > * {
+    scrollbar-color: rgba(66, 232, 255, 0.34) transparent;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+  }
 }
 
 @media (max-width: 1320px) {
   .studio-header { grid-template-columns: 1fr; gap: 12px; padding: 18px 0; }
   .studio-header .tab-nav { width: 100%; }
-  .workspace-card[data-active-tab='sfx'] > .stack,
-  .workspace-card[data-active-tab='script'] > .script-workbench { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .workspace-card[data-active-tab='script'] > .script-workbench > .top-grid {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.72fr);
+  .workspace-card[data-active-tab='sfx'] > .stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-card[data-active-tab='script'] > .script-workbench {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto auto auto;
+    height: auto;
+    overflow: visible;
   }
-  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(n),
-  .workspace-card[data-active-tab='script'] > .script-workbench > .top-grid > :nth-child(n) {
-    grid-column: auto;
+  .workspace-card[data-active-tab='script'] .script-column,
+  .workspace-card[data-active-tab='script'] .script-line-editor {
     grid-row: auto;
+    max-height: none;
+    overflow: visible;
   }
-  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(1),
-  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(2),
-  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(5) { grid-column: 1 / -1; }
+  .workspace-card[data-active-tab='script'] .script-column--left { grid-column: 1; }
+  .workspace-card[data-active-tab='script'] .script-line-editor { grid-column: 2; }
+  .workspace-card[data-active-tab='script'] .script-column--right { grid-column: 1 / -1; }
 }
 
 @media (max-width: 980px) {
@@ -423,8 +496,11 @@ code {
   .workspace-card[data-active-tab='config'] > .stack,
   .workspace-card[data-active-tab='timbres'] > .stack,
   .workspace-card[data-active-tab='sfx'] > .stack,
-  .workspace-card[data-active-tab='prompt'] > .stack,
+  .workspace-card[data-active-tab='prompt'] > .prompt-workbench,
   .workspace-card[data-active-tab='script'] > .script-workbench { grid-template-columns: 1fr; }
-  .workspace-card[data-active-tab='script'] > .script-workbench > .top-grid { grid-template-columns: 1fr; }
-  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(n) { grid-column: 1; }
+  .workspace-card[data-active-tab='timbres'] > .stack > :nth-child(n) { grid-column: 1; }
+  .workspace-card[data-active-tab='script'] > .script-workbench > :nth-child(n),
+  .workspace-card[data-active-tab='script'] .script-column--left,
+  .workspace-card[data-active-tab='script'] .script-column--right,
+  .workspace-card[data-active-tab='script'] .script-line-editor { grid-column: 1; }
 }

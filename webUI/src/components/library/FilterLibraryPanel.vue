@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 
 import type { FilterLibraryItem } from '../../domain/project';
 import { useLibraryStore } from '../../stores/library.store';
@@ -7,12 +7,14 @@ import { useLibraryStore } from '../../stores/library.store';
 const libraryStore = useLibraryStore();
 
 const form = ref<FilterLibraryItem>(libraryStore.createEmptyFilter());
-const isEditing = ref(false);
-const notice = ref('');
+const isEditing = shallowRef(false);
+const isEditorOpen = shallowRef(false);
+const notice = shallowRef('');
 
 const resetForm = () => {
   form.value = libraryStore.createEmptyFilter();
   isEditing.value = false;
+  isEditorOpen.value = false;
 };
 
 const submit = async () => {
@@ -29,6 +31,15 @@ const submit = async () => {
 const startEdit = (item: FilterLibraryItem) => {
   form.value = { ...item };
   isEditing.value = true;
+  isEditorOpen.value = true;
+};
+
+const toggleEnabled = async (item: FilterLibraryItem) => {
+  await libraryStore.saveFilter({
+    ...item,
+    enabled: item.enabled === false
+  });
+  notice.value = item.enabled === false ? '滤波器已启用。' : '滤波器已停用。';
 };
 
 const remove = async (id: string) => {
@@ -57,7 +68,12 @@ const resetDefaults = async () => {
         <p class="eyebrow">滤波器库</p>
         <h3>音频滤波器管理</h3>
       </div>
-      <button type="button" class="secondary" @click="resetDefaults">恢复默认滤波器</button>
+      <div class="header-actions">
+        <button type="button" class="secondary" @click="isEditorOpen = !isEditorOpen">
+          {{ isEditorOpen ? '收起编辑器' : '新增滤波器' }}
+        </button>
+        <button type="button" class="secondary" @click="resetDefaults">恢复默认滤波器</button>
+      </div>
     </header>
 
     <section class="filter-analysis" aria-hidden="true">
@@ -95,9 +111,13 @@ const resetDefaults = async () => {
           <span><b>{{ item.gain ?? 0 }}</b> Gain</span>
         </div>
         <div class="filter-item-footer">
-          <span :class="['filter-state', { 'filter-state--off': item.enabled === false }]">
+          <button
+            type="button"
+            :class="['filter-state', { 'filter-state--off': item.enabled === false }]"
+            @click="toggleEnabled(item)"
+          >
             {{ item.enabled === false ? '已停用' : '已启用' }}
-          </span>
+          </button>
           <div class="list-actions">
             <button type="button" class="ghost" @click="startEdit(item)">编辑</button>
             <button type="button" class="ghost ghost--danger" @click="remove(item.id)">删除</button>
@@ -106,7 +126,7 @@ const resetDefaults = async () => {
       </article>
     </section>
 
-    <section class="filter-editor" aria-label="滤波器编辑器">
+    <section v-if="isEditorOpen" class="filter-editor" aria-label="滤波器编辑器">
       <p class="editor-kicker">{{ isEditing ? '正在编辑预设' : '新建滤波器预设' }}</p>
       <div class="form-grid">
         <label class="field">
@@ -266,7 +286,9 @@ const resetDefaults = async () => {
 
 .filter-state {
   background: rgba(34, 197, 94, 0.12);
+  border: 0;
   color: #15803d;
+  cursor: pointer;
   font-family: inherit;
 }
 
@@ -309,6 +331,7 @@ const resetDefaults = async () => {
 }
 
 .card-header,
+.header-actions,
 .actions,
 .list-item,
 .list-actions {
@@ -320,6 +343,11 @@ const resetDefaults = async () => {
 .card-header {
   justify-content: space-between;
   margin-bottom: 18px;
+}
+
+.header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .eyebrow {

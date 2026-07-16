@@ -9,13 +9,13 @@ import FilterLibraryPanel from './library/FilterLibraryPanel.vue';
       kind="sfx"
       eyebrow="SFX 资源库"
       title="音效素材"
-      description="先迁移文件元数据、默认音量和裁剪比例，波形试听后续再接。"
+      description="真实波形、试听进度、默认音量与裁剪区间会共同作用于脚本播放和导出。"
     />
     <AudioLibraryPanel
       kind="bgm"
       eyebrow="BGM 资源库"
       title="背景音乐素材"
-      description="沿用旧结构中的 filename、assetKey、trimStart、trimEnd 和 volume。"
+      description="支持本地试听与可视化裁剪，并沿用 filename、assetKey、trimStart、trimEnd 和 volume。"
     />
     <FilterLibraryPanel />
   </section>

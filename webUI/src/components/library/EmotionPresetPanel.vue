@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
 
 import type { EmotionPreset } from '../../domain/project';
 import { useLibraryStore } from '../../stores/library.store';
@@ -7,12 +7,17 @@ import { useLibraryStore } from '../../stores/library.store';
 const libraryStore = useLibraryStore();
 
 const form = ref<EmotionPreset>(libraryStore.createEmptyEmotionPreset());
-const isEditing = ref(false);
-const notice = ref('');
+const isEditing = shallowRef(false);
+const isEditorOpen = shallowRef(false);
+const notice = shallowRef('');
+const systemEmotionPresets = computed(() =>
+  libraryStore.emotionPresets.filter((item) => libraryStore.isSystemEmotion(item.name))
+);
 
 const resetForm = () => {
   form.value = libraryStore.createEmptyEmotionPreset();
   isEditing.value = false;
+  isEditorOpen.value = false;
 };
 
 const submit = async () => {
@@ -37,6 +42,16 @@ const startEdit = (item: EmotionPreset) => {
     vector: [...item.vector]
   };
   isEditing.value = true;
+  isEditorOpen.value = true;
+};
+
+const toggleEnabled = async (item: EmotionPreset) => {
+  await libraryStore.saveEmotionPreset({
+    ...item,
+    vector: [...item.vector],
+    enabled: item.enabled === false
+  });
+  notice.value = item.enabled === false ? '情绪预设已启用。' : '情绪预设已停用。';
 };
 
 const remove = async (id: string) => {
@@ -65,33 +80,50 @@ const resetDefaults = async () => {
         <p class="eyebrow">情绪预设</p>
         <h3>8 维向量管理</h3>
       </div>
-      <button type="button" class="secondary" @click="resetDefaults">恢复系统默认</button>
+      <div class="header-actions">
+        <button type="button" class="secondary" @click="isEditorOpen = !isEditorOpen">
+          {{ isEditorOpen ? '收起编辑器' : '新增自定义情绪' }}
+        </button>
+        <button type="button" class="secondary" @click="resetDefaults">恢复系统默认</button>
+      </div>
     </header>
 
-    <div class="form-grid">
-      <label class="field field--wide">
-        <span>情绪名称</span>
-        <input v-model="form.name" type="text" placeholder="例如：压抑 / 希望" />
-      </label>
-      <label
-        v-for="(value, index) in form.vector"
-        :key="index"
-        class="field"
-      >
-        <span>{{ ['高兴', '生气', '伤心', '害怕', '厌恶', '低落', '惊喜', '平静'][index] }}</span>
-        <input v-model.number="form.vector[index]" type="number" min="0" max="1" step="0.1" />
-      </label>
-    </div>
+    <section class="system-emotion-grid" aria-label="系统情绪预设">
+      <article v-for="item in systemEmotionPresets" :key="item.id" class="system-emotion-card">
+        <span class="emotion-orbit" aria-hidden="true"></span>
+        <strong>{{ item.name }}</strong>
+        <span class="mono">[{{ item.vector.join(',') }}]</span>
+      </article>
+    </section>
 
-    <div class="actions">
-      <button type="button" class="primary" @click="submit">
-        {{ isEditing ? '更新情绪预设' : '保存情绪预设' }}
-      </button>
-      <button v-if="isEditing" type="button" class="secondary" @click="resetForm">
-        取消编辑
-      </button>
-      <span v-if="notice" class="notice">{{ notice }}</span>
-    </div>
+    <section v-if="isEditorOpen" class="emotion-editor">
+      <div class="form-grid">
+        <label class="field field--wide">
+          <span>情绪名称</span>
+          <input v-model="form.name" type="text" placeholder="例如：压抑 / 希望" />
+        </label>
+        <label
+          v-for="(value, index) in form.vector"
+          :key="index"
+          class="field"
+        >
+          <span>{{ ['高兴', '生气', '伤心', '害怕', '厌恶', '低落', '惊喜', '平静'][index] }}</span>
+          <input v-model.number="form.vector[index]" type="number" min="0" max="1" step="0.1" />
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="primary" @click="submit">
+          {{ isEditing ? '更新情绪预设' : '保存情绪预设' }}
+        </button>
+        <button v-if="isEditing" type="button" class="secondary" @click="resetForm">
+          取消编辑
+        </button>
+        <span v-if="notice" class="notice">{{ notice }}</span>
+      </div>
+    </section>
+
+    <div v-if="!isEditorOpen && notice" class="notice notice--standalone">{{ notice }}</div>
 
     <div v-if="libraryStore.customEmotionPresets.length" class="list">
       <article v-for="item in libraryStore.customEmotionPresets" :key="item.id" class="list-item">
@@ -100,6 +132,14 @@ const resetDefaults = async () => {
           <p class="mono">[{{ item.vector.join(', ') }}]</p>
         </div>
         <div class="list-actions">
+          <button
+            type="button"
+            class="preset-state"
+            :class="{ 'preset-state--off': item.enabled === false }"
+            @click="toggleEnabled(item)"
+          >
+            {{ item.enabled === false ? '已停用' : '已启用' }}
+          </button>
           <button type="button" class="ghost" @click="startEdit(item)">编辑</button>
           <button type="button" class="ghost ghost--danger" @click="remove(item.id)">
             删除
@@ -120,6 +160,7 @@ const resetDefaults = async () => {
 }
 
 .card-header,
+.header-actions,
 .actions,
 .list-item,
 .list-actions {
@@ -131,6 +172,50 @@ const resetDefaults = async () => {
 .card-header {
   justify-content: space-between;
   margin-bottom: 18px;
+}
+
+.header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.system-emotion-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.system-emotion-card {
+  display: grid;
+  gap: 7px;
+  padding: 11px;
+  border: 1px solid rgba(104, 159, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(6, 15, 36, 0.7);
+}
+
+.system-emotion-card strong {
+  color: var(--tts-text-secondary);
+}
+
+.emotion-orbit {
+  width: 26px;
+  height: 12px;
+  border: 1px solid rgba(66, 232, 255, 0.5);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(66, 232, 255, 0.16);
+}
+
+.emotion-editor {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(104, 159, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(2, 10, 28, 0.42);
+}
+
+.notice--standalone {
+  margin-top: 12px;
 }
 
 .eyebrow {
@@ -207,6 +292,23 @@ const resetDefaults = async () => {
   color: #dc2626;
 }
 
+.preset-state {
+  padding: 5px 9px;
+  border: 1px solid rgba(50, 209, 140, 0.28);
+  border-radius: 999px;
+  background: rgba(50, 209, 140, 0.1);
+  color: #15803d;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.preset-state--off {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(148, 163, 184, 0.1);
+  color: #64748b;
+}
+
 .notice {
   color: #0f766e;
   font-size: 0.9rem;
@@ -242,6 +344,10 @@ const resetDefaults = async () => {
   }
 
   .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-emotion-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -3,6 +3,7 @@ import { computed, watch } from 'vue';
 
 import { useAssetRecovery } from '../../composables/useAssetRecovery';
 import type { CharacterBinding, ScriptEntry, TimbreLibraryItem } from '../../domain/project';
+import LibraryAudioPreview from '../library/LibraryAudioPreview.vue';
 
 const props = defineProps<{
   isSaving: boolean;
@@ -204,6 +205,16 @@ watch(
             </label>
           </div>
 
+          <div v-if="character.voiceAssetKey || character.voiceFile" class="character-preview">
+            <span class="field-label">音色试听</span>
+            <LibraryAudioPreview
+              :asset-key="character.voiceAssetKey"
+              :fallback-key="character.voiceFile"
+              :volume="character.volume"
+              compact
+            />
+          </div>
+
           <div class="character-footer">
             <div class="status-row">
               <span class="asset-pill" :class="resolveAssetStatusClass(character.voiceAssetKey)">
@@ -272,6 +283,15 @@ watch(
 .stack {
   display: grid;
   gap: 14px;
+}
+
+.character-preview {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(104, 159, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(2, 10, 28, 0.36);
 }
 
 .eyebrow,

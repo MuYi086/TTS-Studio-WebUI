@@ -1163,12 +1163,12 @@ export const useScriptAudioRuntime = (options: {
     }
   };
 
-  const exportAudio = async () => {
+  const renderOrExportAudio = async (shouldDownload: boolean): Promise<AudioBuffer | null> => {
     const dialogueLines = currentLines.value.filter(isDialogueLine);
 
     if (dialogueLines.length === 0) {
       window.alert('当前脚本为空。');
-      return;
+      return null;
     }
 
     const missingAudioLines: DialogueLine[] = [];
@@ -1183,11 +1183,15 @@ export const useScriptAudioRuntime = (options: {
       missingAudioLines.length > 0 &&
       !window.confirm('部分台词尚未生成音频，导出时将跳过它们。确定继续吗？')
     ) {
-      return;
+      return null;
     }
 
     isExportingAudio.value = true;
-    jobsStore.updateJob('export', 'running', '正在离线混音并导出 WAV。');
+    jobsStore.updateJob(
+      'export',
+      'running',
+      shouldDownload ? '正在离线混音并导出 WAV。' : '正在为 MP4 渲染音频轨道。'
+    );
 
     try {
       const assets = {
@@ -1386,23 +1390,34 @@ export const useScriptAudioRuntime = (options: {
       });
 
       const renderedBuffer = await offlineContext.startRendering();
-      const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
-      const url = URL.createObjectURL(wavBlob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `Unitale导出音频_${Date.now()}.wav`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
-      jobsStore.updateJob('export', 'success', 'WAV 导出完成。');
+
+      if (shouldDownload) {
+        const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
+        const url = URL.createObjectURL(wavBlob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `Unitale导出音频_${Date.now()}.wav`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+        jobsStore.updateJob('export', 'success', 'WAV 导出完成。');
+      }
+
+      return renderedBuffer;
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知错误';
-      jobsStore.updateJob('export', 'error', `WAV 导出失败：${message}`);
-      window.alert(`导出 WAV 失败：${message}`);
+      const targetLabel = shouldDownload ? 'WAV' : 'MP4 音频轨道';
+      jobsStore.updateJob('export', 'error', `${targetLabel}导出失败：${message}`);
+      window.alert(`导出 ${targetLabel} 失败：${message}`);
+      return null;
     } finally {
       isExportingAudio.value = false;
     }
+  };
+
+  const exportAudio = async () => {
+    await renderOrExportAudio(true);
   };
 
   const exportSrt = async () => {
@@ -1480,6 +1495,8 @@ export const useScriptAudioRuntime = (options: {
     }
 
     const VideoEncoderCtor = (globalThis as { VideoEncoder?: typeof VideoEncoder }).VideoEncoder;
+    const AudioEncoderCtor = (globalThis as { AudioEncoder?: any }).AudioEncoder;
+    const AudioDataCtor = (globalThis as { AudioData?: any }).AudioData;
     const Mp4MuxerCtor = (globalThis as { Mp4Muxer?: any }).Mp4Muxer;
 
     if (!VideoEncoderCtor) {
@@ -1492,11 +1509,24 @@ export const useScriptAudioRuntime = (options: {
       return;
     }
 
+    if (!AudioEncoderCtor || !AudioDataCtor) {
+      window.alert('当前浏览器不支持 WebCodecs 音频编码，无法生成带声音的 MP4。');
+      return;
+    }
+
     isGeneratingVideo.value = true;
     exportStatus.value = '准备素材...';
     jobsStore.updateJob('export', 'running', '正在编码 MP4。');
+    let videoEncoder: VideoEncoder | null = null;
+    let audioEncoder: any = null;
 
     try {
+      const mixedAudioBuffer = await renderOrExportAudio(false);
+
+      if (!mixedAudioBuffer) {
+        throw new Error('无法渲染 MP4 音频轨道。');
+      }
+
       const dialogueBuffers = new Map<string, AudioBuffer>();
 
       for (const line of dialogueLines) {
@@ -1588,29 +1618,145 @@ export const useScriptAudioRuntime = (options: {
       const height = rawHeight % 2 === 0 ? rawHeight : rawHeight + 1;
       const fps = 4;
       const frameDurationUs = Math.round(1_000_000 / fps);
-      const totalDuration = currentTime + 1 + 1 / fps + 0.02;
+      const totalDuration = Math.max(
+        currentTime + 1 + 1 / fps + 0.02,
+        mixedAudioBuffer.duration
+      );
+      const audioConfigCandidates = [
+        {
+          config: {
+            bitrate: 128_000,
+            codec: 'mp4a.40.2',
+            numberOfChannels: mixedAudioBuffer.numberOfChannels,
+            sampleRate: mixedAudioBuffer.sampleRate
+          },
+          muxerCodec: 'aac'
+        },
+        {
+          config: {
+            bitrate: 128_000,
+            codec: 'opus',
+            numberOfChannels: mixedAudioBuffer.numberOfChannels,
+            sampleRate: mixedAudioBuffer.sampleRate
+          },
+          muxerCodec: 'opus'
+        }
+      ];
+      let supportedAudioConfig: Record<string, unknown> | null = null;
+      let muxerAudioCodec = '';
+
+      for (const candidate of audioConfigCandidates) {
+        try {
+          const support = await AudioEncoderCtor.isConfigSupported(candidate.config);
+
+          if (support.supported) {
+            supportedAudioConfig = support.config ?? candidate.config;
+            muxerAudioCodec = candidate.muxerCodec;
+            break;
+          }
+        } catch {
+          // 继续尝试浏览器更常见的音频编码格式。
+        }
+      }
+
+      if (!supportedAudioConfig) {
+        throw new Error('当前浏览器不支持 AAC 或 Opus 音频编码。');
+      }
+
       const muxer = new Mp4MuxerCtor.Muxer({
+        audio: {
+          codec: muxerAudioCodec,
+          numberOfChannels: mixedAudioBuffer.numberOfChannels,
+          sampleRate: mixedAudioBuffer.sampleRate
+        },
         fastStart: 'in-memory',
         target: new Mp4MuxerCtor.ArrayBufferTarget(),
         video: { codec: 'avc', height, width }
       });
-      const encoder = new VideoEncoderCtor({
-        error: (error) => {
-          throw error;
-        },
+
+      let encoderFailure: Error | null = null;
+      let resolveEncoderError: (error: Error) => void = () => undefined;
+      const encoderErrorSignal = new Promise<Error>((resolve) => {
+        resolveEncoderError = resolve;
+      });
+      const reportEncoderError = (kind: string, error: DOMException) => {
+        if (encoderFailure) {
+          return;
+        }
+
+        encoderFailure = new Error(`${kind}编码错误：${error.message}`);
+        resolveEncoderError(encoderFailure);
+      };
+
+      videoEncoder = new VideoEncoderCtor({
+        error: (error) => reportEncoderError('视频', error),
         output: (chunk: EncodedVideoChunk, metadata?: EncodedVideoChunkMetadata) => {
           muxer.addVideoChunk(chunk, metadata);
         }
       });
-
-      encoder.configure({
-        bitrate: 3_000_000,
-        codec: 'avc1.42002a',
-        framerate: fps,
-        height,
-        hardwareAcceleration: 'prefer-hardware',
-        width
+      audioEncoder = new AudioEncoderCtor({
+        error: (error: DOMException) => reportEncoderError('音频', error),
+        output: (chunk: unknown, metadata?: unknown) => {
+          muxer.addAudioChunk(chunk, metadata);
+        }
       });
+
+      const videoConfigCandidates: VideoEncoderConfig[] = [
+        {
+          bitrate: 3_000_000,
+          codec: 'avc1.4d002a',
+          framerate: fps,
+          height,
+          hardwareAcceleration: 'prefer-hardware',
+          width
+        },
+        {
+          bitrate: 3_000_000,
+          codec: 'avc1.42002a',
+          framerate: fps,
+          height,
+          hardwareAcceleration: 'no-preference',
+          width
+        },
+        {
+          bitrate: 2_000_000,
+          codec: 'avc1.42001f',
+          framerate: fps,
+          height,
+          hardwareAcceleration: 'no-preference',
+          width
+        }
+      ];
+      let supportedVideoConfig: VideoEncoderConfig | null = null;
+
+      for (const candidate of videoConfigCandidates) {
+        try {
+          const support = await VideoEncoderCtor.isConfigSupported(candidate);
+
+          if (support.supported) {
+            supportedVideoConfig = support.config ?? candidate;
+            break;
+          }
+        } catch {
+          // 继续尝试更保守的编码配置。
+        }
+      }
+
+      if (!supportedVideoConfig) {
+        throw new Error('当前浏览器不支持所选分辨率的 H.264 编码配置。');
+      }
+
+      videoEncoder.configure(supportedVideoConfig);
+      audioEncoder.configure(supportedAudioConfig);
+
+      const initialEncoderError = await Promise.race([
+        wait(0).then(() => null),
+        encoderErrorSignal
+      ]);
+
+      if (initialEncoderError) {
+        throw initialEncoderError;
+      }
 
       const canvas = new OffscreenCanvas(width, height);
       const context = canvas.getContext('2d', { alpha: false });
@@ -1634,7 +1780,11 @@ export const useScriptAudioRuntime = (options: {
 
       const segments =
         visualTimeline.length > 0
-          ? visualTimeline
+          ? visualTimeline.map((segment, index) =>
+              index === visualTimeline.length - 1
+                ? { ...segment, end: totalDuration }
+                : segment
+            )
           : [{ end: totalDuration, start: 0, url: '' }];
       let encodedFrameCount = 0;
       const totalFrames = Math.max(
@@ -1655,14 +1805,38 @@ export const useScriptAudioRuntime = (options: {
         }
 
         for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+          if (encoderFailure) {
+            throw encoderFailure;
+          }
+
+          if (videoEncoder.state !== 'configured') {
+            throw new Error('视频编码器已意外关闭。');
+          }
+
+          while (videoEncoder.encodeQueueSize > 30) {
+            const queueError = await Promise.race([
+              wait(10).then(() => null),
+              encoderErrorSignal
+            ]);
+
+            if (queueError) {
+              throw queueError;
+            }
+          }
+
           const timestamp = startUs + frameIndex * frameDurationUs;
           const duration =
             frameIndex === frameCount - 1
               ? Math.max(1, durationUs - frameIndex * frameDurationUs)
               : frameDurationUs;
           const frame = new VideoFrame(canvas, { duration, timestamp });
-          encoder.encode(frame, { keyFrame: frameIndex === 0 });
-          frame.close();
+
+          try {
+            videoEncoder.encode(frame, { keyFrame: frameIndex === 0 });
+          } finally {
+            frame.close();
+          }
+
           encodedFrameCount += 1;
         }
 
@@ -1670,8 +1844,67 @@ export const useScriptAudioRuntime = (options: {
         await wait(0);
       }
 
-      await encoder.flush();
-      encoder.close();
+      const numberOfChannels = mixedAudioBuffer.numberOfChannels;
+      const sampleRate = mixedAudioBuffer.sampleRate;
+      const audioChunkSize = 1024;
+
+      for (let offset = 0; offset < mixedAudioBuffer.length; offset += audioChunkSize) {
+        if (encoderFailure) {
+          throw encoderFailure;
+        }
+
+        if (audioEncoder.state !== 'configured') {
+          throw new Error('音频编码器已意外关闭。');
+        }
+
+        while (audioEncoder.encodeQueueSize > 30) {
+          const queueError = await Promise.race([
+            wait(10).then(() => null),
+            encoderErrorSignal
+          ]);
+
+          if (queueError) {
+            throw queueError;
+          }
+        }
+
+        const numberOfFrames = Math.min(audioChunkSize, mixedAudioBuffer.length - offset);
+        const planarData = new Float32Array(numberOfFrames * numberOfChannels);
+
+        for (let channel = 0; channel < numberOfChannels; channel += 1) {
+          planarData.set(
+            mixedAudioBuffer.getChannelData(channel).subarray(offset, offset + numberOfFrames),
+            channel * numberOfFrames
+          );
+        }
+
+        const audioData = new AudioDataCtor({
+          data: planarData,
+          format: 'f32-planar',
+          numberOfChannels,
+          numberOfFrames,
+          sampleRate,
+          timestamp: Math.round((offset / sampleRate) * 1_000_000)
+        });
+
+        try {
+          audioEncoder.encode(audioData);
+        } finally {
+          audioData.close();
+        }
+      }
+
+      const flushError = await Promise.race([
+        Promise.all([videoEncoder.flush(), audioEncoder.flush()]).then(() => null),
+        encoderErrorSignal
+      ]);
+
+      if (flushError) {
+        throw flushError;
+      }
+
+      videoEncoder.close();
+      audioEncoder.close();
       muxer.finalize();
       const mp4Buffer = muxer.target.buffer as ArrayBuffer;
       const blob = new Blob([mp4Buffer], { type: 'video/mp4' });
@@ -1689,6 +1922,14 @@ export const useScriptAudioRuntime = (options: {
       jobsStore.updateJob('export', 'error', `MP4 导出失败：${message}`);
       window.alert(`导出 MP4 失败：${message}`);
     } finally {
+      if (videoEncoder?.state !== 'closed') {
+        videoEncoder?.close();
+      }
+
+      if (audioEncoder?.state !== 'closed') {
+        audioEncoder?.close();
+      }
+
       isGeneratingVideo.value = false;
       exportStatus.value = '';
     }

@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, shallowRef, useTemplateRef } from 'vue';
 
 import { useAssetRecovery } from '../../composables/useAssetRecovery';
+import { useLibraryAudioPreview } from '../../composables/useLibraryAudioPreview';
 import type { TimbreLibraryItem } from '../../domain/project';
 import { useLibraryStore } from '../../stores/library.store';
+import LibraryAudioPreview from './LibraryAudioPreview.vue';
 
 const libraryStore = useLibraryStore();
 const timbreAssetKeys = computed(() => libraryStore.timbres.map((item) => item.assetKey));
 const { assetStatusByKey } = useAssetRecovery({ statusKeys: timbreAssetKeys });
 
 const form = ref<TimbreLibraryItem>(libraryStore.createEmptyTimbre());
-const isEditing = ref(false);
-const notice = ref('');
-const fileInputRef = ref<HTMLInputElement | null>(null);
+const isEditing = shallowRef(false);
+const notice = shallowRef('');
+const fileInputRef = useTemplateRef<HTMLInputElement>('fileInput');
+const audioRevision = shallowRef(0);
+const { invalidateAsset } = useLibraryAudioPreview();
 
 const resolveAssetStatusLabel = (assetKey: string) => {
   if (!assetKey) {
@@ -62,6 +66,9 @@ const onSelectFile = async (event: Event) => {
   const saved = await libraryStore.saveTimbreFile(file, form.value.assetKey);
   form.value.assetKey = saved.assetKey;
   form.value.refPath = saved.refPath;
+  invalidateAsset(saved.assetKey, saved.refPath);
+  audioRevision.value += 1;
+  await nextTick();
   notice.value = `已保存参考音频：${saved.refPath}`;
   input.value = '';
 };
@@ -116,9 +123,12 @@ const remove = async (id: string) => {
                 {{ resolveAssetStatusLabel(item.assetKey) }}
               </span>
             </div>
-            <div class="wave-preview" aria-hidden="true">
-              <i v-for="index in 18" :key="index"></i>
-            </div>
+            <LibraryAudioPreview
+              :asset-key="item.assetKey"
+              :fallback-key="item.refPath"
+              :revision="audioRevision"
+              compact
+            />
             <p v-if="item.promptText" class="prompt-text">{{ item.promptText }}</p>
             <p class="mono">{{ item.refPath }}</p>
             <div class="timbre-card-footer">
@@ -164,7 +174,7 @@ const remove = async (id: string) => {
                 选择文件
               </button>
               <input
-                ref="fileInputRef"
+                ref="fileInput"
                 type="file"
                 accept=".wav,.mp3"
                 class="hidden-input"
@@ -183,6 +193,14 @@ const remove = async (id: string) => {
               <span class="mono">{{ form.assetKey || '保存后生成 assetKey' }}</span>
             </div>
           </label>
+          <div v-if="form.assetKey || form.refPath" class="field field--wide reference-preview">
+            <span>参考音频试听</span>
+            <LibraryAudioPreview
+              :asset-key="form.assetKey"
+              :fallback-key="form.refPath"
+              :revision="audioRevision"
+            />
+          </div>
         </div>
 
         <div class="actions">
@@ -346,6 +364,13 @@ const remove = async (id: string) => {
 
 .field--wide {
   grid-column: 1 / -1;
+}
+
+.reference-preview {
+  padding: 12px;
+  border: 1px solid rgba(104, 159, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(2, 10, 28, 0.4);
 }
 
 .field input,

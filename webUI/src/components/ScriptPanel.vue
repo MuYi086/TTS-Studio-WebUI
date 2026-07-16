@@ -174,7 +174,7 @@ const handleUpdateVideoResolution = (value: string) => {
       @switch="handleSwitchScript"
     />
 
-    <div class="top-grid">
+    <div class="script-column script-column--left">
       <ScriptMetadataPanel
         :is-saving="projectStore.isSaving"
         :selected-voice-design-name="aiWorkflow.selectedVoiceDesignName.value"
@@ -189,7 +189,9 @@ const handleUpdateVideoResolution = (value: string) => {
         @update-character="handleUpdateCharacter"
         @update-raw-script="projectStore.updateRawScript"
       />
+    </div>
 
+    <div class="script-column script-column--right">
       <ScriptRuntimeStatusPanel
         :current-line-count="projectStore.currentScriptLines.length"
         :current-script-name="currentScript.name"
@@ -199,53 +201,53 @@ const handleUpdateVideoResolution = (value: string) => {
         :preview-asset-key="playbackStore.previewAssetKey"
         :selected-line-id="playbackStore.selectedLineId"
       />
+
+      <ScriptWorkflowPanel
+        :bg-image-count="aiWorkflow.bgImageCount.value"
+        :export-status="audioRuntime.exportStatus.value"
+        :is-analyzing-script="aiWorkflow.isAnalyzingScript.value"
+        :is-exporting-audio="audioRuntime.isExportingAudio.value"
+        :is-generating-all="audioRuntime.isGeneratingAll.value"
+        :is-generating-video="audioRuntime.isGeneratingVideo.value"
+        :is-sequence-playing="audioRuntime.isSequencePlaying.value"
+        :selected-line-id="playbackStore.selectedLineId"
+        :selected-voice-design-url="aiWorkflow.selectedVoiceDesignUrl.value"
+        :stage-background-url="audioRuntime.stageBackgroundUrl.value"
+        :video-resolution="audioRuntime.videoResolution.value"
+        :video-resolution-options="audioRuntime.videoResolutionOptions"
+        :voice-designs="aiWorkflow.voiceDesigns.value"
+        @analyze-script="aiWorkflow.analyzeScript"
+        @clear-all-audio="audioRuntime.clearAllGeneratedAudio"
+        @export-audio="audioRuntime.exportAudio"
+        @export-srt="audioRuntime.exportSrt"
+        @generate-all-lines="audioRuntime.generateAllLines"
+        @generate-video="audioRuntime.generateVideo"
+        @play-sequence="audioRuntime.playSequence"
+        @sync-timbres="aiWorkflow.syncTimbresWithServer"
+        @update-bg-image-count="handleUpdateBgImageCount"
+        @update-selected-voice-design-url="handleUpdateSelectedVoiceDesignUrl"
+        @update-video-resolution="handleUpdateVideoResolution"
+      />
+
+      <article class="summary-card">
+        <div class="summary-metric">
+          <span class="summary-label">角色</span>
+          <strong>{{ projectStore.currentCharacters.length }}</strong>
+        </div>
+        <div class="summary-metric">
+          <span class="summary-label">Dialogue</span>
+          <strong>{{ projectStore.lineTypeCounts.dialogue }}</strong>
+        </div>
+        <div class="summary-metric">
+          <span class="summary-label">BGM</span>
+          <strong>{{ projectStore.lineTypeCounts.bgm }}</strong>
+        </div>
+        <div class="summary-metric">
+          <span class="summary-label">bgImage</span>
+          <strong>{{ projectStore.lineTypeCounts.bgImage }}</strong>
+        </div>
+      </article>
     </div>
-
-    <ScriptWorkflowPanel
-      :bg-image-count="aiWorkflow.bgImageCount.value"
-      :export-status="audioRuntime.exportStatus.value"
-      :is-analyzing-script="aiWorkflow.isAnalyzingScript.value"
-      :is-exporting-audio="audioRuntime.isExportingAudio.value"
-      :is-generating-all="audioRuntime.isGeneratingAll.value"
-      :is-generating-video="audioRuntime.isGeneratingVideo.value"
-      :is-sequence-playing="audioRuntime.isSequencePlaying.value"
-      :selected-line-id="playbackStore.selectedLineId"
-      :selected-voice-design-url="aiWorkflow.selectedVoiceDesignUrl.value"
-      :stage-background-url="audioRuntime.stageBackgroundUrl.value"
-      :video-resolution="audioRuntime.videoResolution.value"
-      :video-resolution-options="audioRuntime.videoResolutionOptions"
-      :voice-designs="aiWorkflow.voiceDesigns.value"
-      @analyze-script="aiWorkflow.analyzeScript"
-      @clear-all-audio="audioRuntime.clearAllGeneratedAudio"
-      @export-audio="audioRuntime.exportAudio"
-      @export-srt="audioRuntime.exportSrt"
-      @generate-all-lines="audioRuntime.generateAllLines"
-      @generate-video="audioRuntime.generateVideo"
-      @play-sequence="audioRuntime.playSequence"
-      @sync-timbres="aiWorkflow.syncTimbresWithServer"
-      @update-bg-image-count="handleUpdateBgImageCount"
-      @update-selected-voice-design-url="handleUpdateSelectedVoiceDesignUrl"
-      @update-video-resolution="handleUpdateVideoResolution"
-    />
-
-    <article class="summary-card">
-      <div class="summary-metric">
-        <span class="summary-label">角色</span>
-        <strong>{{ projectStore.currentCharacters.length }}</strong>
-      </div>
-      <div class="summary-metric">
-        <span class="summary-label">Dialogue</span>
-        <strong>{{ projectStore.lineTypeCounts.dialogue }}</strong>
-      </div>
-      <div class="summary-metric">
-        <span class="summary-label">BGM</span>
-        <strong>{{ projectStore.lineTypeCounts.bgm }}</strong>
-      </div>
-      <div class="summary-metric">
-        <span class="summary-label">bgImage</span>
-        <strong>{{ projectStore.lineTypeCounts.bgImage }}</strong>
-      </div>
-    </article>
 
     <ScriptLineEditorPanel
       :active-playback-line-id="activePlaybackLineId"
@@ -280,11 +282,11 @@ const handleUpdateVideoResolution = (value: string) => {
   gap: 18px;
 }
 
-.top-grid {
+.script-column {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
   gap: 18px;
   align-items: start;
+  min-width: 0;
 }
 
 .summary-card {
@@ -319,7 +321,6 @@ const handleUpdateVideoResolution = (value: string) => {
 }
 
 @media (max-width: 1100px) {
-  .top-grid,
   .summary-card {
     grid-template-columns: 1fr;
   }
