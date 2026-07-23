@@ -811,16 +811,28 @@
 
                             <div class="mt-2 pt-2 border-t border-slate-100 space-y-2">
                                 <textarea v-model="char.voiceDescription" rows="2"
-                                    class="w-full px-2 py-1.5 text-[10px] border rounded bg-slate-50 focus:ring-1 focus:ring-blue-500 outline-none resize-none text-slate-600"
+                                    :disabled="char.isGeneratingVoicePrompt || char.isGeneratingVoice"
+                                    class="w-full px-2 py-1.5 text-[10px] border rounded bg-slate-50 focus:ring-1 focus:ring-blue-500 outline-none resize-none text-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
                                     placeholder="音色描述 (例如: 甜美少女音)"></textarea>
-                                <div class="flex gap-1">
+                                <textarea v-model="char.voicePromptText" rows="3"
+                                    :disabled="char.isGeneratingVoicePrompt || char.isGeneratingVoice"
+                                    class="w-full px-2 py-1.5 text-[10px] border rounded bg-slate-50 focus:ring-1 focus:ring-pink-500 outline-none resize-none text-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    placeholder="参考文案"></textarea>
+                                <div class="grid grid-cols-2 gap-1">
                                     <button @click="analyzeCharacterVoice(char)"
-                                        :class="['flex-1 px-2 py-1.5 border rounded text-[10px] font-bold transition-colors flex justify-center items-center gap-1', char.isAnalyzing ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100']">
+                                        :disabled="char.isGeneratingVoicePrompt || char.isGeneratingVoice"
+                                        :class="['col-span-2 px-2 py-1.5 border rounded text-[10px] font-bold transition-colors flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed', char.isAnalyzing ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100']">
                                         <span v-if="char.isAnalyzing" class="animate-spin">⏳</span>{{ char.isAnalyzing ? '停止分析' : 'AI分析音色' }}
                                     </button>
+                                    <button @click="generateVoiceReferenceText(char)"
+                                        :disabled="char.isAnalyzing || char.isGeneratingVoice"
+                                        :class="['px-2 py-1.5 border rounded text-[10px] font-bold transition-colors flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed', char.isGeneratingVoicePrompt ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 'bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100']">
+                                        <span v-if="char.isGeneratingVoicePrompt" class="animate-spin">⏳</span>{{ char.isGeneratingVoicePrompt ? '停止文案' : '生成参考文案' }}
+                                    </button>
                                     <button @click="generateQwenVoice(char)"
-                                        :class="['flex-1 px-2 py-1.5 border rounded text-[10px] font-bold transition-colors flex justify-center items-center gap-1', char.isGeneratingVoice ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 'bg-pink-50 text-pink-600 border-pink-100 hover:bg-pink-100']">
-                                        <span v-if="char.isGeneratingVoice" class="animate-spin">⏳</span>{{ char.isGeneratingVoice ? '停止生成' : selectedVoiceDesignButtonText }}
+                                        :disabled="char.isAnalyzing || char.isGeneratingVoicePrompt"
+                                        :class="['px-2 py-1.5 border rounded text-[10px] font-bold transition-colors flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed', char.isGeneratingVoice ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 'bg-pink-50 text-pink-600 border-pink-100 hover:bg-pink-100']">
+                                        <span v-if="char.isGeneratingVoice" class="animate-spin">⏳</span>{{ char.isGeneratingVoice ? '停止音色' : '生成音色' }}
                                     </button>
                                 </div>
                             </div>
@@ -1987,10 +1999,17 @@
                         // 修复：同步时清理角色运行时状态，防止切换脚本或保存时带入 "loading" 状态
                         // map 创建新的角色数组，避免持久化对象继续引用带运行时字段的 Vue 数据。
                         current.data.characters = characters.value.map(c => {
-                            // 保存前先补齐角色与音色库之间的 assetKey、描述和参考文本。
-                            syncCharacterVoiceSelection(c);
-                            // 解构排除正在分析、正在生成和取消控制器，只保留可恢复字段。
-                            const { isAnalyzing, isGeneratingVoice, abortController, ...rest } = c;
+                            // 保存前只补齐角色与音色库之间的 assetKey，不覆盖用户刚编辑的描述和参考文案。
+                            syncCharacterVoiceSelection(c, false);
+                            // 解构排除音色分析、参考文案生成、音色生成及各自取消控制器，只保留可恢复字段。
+                            const {
+                                isAnalyzing,
+                                isGeneratingVoicePrompt,
+                                isGeneratingVoice,
+                                voicePromptAbortController,
+                                abortController,
+                                ...rest
+                            } = c;
                             // 深拷贝移除 Vue 代理，保证工程数据可以安全 JSON 序列化。
                             return cloneData(rest);
                         });
@@ -3340,12 +3359,6 @@
                     // URL 是持久化主键；目录更新导致 URL 失效时回退首个可用服务。
                     return voiceDesigns.value.find(design => design.url === selectedVoiceDesignUrl.value) || voiceDesigns.value[0] || null;
                 });
-                /** 当前音色设计按钮的显示文字。 */
-                const selectedVoiceDesignButtonText = computed(() => {
-                    // 服务名称为空时仍提供可理解的兜底按钮文字。
-                    return `${selectedVoiceDesign.value?.name || '当前'}生成音色`;
-                });
-
                 // ==================== 6. LLM/TTS 配置管理 ====================
 
                 // --- 配置管理逻辑 ---
@@ -3541,16 +3554,17 @@
                 };
 
                 /**
-                 * 将角色的音色键、描述和参考文本与音色库记录同步。
+                 * 将角色与音色库记录同步；保存阶段可只补齐素材键而不覆盖可编辑文本。
                  * @param {Object} char - 角色数据
+                 * @param {boolean} [syncMetadata=true] - 是否同步音色描述和参考文本
                  * @returns {void}
                 */
-                const syncCharacterVoiceSelection = (char) => {
+                const syncCharacterVoiceSelection = (char, syncMetadata = true) => {
                     if (!char) return;
                     // 每次选择/恢复/保存前刷新稳定素材键。
                     char.voiceAssetKey = resolveCharacterVoiceAssetKey(char);
                     const timbre = resolveCharacterTimbre(char);
-                    if (timbre) {
+                    if (syncMetadata && timbre) {
                         // 音色库非空字段覆盖角色副本，空字段则保留旧数据。
                         char.voiceDescription = timbre.description || char.voiceDescription || '';
                         char.voicePromptText = timbre.promptText || char.voicePromptText || '';
@@ -3790,7 +3804,7 @@
                     if (!useDynamicVoiceReferenceText.value || !currentConfig.value) {
                         // 动态模式因缺配置回退时记录原因，便于排查为何未生成专属文本。
                         if (useDynamicVoiceReferenceText.value && !currentConfig.value) {
-                            console.warn('未配置 LLM，音色生成将回退到固定参考文本。');
+                            console.warn('未配置 LLM，参考文案生成将回退到固定参考文本。');
                         }
                         return fixedText;
                     }
@@ -3824,7 +3838,7 @@
                         throw new Error('LLM 生成的参考文本包含标签或结构化符号，请调整参考文本 Prompt 后重试');
                     }
 
-                    // 返回值稍后同时发送给音色设计和参考文本克隆 TTS。
+                    // 返回文本框展示值，后续只有用户点击“生成音色”才会提交给音色设计服务。
                     return generatedText;
                 };
 
@@ -3880,7 +3894,56 @@
                 };
 
                 /**
-                 * 调用所选音色设计服务生成参考音频，并同步到 TTS 服务与音色库。
+                 * 根据角色的音色描述生成可编辑的参考文案；再次触发可取消任务。
+                 *
+                 * 该步骤只更新角色的 `voicePromptText`，不会调用音色设计服务。
+                 * 用户可以在下一步生成音色前检查或修改结果。
+                 *
+                 * @param {Object} char - 角色数据
+                 * @returns {Promise<void>} 参考文案生成完成或取消后兑现
+                */
+                const generateVoiceReferenceText = async (char) => {
+                    // 同一个按钮兼具开始与停止语义，运行中再次点击时仅取消当前文案请求。
+                    if (char.isGeneratingVoicePrompt) {
+                        if (char.voicePromptAbortController) char.voicePromptAbortController.abort();
+                        return;
+                    }
+
+                    // 防御模板之外的直接调用，避免音色生成中途改写其输入文本。
+                    if (char.isGeneratingVoice) return alert('请先停止当前音色生成任务');
+                    // 参考文案 Prompt 需要明确的音色特征作为输入。
+                    if (!char.voiceDescription?.trim()) return alert('请先填写音色描述');
+
+                    // 文案任务使用独立状态与控制器，不占用音色分析/生成共用的取消控制器。
+                    char.isGeneratingVoicePrompt = true;
+                    const controller = new AbortController();
+                    char.voicePromptAbortController = controller;
+
+                    try {
+                        // 动态模式调用 LLM，关闭动态模式或缺少 LLM 配置时复用固定参考文本。
+                        const generatedText = await resolveVoiceReferenceText(char, controller.signal);
+                        // 只把结果写入可见文本框，让用户在生成音色前拥有最终决定权。
+                        char.voicePromptText = generatedText;
+                        // 将生成结果安排进现有工程自动保存流程。
+                        triggerAutoSave();
+                    } catch (e) {
+                        // 主动取消保持安静，其余异常向用户说明失败阶段。
+                        if (e.name !== 'AbortError') {
+                            console.error(e);
+                            alert('生成参考文案失败: ' + e.message);
+                        }
+                    } finally {
+                        // 无论成功、失败或取消，都释放参考文案任务的运行时状态。
+                        char.isGeneratingVoicePrompt = false;
+                        delete char.voicePromptAbortController;
+                    }
+                };
+
+                /**
+                 * 使用用户确认的音色描述和参考文案生成参考音频，并同步到 TTS 服务与音色库。
+                 *
+                 * 此阶段只消费角色当前的 `voiceDescription` 与 `voicePromptText`，不会再隐式调用 LLM。
+                 *
                  * @param {Object} char - 角色数据
                  * @returns {Promise<void>} 生成、上传和本地保存流程结束后兑现
                 */
@@ -3891,15 +3954,21 @@
                         return;
                     }
 
-                    // 生成链路需要 TTS 服务用于回传参考音频、音色设计端点和非空描述。
+                    // 防御模板之外的直接调用，确保文案请求不会在音色任务启动后覆盖输入。
+                    if (char.isGeneratingVoicePrompt) return alert('请先完成或停止参考文案生成任务');
+                    // 在任何异步操作前固定用户确认的两个输入，避免请求期间的界面改动造成数据错配。
+                    const voiceDescription = char.voiceDescription?.trim() || '';
+                    const textToUse = char.voicePromptText?.trim() || '';
+                    // 生成链路需要 TTS 服务用于回传参考音频、音色设计端点及两个非空输入。
                     if (!currentTtsConfig.value) return alert('请先选择 TTS 服务');
                     if (!selectedVoiceDesign.value?.url) return alert('请先选择音色模型');
-                    if (!char.voiceDescription?.trim()) return alert('请先填写音色描述');
+                    if (!voiceDescription) return alert('请先填写音色描述');
+                    if (!textToUse) return alert('请先生成或填写参考文案');
 
                     // 标记角色级加载状态并记录耗时，用于生成失败提示。
                     char.isGeneratingVoice = true;
                     const startTime = Date.now();
-                    // 同一个 signal 贯穿参考文本 LLM、音色生成和上传三个网络阶段。
+                    // 同一个 signal 贯穿音色生成和上传两个网络阶段。
                     const controller = new AbortController();
                     char.abortController = controller;
 
@@ -3916,12 +3985,9 @@
                         let baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '');
                         if (baseUrl.endsWith('/v1')) baseUrl = baseUrl.slice(0, -3);
 
-                        // 动态或固定方式解析本次真正会被朗读的参考文本。
-                        const textToUse = await resolveVoiceReferenceText(char, controller.signal);
-
-                        // 音色设计服务需要稳定音色描述和待朗读文本两个字段。
+                        // 音色设计服务只接收用户在角色卡片中确认过的描述和参考文案。
                         const payload = {
-                            voice_description: char.voiceDescription.trim(),
+                            voice_description: voiceDescription,
                             text: textToUse
                         };
                         // 服务名用于构造可读文件名前缀；非法文件字符转为下划线。
@@ -3998,7 +4064,7 @@
                             // 更新已有音色
                             // 元数据、参考文本、后端路径与素材键必须作为一组同步。
                             // 更新本次采用的音色描述。
-                            timbres.value[existingIndex].description = char.voiceDescription;
+                            timbres.value[existingIndex].description = voiceDescription;
                             // 更新音频真实朗读文本。
                             timbres.value[existingIndex].promptText = textToUse;
                             // 更新后端参考音频路径。
@@ -4014,7 +4080,7 @@
                                 // 同一角色固定使用“角色名_AI”命名。
                                 name: timbreName,
                                 // 保存本次生成采用的音色描述。
-                                description: char.voiceDescription,
+                                description: voiceDescription,
                                 // 保存音频中真实朗读的参考文本。
                                 promptText: textToUse,
                                 // 后端 TTS 通过该文件路径引用参考音频。
@@ -8423,10 +8489,10 @@
 
                     // 当前脚本角色集合以及角色新增、删除入口。
                     characters, addCharacter, deleteCharacter,
-                    // LLM 音色分析和 Qwen/MiMo 音色生成入口。
-                    analyzeCharacterVoice, generateQwenVoice,
+                    // LLM 音色分析、参考文案生成和 Qwen/MiMo 音色生成入口。
+                    analyzeCharacterVoice, generateVoiceReferenceText, generateQwenVoice,
                     // 音色设计服务目录、当前选择和角色绑定同步状态。
-                    voiceDesigns, selectedVoiceDesignUrl, selectedVoiceDesignButtonText, syncCharacterVoiceSelection,
+                    voiceDesigns, selectedVoiceDesignUrl, syncCharacterVoiceSelection,
 
                     // 音色资源库、编辑表单、选中项及 CRUD/文件上传入口。
                     timbres, timbreForm, isEditingTimbre, selectedTimbreId,

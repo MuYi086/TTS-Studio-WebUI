@@ -318,7 +318,9 @@
                 characters: ensureArray(script.data.characters).map((character) => {
                     const safe = cloneData(character) || {};
                     delete safe.isAnalyzing;
+                    delete safe.isGeneratingVoicePrompt;
                     delete safe.isGeneratingVoice;
+                    delete safe.voicePromptAbortController;
                     delete safe.abortController;
                     return safe;
                 }),

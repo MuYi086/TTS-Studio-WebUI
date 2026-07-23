@@ -38,9 +38,9 @@ curl http://127.0.0.1:8300/v1/health
 | Qwen | `POST http://127.0.0.1:8300/v1/qwen/design` | `text`、`voice_description` |
 | MiMo | `POST http://127.0.0.1:8300/v1/mimo/design` | `text`、`voice_description` |
 
-角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。默认开启角色专属参考文本：前端使用当前 LLM，根据角色名、音色描述和角色上下文生成参考台词，然后把同一份文本提交给 Qwen 或 MiMo。
+角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：点击“生成参考文案”后，前端使用当前 LLM，根据角色名、音色描述和角色上下文生成文本并写入角色卡片的“参考文案”文本框；用户可以检查或编辑文本，再点击“生成音色”。“生成音色”不会再次调用 LLM，只把当时确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen 或 MiMo。
 
-返回音频会写入浏览器本地音色库，再按当前 TTS 配置同步。实际提交给音色设计接口的 `text` 会原样保存为音色的 `promptText`，供参考文本克隆使用；因此自定义固定文本不得包含不会被念出的舞台说明、音频标签或 SSML（语音合成标记语言）。
+返回音频会写入浏览器本地音色库，再按当前 TTS 配置同步。实际提交给音色设计接口的 `text` 会原样保存为角色的 `voicePromptText` 和音色的 `promptText`，供工程恢复与参考文本克隆使用；因此参考文案不得包含不会被念出的舞台说明、音频标签或 SSML（语音合成标记语言）。
 
 Prompt 管理继续兼容旧键 `storyforge_qwen_voice_text_template` 和 `storyforge_use_custom_qwen_voice_text`，并新增：
 
