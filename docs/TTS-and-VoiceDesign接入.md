@@ -38,7 +38,16 @@ curl http://127.0.0.1:8300/v1/health
 | Qwen | `POST http://127.0.0.1:8300/v1/qwen/design` | `text`、`voice_description` |
 | MiMo | `POST http://127.0.0.1:8300/v1/mimo/design` | `text`、`voice_description` |
 
-返回音频会写入浏览器本地音色库，再按当前 TTS 配置同步。
+角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。默认开启角色专属参考文本：前端使用当前 LLM，根据角色名、音色描述和角色上下文生成参考台词，然后把同一份文本提交给 Qwen 或 MiMo。
+
+返回音频会写入浏览器本地音色库，再按当前 TTS 配置同步。实际提交给音色设计接口的 `text` 会原样保存为音色的 `promptText`，供参考文本克隆使用；因此自定义固定文本不得包含不会被念出的舞台说明、音频标签或 SSML（语音合成标记语言）。
+
+Prompt 管理继续兼容旧键 `storyforge_qwen_voice_text_template` 和 `storyforge_use_custom_qwen_voice_text`，并新增：
+
+- `storyforge_voice_reference_prompt_template`：角色专属参考文本的 LLM Prompt。
+- `storyforge_use_dynamic_voice_reference_text`：是否启用动态参考文本。
+
+旧版中已经启用自定义 Qwen 固定文本的用户，在首次升级且不存在新开关键时会继续使用固定模式；其他用户默认启用动态模式。未配置 LLM 时，动态模式会安全回退到固定文本。
 
 ## `8311` SoundEffect 状态
 

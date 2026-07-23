@@ -6,33 +6,23 @@
 
 ## 仓库边界
 
-- 当前开发入口是 [`webUI/`](webUI/)，应用入口为 `webUI/src/app/main.ts`；所有 npm 命令在 `webUI/` 执行。
-- 根目录 `index.html`、`project-storage.js` 和 `voice-design.js` 是旧版对照物。除兼容性任务外，不要将新功能写回旧页。
-- Vue 音色设计默认目录在 `webUI/src/services/providers/voiceDesignCatalog.ts`。
+- 当前开发入口是根目录 [`index.html`](index.html)，应用采用 Vue 3 CDN 单文件实现；`project-storage.js` 和 `voice-design.js` 是当前页面的配套模块。
+- [`webUI/`](webUI/) 已废弃，不要把新功能写入或恢复到该目录。
+- 音色设计默认目录由根目录 [`voice-design.js`](voice-design.js) 提供。
 - 本地后端是独立仓库 [TTS-and-VoiceDesign](https://github.com/MuYi086/TTS-and-VoiceDesign)；前端接入边界见 [`docs/TTS-and-VoiceDesign接入.md`](docs/TTS-and-VoiceDesign接入.md)。
 
 ## 兼容性与职责
 
 改动存储、工程导入导出、模型调用或音频时间轴前，必须先读 [`webUI/P0-兼容性红线.md`](webUI/P0-兼容性红线.md)。不得破坏 `UnitaleDB`、旧 `localStorage` 键、工程 schema、资产键和 `dialogue` / `bgm` / `bgImage` 的时间轴语义。
 
-| 范围 | 首选位置 |
-| --- | --- |
-| schema、规范化与工厂函数 | `webUI/src/domain/` |
-| 存储与工程传输 | `webUI/src/services/storage/` |
-| LLM/TTS/音色设计 HTTP 调用 | `webUI/src/services/providers/` |
-| 配置、资源库、工程与运行状态 | `webUI/src/stores/` |
-| 播放、批量合成与导出流程 | `webUI/src/composables/` |
-| 展示和用户意图 | `webUI/src/components/` |
-
-保持 Props Down / Events Up（属性向下传递、事件向上传递）。不要在组件中直接实现 `fetch`、IndexedDB 或重复的领域转换逻辑。修改前先检查 `git status`，不得覆盖无关用户修改。
+当前应用仍集中在 `index.html`，修改时按“配置与 Prompt、存储兼容、模型调用、播放导出、页面展示”分区维护，不要把同一转换逻辑复制到多个函数。工程导入导出和 IndexedDB 兼容逻辑优先复用 `project-storage.js`，音色设计目录优先复用 `voice-design.js`。修改前先检查 `git status`，不得覆盖无关用户修改。
 
 ## 验证与文档同步
 
-涉及前端代码时，在 `webUI/` 运行：
+涉及根目录单文件前端代码时，至少运行内联脚本语法检查：
 
 ```bash
-npm run typecheck
-npm run build
+node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');for(const match of html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}"
 ```
 
 涉及 schema、资产恢复或工程传输时，从仓库根目录运行：

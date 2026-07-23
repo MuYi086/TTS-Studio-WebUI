@@ -1,15 +1,15 @@
 # TTS Studio WebUI
 
-## webUI重构进行中
+## 单文件 WebUI
 
 面向多角色有声书制作的浏览器端工作台：将原文分析、角色与参考音色、台词合成、音效与背景音乐编排，以及 `SRT`（字幕文件）/ `WAV`（波形音频文件）/ `MP4`（视频文件）导出串为一条本地创作流程。
 
-当前可维护的前端工程是 [`webUI/`](webUI/)。根目录的 [`index.html`](index.html) 是保留的旧版行为对照页，在 Vue（渐进式 JavaScript 框架）重构完成前不应作为日常开发入口。
+当前开发入口是根目录 [`index.html`](index.html)，由 Vue 3 CDN（内容分发网络）运行时驱动；[`project-storage.js`](project-storage.js) 和 [`voice-design.js`](voice-design.js) 分别提供工程兼容与音色设计目录。`webUI/` 已废弃，不再作为功能开发入口。
 
 ## 主要能力
 
 - 用 OpenAI 兼容的 LLM（大语言模型）把小说或剧本拆为 `dialogue`、`bgm`、`bgImage` 三类脚本块。
-- 为角色绑定本地参考音频，或通过 Qwen / MiMo 音色设计接口生成参考音色。
+- 为角色绑定本地参考音频，或通过 Qwen / MiMo 音色设计接口生成参考音色；可由 LLM 根据角色音色、代表台词和相邻旁白生成专属参考文本。
 - 在音色、SFX 与 BGM 资源库中显示真实波形和试听进度，并以可视化手柄维护音频裁剪范围。
 - 单行或批量调用本地 TTS（文本转语音）服务；合成前会校验并上传参考音频。
 - 在浏览器内混入 SFX（场景音效）、BGM（背景音乐）与滤波器，顺序预览并导出 `SRT`、`WAV`、`MP4`。
@@ -17,18 +17,16 @@
 
 ## 快速开始
 
-前端使用 npm（Node.js 包管理器）。在 `webUI/` 目录执行：
+在仓库根目录启动一个静态文件服务器：
 
 ```bash
-npm ci
-npm run dev
+python3 -m http.server 5173
 ```
 
-开发服务器固定使用 `5173` 端口；`strictPort` 已启用，端口被占用时不会自动漂移。生产构建和类型检查：
+然后访问 `http://127.0.0.1:5173/index.html`。修改后可用 Node.js 执行内联脚本语法检查：
 
 ```bash
-npm run typecheck
-npm run build
+node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');for(const match of html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}"
 ```
 
 ## 连接 TTS-and-VoiceDesign
@@ -65,7 +63,7 @@ bash start.sh
 1. 配置并选中 LLM 与 TTS 服务。
 2. 导入参考音频、SFX、BGM，维护滤波器和情绪预设。
 3. 在“脚本制作”粘贴原文，运行“LLM 深度分析”，检查角色和脚本块。
-4. 绑定或生成角色音色，逐行或批量生成台词。
+4. 分析角色音色，检查或调整专属参考文本策略，再通过 Qwen / MiMo 生成并绑定参考音色。
 5. 预览并调整停顿、音量、滤波器、SFX 与裁剪范围。
 6. 定期导出完整工程；最终导出 `SRT`、`WAV` 或 `MP4`。
 
@@ -79,8 +77,6 @@ bash start.sh
 
 - [本地开发与回归](docs/本地开发与回归.md)
 - [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)
-- [Vue 工作台待完成事项](webUI/待完成功能.md)
-- [重构顺序计划](webUI/重构顺序计划.md)
 - [Agent 协作说明](AGENTS.md)
 
 ## 当前限制
