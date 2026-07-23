@@ -29,6 +29,28 @@ curl http://127.0.0.1:8300/v1/health
 
 “参考文本克隆”会读取角色音色的 `promptText`。该字段为空时，WebUI 会阻止合成并提示补充参考音频中实际说出的文字。
 
+### 台词合成中的参考文案
+
+脚本工作台点击单条台词的“生成音频”按钮时，`generateLineAudio` 会从角色当前绑定的音色记录读取参考文案，并按以下边界传递：
+
+1. 使用“参考文本克隆”协议时，参考文案为必填；每次台词合成都会把它作为 `prompt_text` 加入 `POST /v2/synthesize` 的 JSON 请求体。
+2. 自动补传参考音频时，WebUI 还会把参考文案作为表单字段提交给 `POST /v1/upload_audio`，供后端保存 sidecar。
+3. IndexTTS2 使用独立的 `indextts2` 协议，不读取或发送 `prompt_text`。
+
+对于支持参考文案的模型，后端以本次合成请求里的 `prompt_text` 为第一优先级，再回退到上传时保存的 sidecar（伴随音频保存的文本文件）。各服务最终处理方式如下：
+
+| 服务 | 后端对 `prompt_text` 的处理 |
+| --- | --- |
+| IndexTTS2 | 请求模型不声明该字段；官方 `IndexTTS2.infer` 克隆签名只使用 `spk_audio_prompt` |
+| dots.tts-base | 原样传给官方 `DotsTtsRuntime.generate(prompt_text=...)`；官方推荐参考音频与准确转写配对 |
+| LongCat-AudioDiT-1B | 原样传入并与目标文本拼接；缺失时可按后端配置自动转写 |
+| MOSS-TTS-Local-Transformer | 有文案时走官方 continuation 克隆（参考转写 + 目标文本 + 前缀音频）；缺失时保留 reference 音频克隆 |
+| OmniVoice | 映射为模型的 `ref_text`；缺失时可使用本地 ASR（自动语音识别） |
+| Qwen3-TTS-12Hz-1.7B-Base | 映射为官方 `ref_text`；缺失时退回 `x-vector-only`，音色克隆质量可能降低 |
+| VoxCPM2 | 同时传 `prompt_text`、`prompt_wav_path` 与 `reference_wav_path`，使用官方 Ultimate Cloning 路径 |
+
+能力依据均来自模型维护方资料：[IndexTTS2](https://github.com/index-tts/index-tts)、[dots.tts-base](https://huggingface.co/rednote-hilab/dots.tts-base)、[LongCat-AudioDiT](https://github.com/meituan-longcat/LongCat-AudioDiT)、[MOSS-TTS-Local-Transformer-v1.5](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5)、[OmniVoice](https://github.com/k2-fsa/OmniVoice)、[Qwen3-TTS Base](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base) 和 [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2)。
+
 ## 音色设计
 
 默认可选端点：

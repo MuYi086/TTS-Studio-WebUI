@@ -2501,8 +2501,15 @@
                     const storageKey = typeof itemOrKey === 'string' ? itemOrKey : getAssetStorageKey(itemOrKey);
                     // 没有稳定键或文件时无法建立运行时映射。
                     if (!storageKey || !file) return '';
+                    // 同一稳定键可能被重新生成或重新上传；记录旧文件以清理路径形式的解码缓存。
+                    const previousFile = localFileMap.value.get(storageKey);
                     // 确保映射值统一为 File，以便后端上传时提供文件名。
                     const normalizedFile = file instanceof File ? file : createFileFromBlob(file, fallbackName || getAssetPath(itemOrKey) || storageKey);
+                    // 解码缓存必须与原始 File 同步失效，否则再次生成同一角色音色后仍会播放旧 AudioBuffer。
+                    const itemPath = typeof itemOrKey === 'string' ? '' : getAssetPath(itemOrKey);
+                    [storageKey, itemPath, fallbackName, previousFile?.name, normalizedFile.name]
+                        .filter(Boolean)
+                        .forEach(cacheKey => audioBufferCache.delete(cacheKey));
                     // Map 写入会覆盖同键旧文件，符合用户重新选择素材的预期。
                     localFileMap.value.set(storageKey, normalizedFile);
                     // 返回键方便调用方继续写入对象字段或 IndexedDB。
