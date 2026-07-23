@@ -7,6 +7,7 @@
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-4D36DBYDJX"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
+        /** 将事件参数转发到 Google Analytics 数据层。 */
         function gtag() { dataLayer.push(arguments); }
         gtag('js', new Date());
 
@@ -1441,8 +1442,19 @@
     <script src="./project-storage.js"></script>
     <script src="./voice-design.js"></script>
     <script>
+        /**
+         * @fileoverview TTS Studio WebUI 浏览器端入口
+         * @description 使用 Vue 3 的 CDN（内容分发网络）版本组织完整的配音工程工作台
+         * - 配置与提示词（Prompt）：管理大语言模型（LLM）、语音合成（TTS）、音色设计及提示词模板
+         * - 存储兼容：维护工程状态、素材键、IndexedDB（浏览器数据库）与导入导出
+         * - 模型调用：分析脚本、设计音色并生成台词音频
+         * - 播放导出：编排台词、音效、背景音乐（BGM）、背景图片及视频时间轴
+         * - 页面展示：向根模板暴露响应式状态与交互动作
+         * @module index
+         */
         const { createApp, ref, onMounted, computed, watch, onBeforeUpdate } = Vue;
 
+        /** 创建并挂载 TTS Studio WebUI 根应用。 */
         createApp({
             setup() {
                 // --- System Emotions Definition ---
@@ -1456,6 +1468,11 @@
                     { id: 'sys_7', name: '惊喜', vector: [0, 0, 0, 0, 0, 0, 1, 0] },
                     { id: 'sys_8', name: '平静', vector: [0, 0, 0, 0, 0, 0, 0, 1] }
                 ];
+                /**
+                 * 判断给定名称是否属于不可覆盖的系统情绪。
+                 * @param {string} name - 情绪名称
+                 * @returns {boolean} 是否为系统情绪
+                 */
                 const isSystemEmotion = (name) => SYSTEM_EMOTIONS.some(e => e.name === name);
                 const projectStorage = window.UnitaleProjectStorage;
 
@@ -1479,6 +1496,11 @@
                 let dbInstance = null;
                 let dbPromise = null;
 
+                /**
+                 * 初始化或复用 UnitaleDB 数据库连接。
+                 * @returns {Promise<IDBDatabase>} 可用的 IndexedDB 连接
+                 * @throws {DOMException} 数据库打开失败时抛出异常
+                 */
                 const initDB = () => {
                     if (dbInstance) return Promise.resolve(dbInstance);
                     if (dbPromise) return dbPromise;
@@ -1505,6 +1527,13 @@
                     return dbPromise;
                 };
 
+                /**
+                 * 将单个二进制素材写入 IndexedDB，并在连接关闭时重试一次。
+                 * @param {string} key - 稳定的素材存储键
+                 * @param {Blob} blob - 待保存的二进制素材
+                 * @returns {Promise<void>} 事务完成后兑现
+                 * @throws {Error} 重试后仍无法保存时抛出异常
+                 */
                 const saveAssetToDB = async (key, blob) => {
                     try {
                         if (!dbInstance) await initDB();
@@ -1533,6 +1562,11 @@
                     }
                 };
 
+                /**
+                 * 按素材键读取 IndexedDB 中的二进制数据。
+                 * @param {string} key - 素材存储键
+                 * @returns {Promise<Blob | null>} 素材数据；读取失败时返回 null
+                 */
                 const loadAssetFromDB = async (key) => {
                     if (!dbInstance) await initDB();
                     return new Promise((resolve) => {
@@ -1543,6 +1577,12 @@
                     });
                 };
 
+                /**
+                 * 将素材去重后分批写入 IndexedDB，避免超大事务中止。
+                 * @param {Array<{key: string, blob: Blob}>} items - 待保存的素材集合
+                 * @returns {Promise<void>} 全部分块保存完成后兑现
+                 * @throws {Error} 任一分块耗尽重试次数时抛出异常
+                 */
                 const saveAssetsBatch = async (items) => {
                     if (!dbInstance) await initDB();
 
@@ -1586,6 +1626,10 @@
                     }
                 };
 
+                /**
+                 * 将当前资源库和全部脚本保存为规范化工程状态。
+                 * @returns {Promise<void>} 工程事务完成后兑现
+                 */
                 const saveProjectToDB = async () => {
                     if (!dbInstance) await initDB();
 
@@ -1617,6 +1661,7 @@
                 };
 
                 let saveTimeout = null;
+                /** 将工程自动保存推迟到最后一次状态变化的一秒后执行。 */
                 const triggerAutoSave = () => {
                     if (saveTimeout) clearTimeout(saveTimeout);
                     saveTimeout = setTimeout(() => {
@@ -1646,12 +1691,27 @@
                     indextts2: 'indextts2',
                     referenceTextClone: 'reference-text-clone'
                 };
+                /**
+                 * 将未知或缺失的 TTS 协议归一化为兼容默认值。
+                 * @param {string} value - 原始协议标识
+                 * @returns {string} 受支持的协议标识
+                 */
                 const normalizeTtsProtocol = (value) =>
                     value === TTS_PROTOCOLS.referenceTextClone
                         ? TTS_PROTOCOLS.referenceTextClone
                         : TTS_PROTOCOLS.indextts2;
+                /**
+                 * 判断 TTS 配置是否需要随参考音频传入参考文本。
+                 * @param {Object | null | undefined} config - TTS 配置
+                 * @returns {boolean} 是否使用参考文本克隆协议
+                 */
                 const usesReferenceText = (config) =>
                     normalizeTtsProtocol(config?.protocol) === TTS_PROTOCOLS.referenceTextClone;
+                /**
+                 * 获取 TTS 协议的界面说明文字。
+                 * @param {string} protocol - 协议标识
+                 * @returns {string} 协议中文标签
+                 */
                 const ttsProtocolLabel = (protocol) =>
                     normalizeTtsProtocol(protocol) === TTS_PROTOCOLS.referenceTextClone
                         ? '参考文本克隆（传 prompt_text）'
@@ -1741,6 +1801,10 @@
                 const editingScriptId = ref(null);
                 const scriptNameInputRefs = ref({});
 
+                /**
+                 * 将当前工作区内容同步回活动脚本，并剔除角色运行时状态。
+                 * @returns {void}
+                 */
                 const syncCurrentScriptState = () => {
                     const current = scriptList.value.find(s => s.id === currentScriptId.value);
                     if (current) {
@@ -1756,6 +1820,11 @@
                     }
                 };
 
+                /**
+                 * 保存当前脚本状态并切换到指定脚本。
+                 * @param {string} id - 目标脚本 ID
+                 * @returns {void}
+                 */
                 const switchScript = (id) => {
                     if (isAnalyzingScript.value || isGeneratingAll.value || isSequencePlaying.value) {
                         return alert('请先停止当前的生成或播放任务，再切换脚本。');
@@ -1771,6 +1840,7 @@
                     }
                 };
 
+                /** 新建空白脚本并将其设为当前脚本。 */
                 const addScript = () => {
                     if (isAnalyzingScript.value || isGeneratingAll.value || isSequencePlaying.value) {
                         return alert('请先停止当前的生成或播放任务，再添加脚本。');
@@ -1787,6 +1857,11 @@
                     switchScript(newId);
                 };
 
+                /**
+                 * 进入脚本名称编辑状态并聚焦输入框。
+                 * @param {string} id - 脚本 ID
+                 * @returns {void}
+                 */
                 const startEditingScript = (id) => {
                     editingScriptId.value = id;
                     setTimeout(() => {
@@ -1795,10 +1870,16 @@
                     }, 0);
                 };
 
+                /** 结束脚本名称编辑状态。 */
                 const stopEditingScript = () => {
                     editingScriptId.value = null;
                 };
 
+                /**
+                 * 经用户确认后删除指定脚本，并保证至少保留一个脚本。
+                 * @param {string} id - 待删除的脚本 ID
+                 * @returns {void}
+                 */
                 const deleteScriptTab = (id) => {
                     if (isAnalyzingScript.value || isGeneratingAll.value || isSequencePlaying.value) {
                         return alert('请先停止当前的生成或播放任务，再删除脚本。');
@@ -1847,6 +1928,11 @@
                 let playbackAnimationFrame = null;
                 const isRestoring = ref(false); // 新增：恢复数据时的锁
 
+                /**
+                 * 更新舞台背景并记录上一张图片，以便播放或导出时淡入切换。
+                 * @param {string} url - 新背景图片地址；空值表示清空
+                 * @returns {void}
+                 */
                 const setStageBgUrlWithFade = (url) => {
                     const next = url || '';
                     const prev = stageBgUrl.value || '';
@@ -1856,17 +1942,24 @@
                     stageBgUrl.value = next;
                 };
 
+                /** 清空舞台背景及其淡入状态。 */
                 const clearStageBgWithFade = () => {
                     stageBgFadePrevUrl.value = '';
                     stageBgFadeStartTs.value = 0;
                     stageBgUrl.value = '';
                 };
 
+                /**
+                 * 打开指定图片的全屏预览。
+                 * @param {string} url - 图片地址
+                 * @returns {void}
+                 */
                 const openImagePreview = (url) => {
                     if (!url) return;
                     previewImageUrl.value = url;
                 };
 
+                /** 关闭图片预览。 */
                 const closeImagePreview = () => {
                     previewImageUrl.value = '';
                 };
@@ -1875,6 +1968,7 @@
                 const draggingTrimState = ref(null);
 
                 // 计算当前选中的配置
+                /** 当前选中的 LLM 配置；无有效选项时为 null。 */
                 const currentConfig = computed(() => {
                     return llmConfigs.value.find(c => c.id === currentConfigId.value) || null;
                 });
@@ -2056,30 +2150,62 @@
                 // --- 音频引擎与缓存 (Audio Engine & Cache) ---
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 let videoRecordingAudioDestination = null;
+                /**
+                 * 获取当前音频输出节点；视频录制期间切换到录制目标。
+                 * @returns {AudioNode} Web Audio 输出节点
+                 */
                 const getAudioOutputNode = () => videoRecordingAudioDestination || audioContext.destination;
                 const audioBufferCache = new Map();
                 const localFileMap = ref(new Map());
+                /**
+                 * 从不同类型的工程对象中解析统一素材键。
+                 * @param {Object | string | null} item - 素材对象或原始键
+                 * @returns {string} 素材键；无法解析时返回空字符串
+                 */
                 const getAssetStorageKey = (item) => {
                     if (!item || typeof item === 'string') return '';
                     return item.assetKey || item.audioAssetKey || item.bgImageAssetKey || item.voiceAssetKey || '';
                 };
 
+                /**
+                 * 从工程对象中解析可加载或展示的素材路径。
+                 * @param {Object | string | null} item - 素材对象或路径
+                 * @returns {string} 素材路径；无法解析时返回空字符串
+                 */
                 const getAssetPath = (item) => {
                     if (!item) return '';
                     if (typeof item === 'string') return item;
                     return item.audioUrl || item.imageUrl || item.filename || item.refPath || item.voiceFile || '';
                 };
 
+                /**
+                 * 生成用于区分试听轨道的稳定键。
+                 * @param {Object | string} item - 待试听素材
+                 * @returns {string} 试听轨道键
+                 */
                 const getPreviewTrackKey = (item) => {
                     if (typeof item === 'string') return item;
                     return getAssetStorageKey(item) || getAssetPath(item);
                 };
 
+                /**
+                 * 将 Blob 规范化为带文件名的 File 对象。
+                 * @param {Blob | File} blob - 原始二进制数据
+                 * @param {string} filename - 回退文件名
+                 * @returns {File} 可用于上传的文件对象
+                 */
                 const createFileFromBlob = (blob, filename) => {
                     if (blob instanceof File) return blob;
                     return new File([blob], filename || 'asset.bin', { type: blob.type || 'application/octet-stream' });
                 };
 
+                /**
+                 * 将素材登记到运行时本地文件映射。
+                 * @param {Object | string} itemOrKey - 素材对象或存储键
+                 * @param {Blob | File} file - 本地素材数据
+                 * @param {string} [fallbackName] - 缺少路径时使用的文件名
+                 * @returns {string} 登记成功的素材键；失败时返回空字符串
+                 */
                 const registerLocalAsset = (itemOrKey, file, fallbackName = '') => {
                     const storageKey = typeof itemOrKey === 'string' ? itemOrKey : getAssetStorageKey(itemOrKey);
                     if (!storageKey || !file) return '';
@@ -2088,6 +2214,11 @@
                     return storageKey;
                 };
 
+                /**
+                 * 从运行时文件映射和音频缓存中移除素材。
+                 * @param {Object | string} itemOrKey - 素材对象或存储键
+                 * @returns {void}
+                 */
                 const removeLocalAsset = (itemOrKey) => {
                     const storageKey = typeof itemOrKey === 'string' ? itemOrKey : getAssetStorageKey(itemOrKey);
                     if (storageKey) {
@@ -2096,6 +2227,12 @@
                     }
                 };
 
+                /**
+                 * 按 URL、voice 目录或根目录路径获取素材 Blob。
+                 * @param {string} path - 素材路径
+                 * @returns {Promise<Blob | null>} 加载到的素材；空路径返回 null
+                 * @throws {Error} 所有候选路径均不可用时抛出异常
+                 */
                 const fetchBlobByPath = async (path) => {
                     if (!path) return null;
 
@@ -2114,6 +2251,12 @@
                     throw new Error(`Asset file not found: ${path}`);
                 };
 
+                /**
+                 * 依次从运行时映射、IndexedDB 和文件路径恢复素材。
+                 * @param {Object | string} itemOrKey - 素材对象或存储键
+                 * @param {string} [fallbackPath] - 回退加载路径
+                 * @returns {Promise<Blob | File | null>} 找到的素材；不存在时返回 null
+                 */
                 const loadStoredAssetBlob = async (itemOrKey, fallbackPath = '') => {
                     const storageKey = typeof itemOrKey === 'string' ? itemOrKey : getAssetStorageKey(itemOrKey);
                     const effectivePath = fallbackPath || getAssetPath(itemOrKey);
@@ -2147,6 +2290,12 @@
                     return null;
                 };
 
+                /**
+                 * 加载并解码音频素材，同时按素材键和路径缓存 AudioBuffer。
+                 * @param {Object | string} assetInput - 素材对象、素材键或路径
+                 * @returns {Promise<AudioBuffer>} 解码后的音频缓冲
+                 * @throws {Error} 素材不存在或无法解码时抛出异常
+                 */
                 const loadAudioBuffer = async (assetInput) => {
                     const storageKey = typeof assetInput === 'string' ? '' : getAssetStorageKey(assetInput);
                     const sourcePath = getAssetPath(assetInput);
@@ -2175,6 +2324,11 @@
                 const previewPlayingFile = ref(null);
                 let previewSource = null;
 
+                /**
+                 * 切换素材试听，并同步播放进度与试听状态。
+                 * @param {Object} item - 音效、BGM 或音色素材
+                 * @returns {Promise<void>} 试听启动或停止后兑现
+                 */
                 const playPreview = async (item) => {
                     if (audioContext.state === 'suspended') await audioContext.resume();
 
@@ -2244,6 +2398,7 @@
                         previewPlayingFile.value = playbackKey;
 
                         // Progress bar logic
+                        /** 更新素材试听进度，直到音源播放结束。 */
                         const updateProgress = () => {
                             if (previewPlayingFile.value !== playbackKey) return;
                             const elapsed = audioContext.currentTime - now;
@@ -2264,12 +2419,22 @@
                     }
                 };
 
+                /**
+                 * 预加载资源库中的音效、BGM 与音色，减少首次播放等待。
+                 * @returns {Promise<void>} 预加载任务全部结束后兑现
+                 */
                 const preloadAudioAssets = async () => {
                     // 移除启动时的自动预加载，因为现在没有持久化的文件列表
                     // 仅在导入工程后或添加文件时加载
                 };
 
                 // --- 波形绘制与剪辑逻辑 ---
+                /**
+                 * 将素材波形绘制到指定 Canvas，并叠加当前剪辑范围。
+                 * @param {HTMLCanvasElement | null} canvas - 波形画布
+                 * @param {Object} item - 含剪辑参数的音频素材
+                 * @returns {Promise<void>} 绘制完成或跳过后兑现
+                 */
                 const drawWaveform = async (canvas, item) => {
                     const audioPath = getPreviewTrackKey(item) || getAssetPath(item);
                     if (!canvas || !audioPath) return;
@@ -2307,6 +2472,13 @@
                     }
                 };
 
+                /**
+                 * 启动音频剪辑边界拖拽，并在指针移动时更新起止比例。
+                 * @param {PointerEvent | MouseEvent} e - 拖拽起始事件
+                 * @param {Object} item - 被剪辑的音频对象
+                 * @param {'start' | 'end'} type - 拖拽的边界类型
+                 * @returns {void}
+                 */
                 const startDragTrim = (e, item, type) => {
                     draggingTrimState.value = {
                         item: item,
@@ -2316,6 +2488,11 @@
                         startVal: type === 'start' ? (item.trimStart ?? 0) : (item.trimEnd ?? 1)
                     };
 
+                    /**
+                     * 根据鼠标横向位移更新当前剪辑边界。
+                     * @param {MouseEvent} ev - 鼠标移动事件
+                     * @returns {void}
+                     */
                     const onMove = (ev) => {
                         if (!draggingTrimState.value) return;
                         const state = draggingTrimState.value;
@@ -2333,6 +2510,7 @@
                         }
                     };
 
+                    /** 结束剪辑拖拽、移除全局监听并触发自动保存。 */
                     const onUp = () => {
                         window.removeEventListener('mousemove', onMove);
                         window.removeEventListener('mouseup', onUp);
@@ -2359,6 +2537,11 @@
                     localStorage.setItem('unitale_bgImageCount', String(Math.max(0, Number(bgImageCount.value) || 0)));
                 });
 
+                /**
+                 * 合并系统情绪与已加载的自定义情绪，并保留系统项启用状态。
+                 * @param {Array<Object> | null} loadedEmotions - 工程中保存的情绪集合
+                 * @returns {void}
+                 */
                 const applyEmotionLibrary = (loadedEmotions) => {
                     if (loadedEmotions && Array.isArray(loadedEmotions)) {
                         const customLoaded = loadedEmotions.filter(e => !isSystemEmotion(e.name) && Array.isArray(e.vector));
@@ -2374,6 +2557,7 @@
                     emotionPresets.value = [...SYSTEM_EMOTIONS];
                 };
 
+                /** 将当前脚本的数据载入工作区响应式状态。 */
                 const loadCurrentScriptIntoView = () => {
                     const active = scriptList.value.find(s => s.id === currentScriptId.value) || scriptList.value[0];
                     if (!active) {
@@ -2399,6 +2583,11 @@
                     });
                 };
 
+                /**
+                 * 将规范化工程信封应用到资源库与多脚本工作区。
+                 * @param {Object} projectEnvelope - 由存储模块规范化后的工程信封
+                 * @returns {void}
+                 */
                 const applyNormalizedProjectState = (projectEnvelope) => {
                     const libraries = projectEnvelope.libraries || {};
                     const project = projectEnvelope.project || {};
@@ -2416,6 +2605,13 @@
                     loadCurrentScriptIntoView();
                 };
 
+                /**
+                 * 将使用旧路径恢复的素材回填到新的稳定素材键。
+                 * @param {Object | string} itemOrKey - 素材对象或新存储键
+                 * @param {Blob | File} blob - 已恢复的素材
+                 * @param {string} [legacyKey] - 旧版路径键
+                 * @returns {Promise<void>} 回填尝试结束后兑现
+                 */
                 const persistMigratedAssetKey = async (itemOrKey, blob, legacyKey = '') => {
                     const storageKey = typeof itemOrKey === 'string' ? itemOrKey : getAssetStorageKey(itemOrKey);
                     if (!storageKey || !blob || storageKey === legacyKey) return;
@@ -2426,6 +2622,12 @@
                     }
                 };
 
+                /**
+                 * 恢复资源集合中的本地文件并预解码音频。
+                 * @param {Array<Object>} items - 待恢复的素材集合
+                 * @param {string} fileField - 记录旧路径的字段名
+                 * @returns {Promise<void>} 集合恢复完成后兑现
+                 */
                 const restoreAssetCollection = async (items, fileField) => {
                     if (!items || !Array.isArray(items)) return;
 
@@ -2443,6 +2645,10 @@
                     }
                 };
 
+                /**
+                 * 从工程状态恢复资源库、角色、台词音频和背景图片素材。
+                 * @returns {Promise<void>} 所有可用素材恢复完成后兑现
+                 */
                 const restoreProjectAssetsFromState = async () => {
                     await restoreAssetCollection(sfxLibrary.value, 'filename');
                     await restoreAssetCollection(bgmLibrary.value, 'filename');
@@ -2610,9 +2816,15 @@
                      }
                 });
 
+                /** 当前选中的 TTS 配置；无有效选项时为 null。 */
                 const currentTtsConfig = computed(() => {
                     return ttsConfigs.value.find(c => c.id === currentTtsConfigId.value) || null;
                 });
+                /**
+                 * 保证当前 TTS 配置 ID 指向有效配置，并可优先选择指定 ID。
+                 * @param {string} [preferredId] - 优先选择的配置 ID
+                 * @returns {void}
+                 */
                 const ensureCurrentTtsConfigSelection = (preferredId = '') => {
                     if (preferredId && ttsConfigs.value.some(c => c.id === preferredId)) {
                         currentTtsConfigId.value = preferredId;
@@ -2623,18 +2835,22 @@
                     }
                     currentTtsConfigId.value = ttsConfigs.value[0]?.id || '';
                 };
+                /** 当前选择的音色设计服务；未匹配时回退到首项。 */
                 const selectedVoiceDesign = computed(() => {
                     return voiceDesigns.value.find(design => design.url === selectedVoiceDesignUrl.value) || voiceDesigns.value[0] || null;
                 });
+                /** 当前音色设计按钮的显示文字。 */
                 const selectedVoiceDesignButtonText = computed(() => {
                     return `${selectedVoiceDesign.value?.name || '当前'}生成音色`;
                 });
 
                 // --- 配置管理逻辑 ---
+                /** 将 LLM 配置列表保存到兼容的 localStorage 键。 */
                 const saveConfigsToLocal = () => {
                     localStorage.setItem('storyforge_configs', JSON.stringify(llmConfigs.value));
                 };
 
+                /** 校验并新增或更新 LLM 配置。 */
                 const saveConfig = () => {
                     if (!form.value.name || !form.value.baseUrl || !form.value.key) {
                         return alert('请填写完整信息');
@@ -2659,12 +2875,22 @@
                     }
                 };
 
+                /**
+                 * 将指定 LLM 配置载入编辑表单。
+                 * @param {Object} conf - 待编辑的 LLM 配置
+                 * @returns {void}
+                 */
                 const editConfig = (conf) => {
                     form.value = { ...conf };
                     isEditing.value = true;
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 };
 
+                /**
+                 * 经用户确认后删除指定 LLM 配置。
+                 * @param {string} id - 配置 ID
+                 * @returns {void}
+                 */
                 const deleteConfig = (id) => {
                     if (!confirm('确定删除此配置吗？')) return;
                     llmConfigs.value = llmConfigs.value.filter(c => c.id !== id);
@@ -2672,16 +2898,19 @@
                     if (currentConfigId.value === id) currentConfigId.value = '';
                 };
 
+                /** 重置 LLM 配置表单和编辑状态。 */
                 const resetForm = () => {
                     form.value = { id: '', name: '', baseUrl: '', model: '', key: '', params: '' };
                     isEditing.value = false;
                 };
 
                 // --- TTS 配置管理逻辑 ---
+                /** 将 TTS 配置列表保存到兼容的 localStorage 键。 */
                 const saveTtsConfigsToLocal = () => {
                     localStorage.setItem('storyforge_tts_configs', JSON.stringify(ttsConfigs.value));
                 };
 
+                /** 校验并新增或更新 TTS 配置，同时维持有效选中项。 */
                 const saveTtsConfig = () => {
                     if (!ttsForm.value.name || !ttsForm.value.baseUrl) {
                         return alert('请填写完整信息');
@@ -2706,11 +2935,21 @@
                     resetTtsForm();
                 };
 
+                /**
+                 * 将指定 TTS 配置载入编辑表单并归一化协议。
+                 * @param {Object} conf - 待编辑的 TTS 配置
+                 * @returns {void}
+                 */
                 const editTtsConfig = (conf) => {
                     ttsForm.value = { ...conf, protocol: normalizeTtsProtocol(conf.protocol) };
                     isEditingTts.value = true;
                 };
 
+                /**
+                 * 经用户确认后删除指定 TTS 配置。
+                 * @param {string} id - 配置 ID
+                 * @returns {void}
+                 */
                 const deleteTtsConfig = (id) => {
                     if (!confirm('确定删除此 TTS 配置吗？')) return;
                     ttsConfigs.value = ttsConfigs.value.filter(c => c.id !== id);
@@ -2718,12 +2957,18 @@
                     ensureCurrentTtsConfigSelection();
                 };
 
+                /** 重置 TTS 配置表单和编辑状态。 */
                 const resetTtsForm = () => {
                     ttsForm.value = { id: '', name: '', baseUrl: '', protocol: TTS_PROTOCOLS.indextts2 };
                     isEditingTts.value = false;
                 };
 
                 // --- 角色库管理逻辑 (左侧栏) ---
+                /**
+                 * 根据角色音色路径和音色库解析稳定素材键。
+                 * @param {Object} char - 角色数据
+                 * @returns {string} 音色素材键；无法匹配时返回空字符串
+                 */
                 const resolveCharacterVoiceAssetKey = (char) => {
                     if (!char || !char.voiceFile) return '';
                     const directMatch = timbres.value.find(t => t.refPath === char.voiceFile && t.assetKey && (!char.voiceAssetKey || t.assetKey === char.voiceAssetKey));
@@ -2732,6 +2977,11 @@
                     return fallbackMatch ? fallbackMatch.assetKey : (char.voiceAssetKey || '');
                 };
 
+                /**
+                 * 查找角色当前绑定的音色库记录。
+                 * @param {Object} char - 角色数据
+                 * @returns {Object | null} 匹配的音色记录
+                 */
                 const resolveCharacterTimbre = (char) => {
                     if (!char || !char.voiceFile) return null;
                     return timbres.value.find(t => char.voiceAssetKey && t.assetKey === char.voiceAssetKey)
@@ -2739,11 +2989,21 @@
                         || null;
                 };
 
+                /**
+                 * 获取角色绑定音色的参考文本。
+                 * @param {Object} char - 角色数据
+                 * @returns {string} 已去除首尾空白的参考文本
+                 */
                 const resolveCharacterPromptText = (char) => {
                     const timbre = resolveCharacterTimbre(char);
                     return (timbre?.promptText || char?.voicePromptText || '').trim();
                 };
 
+                /**
+                 * 将角色的音色键、描述和参考文本与音色库记录同步。
+                 * @param {Object} char - 角色数据
+                 * @returns {void}
+                 */
                 const syncCharacterVoiceSelection = (char) => {
                     if (!char) return;
                     char.voiceAssetKey = resolveCharacterVoiceAssetKey(char);
@@ -2754,6 +3014,7 @@
                     }
                 };
 
+                /** 向当前脚本添加一个使用默认参数的新角色。 */
                 const addCharacter = () => {
                     characters.value.push({
                         id: Date.now().toString(),
@@ -2766,11 +3027,21 @@
                     });
                 };
 
+                /**
+                 * 经用户确认后删除指定角色。
+                 * @param {string} id - 角色 ID
+                 * @returns {void}
+                 */
                 const deleteCharacter = (id) => {
                     if (!confirm('确定删除此角色吗？')) return;
                     characters.value = characters.value.filter(c => c.id !== id);
                 };
 
+                /**
+                 * 从角色台词及相邻旁白中抽样构造 LLM 上下文。
+                 * @param {string} charName - 角色名称
+                 * @returns {string} 最长 2400 字符的角色上下文
+                 */
                 const buildCharacterContext = (charName) => {
                     const roleLineIndexes = scriptLines.value
                         .map((line, index) => line?.type === 'dialogue' && line.role === charName ? index : -1)
@@ -2812,6 +3083,13 @@
                         .substring(0, 2400);
                 };
 
+                /**
+                 * 清理 LLM 返回的代码围栏、标签、外层引号和多余空白。
+                 * @param {unknown} content - LLM 原始内容
+                 * @param {string} outputLabel - 用于报错的输出类型名称
+                 * @returns {string} 可直接使用的纯文本
+                 * @throws {Error} 清理后没有有效文本时抛出异常
+                 */
                 const cleanLlmPlainText = (content, outputLabel) => {
                     let text = String(content || '').trim();
                     text = text
@@ -2831,6 +3109,14 @@
                     return text;
                 };
 
+                /**
+                 * 调用当前 LLM 配置获取一次非流式纯文本结果。
+                 * @param {string} promptText - 发送给模型的提示词
+                 * @param {AbortSignal} signal - 请求取消信号
+                 * @param {string} outputLabel - 预期输出类型名称
+                 * @returns {Promise<string>} 清理后的模型文本
+                 * @throws {Error} 配置缺失、请求失败或输出无效时抛出异常
+                 */
                 const requestLlmPlainText = async (promptText, signal, outputLabel) => {
                     const cfg = currentConfig.value;
                     if (!cfg) throw new Error('未配置 LLM，无法生成角色专属参考文本');
@@ -2868,6 +3154,11 @@
                     return cleanLlmPlainText(data.choices?.[0]?.message?.content, outputLabel);
                 };
 
+                /**
+                 * 使用固定模板生成角色参考文本。
+                 * @param {Object} char - 角色数据
+                 * @returns {string} 替换角色变量后的参考文本
+                 */
                 const getFixedVoiceReferenceText = (char) => {
                     const selectedTemplate = useCustomQwenVoiceText.value
                         ? customQwenVoiceTextTemplate.value
@@ -2879,6 +3170,13 @@
                         .trim();
                 };
 
+                /**
+                 * 按设置动态生成或回退到固定角色参考文本。
+                 * @param {Object} char - 角色数据
+                 * @param {AbortSignal} signal - LLM 请求取消信号
+                 * @returns {Promise<string>} 通过长度和结构校验的参考文本
+                 * @throws {Error} 动态文本不符合约束时抛出异常
+                 */
                 const resolveVoiceReferenceText = async (char, signal) => {
                     const fixedText = getFixedVoiceReferenceText(char);
                     if (!useDynamicVoiceReferenceText.value || !currentConfig.value) {
@@ -2909,6 +3207,11 @@
                     return generatedText;
                 };
 
+                /**
+                 * 分析角色上下文并生成可复用的音色描述；再次触发可取消任务。
+                 * @param {Object} char - 角色数据
+                 * @returns {Promise<void>} 分析完成或取消后兑现
+                 */
                 const analyzeCharacterVoice = async (char) => {
                     if (char.isAnalyzing) {
                         if (char.abortController) char.abortController.abort();
@@ -2941,6 +3244,11 @@
                     }
                 };
 
+                /**
+                 * 调用所选音色设计服务生成参考音频，并同步到 TTS 服务与音色库。
+                 * @param {Object} char - 角色数据
+                 * @returns {Promise<void>} 生成、上传和本地保存流程结束后兑现
+                 */
                 const generateQwenVoice = async (char) => {
                     if (char.isGeneratingVoice) {
                         if (char.abortController) char.abortController.abort();
@@ -3070,6 +3378,11 @@
                 };
 
 
+                /**
+                 * 接收音色文件并登记到本地映射和 IndexedDB。
+                 * @param {Event} event - 文件输入框 change 事件
+                 * @returns {void}
+                 */
                 const handleTimbreFileUpload = (event) => {
                     const file = event.target.files[0];
                     if (file) {
@@ -3084,6 +3397,10 @@
                 };
 
                 // --- 音色库管理逻辑 ---
+                /**
+                 * 将本地音色库中服务端缺失的参考音频与参考文本补传到当前 TTS 服务。
+                 * @returns {Promise<void>} 音色逐项检查与同步结束后兑现
+                 */
                 const syncTimbresWithServer = async () => {
                     // 尝试获取可用的 TTS 配置
                     let cfg = currentTtsConfig.value;
@@ -3152,6 +3469,10 @@
                     console.log("音色同步完成。");
                 };
 
+                /**
+                 * 校验并新增或更新音色元数据。
+                 * @returns {Promise<void>} 保存流程结束后兑现
+                 */
                 const saveTimbre = async () => {
                     if (!timbreForm.value.name || !timbreForm.value.refPath) {
                         return alert('请填写音色名称并选择一个参考音频文件');
@@ -3196,12 +3517,22 @@
                     }
                 };
 
+                /**
+                 * 将指定音色载入编辑表单。
+                 * @param {Object} timbre - 待编辑的音色记录
+                 * @returns {void}
+                 */
                 const editTimbre = (timbre) => {
                     timbreForm.value = { ...timbre };
                     isEditingTimbre.value = true;
                     timbreFile.value = null; // Important: reset file on edit start
                 };
 
+                /**
+                 * 经用户确认后删除指定音色记录。
+                 * @param {string} id - 音色 ID
+                 * @returns {Promise<void>} 删除动作结束后兑现
+                 */
                 const deleteTimbre = async (id) => {
                     if (!confirm('确定删除此音色吗？')) return;
                     timbres.value = timbres.value.filter(c => c.id !== id);
@@ -3209,6 +3540,7 @@
                     if (selectedTimbreId.value === id) selectedTimbreId.value = '';
                 };
 
+                /** 重置音色表单、编辑状态和待上传文件。 */
                 const resetTimbreForm = () => {
                     timbreForm.value = { id: '', name: '', description: '', promptText: '', refPath: '', assetKey: '' };
                     isEditingTimbre.value = false;
@@ -3218,6 +3550,10 @@
                 // --- 音效库管理逻辑 ---
                 // 移除 saveSfxToLocal
 
+                /**
+                 * 校验并新增或更新音效素材记录。
+                 * @returns {Promise<void>} 保存流程结束后兑现
+                 */
                 const saveSfx = async () => {
                     if (!sfxForm.value.name || !sfxForm.value.filename) {
                         return alert('请填写音效名称和文件路径');
@@ -3239,21 +3575,37 @@
                     }
                 };
 
+                /**
+                 * 将指定音效载入编辑表单，并补齐剪辑默认值。
+                 * @param {Object} sfx - 待编辑的音效记录
+                 * @returns {void}
+                 */
                 const editSfx = (sfx) => {
                     sfxForm.value = { trimStart: 0, trimEnd: 1, volume: 1.0, ...sfx };
                     isEditingSfx.value = true;
                 };
 
+                /**
+                 * 经用户确认后删除指定音效记录。
+                 * @param {string} id - 音效 ID
+                 * @returns {void}
+                 */
                 const deleteSfx = (id) => {
                     if (!confirm('确定删除？')) return;
                     sfxLibrary.value = sfxLibrary.value.filter(s => s.id !== id);
                 };
 
+                /** 重置音效表单及其剪辑参数。 */
                 const resetSfxForm = () => {
                     sfxForm.value = { id: '', name: '', description: '', filename: '', assetKey: '', trimStart: 0, trimEnd: 1, volume: 0.3 };
                     isEditingSfx.value = false;
                 };
 
+                /**
+                 * 接收音效文件，初始化剪辑参数并写入本地素材存储。
+                 * @param {Event} event - 文件输入框 change 事件
+                 * @returns {void}
+                 */
                 const handleSfxFileUpload = (event) => {
                     const file = event.target.files[0];
                     if (file) {
@@ -3271,10 +3623,15 @@
                 };
 
                 // --- BGM库管理逻辑 ---
+                /** 将 BGM 元数据写入旧版兼容 localStorage 键。 */
                 const saveBgmToLocal = () => {
                     localStorage.setItem('storyforge_bgm', JSON.stringify(bgmLibrary.value));
                 };
 
+                /**
+                 * 校验并新增或更新 BGM 素材记录。
+                 * @returns {Promise<void>} 保存流程结束后兑现
+                 */
                 const saveBgm = async () => {
                     if (!bgmForm.value.name || !bgmForm.value.filename) {
                         return alert('请填写 BGM 名称和文件路径');
@@ -3296,21 +3653,37 @@
                     }
                 };
 
+                /**
+                 * 将指定 BGM 载入编辑表单，并补齐剪辑默认值。
+                 * @param {Object} bgm - 待编辑的 BGM 记录
+                 * @returns {void}
+                 */
                 const editBgm = (bgm) => {
                     bgmForm.value = { trimStart: 0, trimEnd: 1, volume: 1.0, ...bgm };
                     isEditingBgm.value = true;
                 };
 
+                /**
+                 * 经用户确认后删除指定 BGM 记录。
+                 * @param {string} id - BGM ID
+                 * @returns {void}
+                 */
                 const deleteBgm = (id) => {
                     if (!confirm('确定删除？')) return;
                     bgmLibrary.value = bgmLibrary.value.filter(s => s.id !== id);
                 };
 
+                /** 重置 BGM 表单及其剪辑参数。 */
                 const resetBgmForm = () => {
                     bgmForm.value = { id: '', name: '', description: '', filename: '', assetKey: '', trimStart: 0, trimEnd: 1, volume: 0.3 };
                     isEditingBgm.value = false;
                 };
 
+                /**
+                 * 接收 BGM 文件，初始化剪辑参数并写入本地素材存储。
+                 * @param {Event} event - 文件输入框 change 事件
+                 * @returns {void}
+                 */
                 const handleBgmFileUpload = (event) => {
                     const file = event.target.files[0];
                     if (file) {
@@ -3328,10 +3701,12 @@
                 };
 
                 // --- 滤波器库管理逻辑 ---
+                /** 将滤波器元数据写入旧版兼容 localStorage 键。 */
                 const saveFiltersToLocal = () => {
                     localStorage.setItem('storyforge_filters', JSON.stringify(filterLibrary.value));
                 };
 
+                /** 校验、数值化并新增或更新滤波器预设。 */
                 const saveFilter = () => {
                     if (!filterForm.value.name) return alert('请填写滤波器名称');
 
@@ -3351,17 +3726,28 @@
                     resetFilterForm();
                 };
 
+                /**
+                 * 将指定滤波器载入编辑表单。
+                 * @param {Object} filter - 待编辑的滤波器预设
+                 * @returns {void}
+                 */
                 const editFilter = (filter) => {
                     filterForm.value = { ...filter };
                     isEditingFilter.value = true;
                 };
 
+                /**
+                 * 经用户确认后删除指定滤波器预设。
+                 * @param {string} id - 滤波器 ID
+                 * @returns {void}
+                 */
                 const deleteFilter = (id) => {
                     if (!confirm('确定删除此滤波器？')) return;
                     filterLibrary.value = filterLibrary.value.filter(f => f.id !== id);
                     // saveFiltersToLocal();
                 };
 
+                /** 重置滤波器表单及默认参数。 */
                 const resetFilterForm = () => {
                     filterForm.value = { id: '', name: '', description: '', type: 'lowpass', frequency: 1000, Q: 1, gain: 0 };
                     isEditingFilter.value = false;
@@ -3370,6 +3756,7 @@
                 // --- 情绪预设管理逻辑 ---
                 // 移除 saveEmotionPresetsToLocal
 
+                /** 校验并新增或更新自定义情绪向量，同时保护系统预设。 */
                 const saveEmotion = () => {
                     if (!emotionForm.value.name) return alert('请填写情绪名称');
                     if (isSystemEmotion(emotionForm.value.name)) return alert('无法修改或覆盖系统预设情绪');
@@ -3383,28 +3770,41 @@
                     resetEmotionForm();
                 };
 
+                /**
+                 * 将指定情绪向量载入编辑表单。
+                 * @param {Object} emo - 待编辑的情绪预设
+                 * @returns {void}
+                 */
                 const editEmotion = (emo) => {
                     emotionForm.value = { ...emo };
                     isEditingEmotion.value = true;
                 };
 
+                /**
+                 * 经用户确认后删除指定自定义情绪。
+                 * @param {string} id - 情绪 ID
+                 * @returns {void}
+                 */
                 const deleteEmotion = (id) => {
                     if (!confirm('确定删除？')) return;
                     emotionPresets.value = emotionPresets.value.filter(e => e.id !== id);
                     // saveEmotionPresetsToLocal();
                 };
 
+                /** 重置情绪表单为八维零向量。 */
                 const resetEmotionForm = () => {
                     emotionForm.value = { id: '', name: '', vector: [0, 0, 0, 0, 0, 0, 0, 0] };
                     isEditingEmotion.value = false;
                 };
 
+                /** 经用户确认后移除自定义情绪并恢复系统预设。 */
                 const resetEmotionsToDefault = () => {
                     if (!confirm('确定要重置所有情绪预设为默认值吗？这将清除自定义的情绪。')) return;
                     emotionPresets.value = [...SYSTEM_EMOTIONS];
                     // saveEmotionPresetsToLocal();
                 };
 
+                /** 当前脚本中去重后的角色名称集合。 */
                 const availableRoles = computed(() => {
                     const roles = new Set(characters.value.map(c => c.name));
                     return Array.from(roles);
@@ -3412,17 +3812,33 @@
 
                 // --- 拖拽与排序逻辑 ---
                 const draggingIndex = ref(-1);
+                /**
+                 * 将指定脚本块向上移动一位。
+                 * @param {number} index - 当前索引
+                 * @returns {void}
+                 */
                 const moveLineUp = (index) => {
                     if (index <= 0) return;
                     const item = scriptLines.value.splice(index, 1)[0];
                     scriptLines.value.splice(index - 1, 0, item);
                 };
+                /**
+                 * 将指定脚本块向下移动一位。
+                 * @param {number} index - 当前索引
+                 * @returns {void}
+                 */
                 const moveLineDown = (index) => {
                     if (index >= scriptLines.value.length - 1) return;
                     const item = scriptLines.value.splice(index, 1)[0];
                     scriptLines.value.splice(index + 1, 0, item);
                 };
 
+                /**
+                 * 切换脚本块选中状态，忽略来自表单控件的点击。
+                 * @param {number} index - 脚本块索引
+                 * @param {Event} [event] - 可选点击事件
+                 * @returns {void}
+                 */
                 const toggleLineSelection = (index, event) => {
                     if (event) {
                         // 如果点击的是交互式控件（输入框、按钮、下拉框等）或其内部元素，则不切换选中状态
@@ -3441,6 +3857,11 @@
                 const isAuditioningId = ref(null);
 
                 // Helper for distortion
+                /**
+                 * 生成供 WaveShaperNode 使用的失真曲线。
+                 * @param {number} amount - 失真强度
+                 * @returns {Float32Array} 包含 44100 个采样点的曲线
+                 */
                 const makeDistortionCurve = (amount) => {
                     const k = typeof amount === 'number' ? amount : 50;
                     const n_samples = 44100;
@@ -3461,6 +3882,13 @@
                     "强烈": 1.0
                 };
 
+                /**
+                 * 为单条台词生成音频，必要时先补传角色参考音频。
+                 * @param {Object} line - dialogue 类型的台词块
+                 * @param {AbortSignal | null} [externalSignal] - 批量任务的取消信号
+                 * @returns {Promise<void>} 音频保存并绑定到台词后兑现
+                 * @throws {Error} 合成失败时向批量调用方继续抛出异常
+                 */
                 const generateLineAudio = async (line, externalSignal = null) => {
                     // This button is a toggle. If the line is already generating, this aborts it.
                     if (line.isGenerating) {
@@ -3481,6 +3909,7 @@
                     const internalSignal = controller.signal;
 
                     // Link external signal if provided (for batch abort)
+                    /** 将批量任务的取消信号转发到当前台词任务。 */
                     const handleExternalAbort = () => controller.abort();
                     externalSignal?.addEventListener('abort', handleExternalAbort);
 
@@ -3592,6 +4021,11 @@
 
                                 let batchAbortController = null;
 
+                                /**
+                                 * 从选中位置开始顺序生成所有尚无音频的台词。
+                                 * 再次触发时会取消当前批量任务。
+                                 * @returns {Promise<void>} 批量任务结束或取消后兑现
+                                 */
                                 const generateAllLines = async () => {
 
                                     if (isGeneratingAll.value) {
@@ -3738,6 +4172,10 @@
 
                 
 
+                                /**
+                                 * 经用户确认后清除当前脚本全部已生成台词音频。
+                                 * @returns {Promise<void>} 清理请求发起后兑现
+                                 */
                                 const clearAllGeneratedAudio = async () => {
 
                                     const linesWithAudio = scriptLines.value.filter(l => l.audioUrl);
@@ -3770,6 +4208,12 @@
 
                                 };
 
+                /**
+                 * 播放单条台词及其时间点音效，并实时更新剪辑区间内的进度。
+                 * @param {Object} line - 待播放的台词块
+                 * @param {boolean} [stopPreviousSfx] - 是否先停止上一组音效
+                 * @returns {Promise<void>} 台词自然结束、停止或加载失败后兑现
+                 */
                 const playLineAudio = (line, stopPreviousSfx = true) => {
                     return new Promise(async (resolve, reject) => {
                         try {
@@ -3806,8 +4250,13 @@
                             isAuditioningId.value = line.id;
 
                             // 3. Prepare loading promises (Parallel loading)
+                            /** 加载当前台词的音频缓冲。 */
                             const loadDialogue = async () => await loadAudioBuffer(line);
 
+                            /**
+                             * 并行加载当前台词引用的全部有效音效。
+                             * @returns {Promise<Array<Object>>} 可调度的音效缓冲及参数
+                             */
                             const loadSfx = async () => {
                                 if (!line.sfx || line.sfx.length === 0) return [];
                                 const promises = line.sfx.map(async (sfxItem) => {
@@ -3927,6 +4376,7 @@
                             dialogueSource.start(now, startTimeOffset, playDuration);
 
                             // 启动进度条动画
+                            /** 按播放速率更新台词在原始音频中的进度比例。 */
                             const updateProgress = () => {
                                 if (isAuditioningId.value !== line.id) return;
                                 const elapsed = audioContext.currentTime - now;
@@ -3959,6 +4409,11 @@
                     });
                 };
 
+                /**
+                 * 清除单条台词的运行时音频、缓存和 IndexedDB 素材。
+                 * @param {Object} line - 待清理的台词块
+                 * @returns {Promise<void>} 本地清理和数据库删除结束后兑现
+                 */
                 const clearLineAudio = async (line) => {
                     if (!line.audioUrl) return;
 
@@ -3990,6 +4445,11 @@
                 };
 
                 // --- 存档管理逻辑 ---
+                /**
+                 * 将 Blob 读取为可嵌入工程 JSON 的 Data URL。
+                 * @param {Blob} blob - 二进制素材
+                 * @returns {Promise<string>} Base64 Data URL
+                 */
                 const blobToBase64 = (blob) => {
                     return new Promise((resolve, reject) => {
                         const reader = new FileReader();
@@ -3999,6 +4459,12 @@
                     });
                 };
 
+                /**
+                 * 将 Base64 Data URL 还原为 Blob。
+                 * @param {string} base64 - Base64 Data URL
+                 * @param {string} mimeType - 素材 MIME 类型
+                 * @returns {Blob} 还原后的二进制素材
+                 */
                 const base64ToBlob = (base64, mimeType) => {
                     const byteString = atob(base64.split(',')[1]);
                     const ab = new ArrayBuffer(byteString.length);
@@ -4009,6 +4475,10 @@
                     return new Blob([ab], { type: mimeType });
                 };
 
+                /**
+                 * 打包规范化工程结构及全部可恢复素材并下载 JSON 工程文件。
+                 * @returns {Promise<void>} 导出完成、取消或失败后兑现
+                 */
                 const exportScriptState = async () => {
                     if (!confirm('即将导出包含所有素材（音效、BGM、音色）的完整工程文件。如果素材较多，文件可能较大，请耐心等待。')) return;
 
@@ -4037,6 +4507,12 @@
                             }
                         });
 
+                        /**
+                         * 将资源集合中的二进制素材嵌入导出结构。
+                         * @param {Array<Object>} items - 导出资源集合
+                         * @param {string} fileField - 资源路径字段名
+                         * @returns {Promise<void>} 集合处理完成后兑现
+                         */
                         const processLibrary = async (items, fileField) => {
                             for (let i = 0; i < items.length; i++) {
                                 const item = items[i];
@@ -4114,10 +4590,16 @@
                     }
                 };
 
+                /** 打开工程 JSON 文件选择器。 */
                 const triggerImport = () => {
                     importFileRef.value.click();
                 };
 
+                /**
+                 * 解析工程 JSON，迁移旧结构并恢复资源库、脚本和嵌入素材。
+                 * @param {Event} event - 工程文件输入框 change 事件
+                 * @returns {Promise<void>} 导入完成、取消或失败后兑现
+                 */
                 const handleImportFile = async (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
@@ -4166,6 +4648,11 @@
                             : '检测到完整工程文件。导入将覆盖当前的【资源库和脚本】（模型配置不会被覆盖）。确定继续吗？';
                         if (!confirm(confirmText)) return;
 
+                        /**
+                         * 将临时占位符还原为导入文件中提取的 Base64 数据。
+                         * @param {unknown} value - 原始字段值
+                         * @returns {string} 还原后的 Base64 或原字符串
+                         */
                         const resolveEmbeddedBase64 = (value) => {
                             if (typeof value !== 'string') return '';
                             if (!value.startsWith('__EXTRACTED_BASE64_')) return value;
@@ -4189,6 +4676,12 @@
                         localFileMap.value.clear();
                         audioBufferCache.clear();
 
+                        /**
+                         * 从工程内嵌数据恢复资源库素材并收集批量保存项。
+                         * @param {Array<Object>} items - 待恢复资源集合
+                         * @param {string} fileField - 资源路径字段名
+                         * @returns {Promise<void>} 集合恢复完成后兑现
+                         */
                         const restoreEmbeddedLibraryAssets = async (items, fileField) => {
                             for (const item of items || []) {
                                 if (!item || !item._fileData) continue;
@@ -4298,10 +4791,16 @@
                     }
                 };
 
+                /** 打开小说原文 TXT 文件选择器。 */
                 const triggerImportTxt = () => {
                     importTxtRef.value.click();
                 };
 
+                /**
+                 * 将选中的文本文件读取到小说原文输入区。
+                 * @param {Event} event - 文本文件输入框 change 事件
+                 * @returns {void}
+                 */
                 const handleImportTxt = (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
@@ -4314,6 +4813,10 @@
                 };
 
                 // --- 导出音频逻辑 (WAV) ---
+                /**
+                 * 按脚本时间轴离线混合台词、音效与 BGM，并下载 WAV。
+                 * @returns {Promise<void>} 混音导出完成或失败后兑现
+                 */
                 const exportAudio = async () => {
                     const dialogueLines = scriptLines.value.filter(l => l.type === 'dialogue');
                     if (dialogueLines.length === 0) return alert('脚本为空');
@@ -4513,6 +5016,10 @@
                     }
                 };
 
+                /**
+                 * 根据实际音频时长和停顿生成 SRT 字幕并下载。
+                 * @returns {Promise<void>} 字幕导出完成、取消或失败后兑现
+                 */
                 const exportSRT = async () => {
                     const dialogueLines = scriptLines.value.filter(l => l.type === 'dialogue');
                     if (dialogueLines.length === 0) return alert('脚本为空');
@@ -4538,6 +5045,11 @@
                         let currentTime = 0;
                         let counter = 1;
 
+                        /**
+                         * 将秒数格式化为 SRT 时间戳。
+                         * @param {number} seconds - 时间轴秒数
+                         * @returns {string} HH:MM:SS,mmm 格式时间
+                         */
                         const formatTime = (seconds) => {
                             const date = new Date(0);
                             date.setMilliseconds(seconds * 1000);
@@ -4549,6 +5061,11 @@
                         };
 
                         // 辅助函数：智能切割长字幕
+                        /**
+                         * 按标点和最大长度拆分过长字幕。
+                         * @param {string} text - 原始台词文本
+                         * @returns {string[]} 字幕文本片段
+                         */
                         const splitLongText = (text) => {
                             if (!text) return [];
 
@@ -4659,6 +5176,12 @@
                 };
 
                 // 辅助函数：AudioBuffer 转 WAV Blob
+                /**
+                 * 将 AudioBuffer 编码为 16 位 PCM WAV Blob。
+                 * @param {AudioBuffer} abuffer - 已渲染的音频缓冲
+                 * @param {number} len - 每声道采样帧数
+                 * @returns {Blob} WAV 音频文件
+                 */
                 function bufferToWave(abuffer, len) {
                     const numOfChan = abuffer.numberOfChannels;
                     const length = len * numOfChan * 2 + 44;
@@ -4669,7 +5192,9 @@
                     let offset = 0;
                     let pos = 0;
 
+                    /** 按小端序写入 16 位整数并推进 WAV 写入偏移。 */
                     function setUint16(data) { view.setUint16(offset, data, true); offset += 2; }
+                    /** 按小端序写入 32 位整数并推进 WAV 写入偏移。 */
                     function setUint32(data) { view.setUint32(offset, data, true); offset += 4; }
 
                     setUint32(0x46464952); // "RIFF"
@@ -4701,6 +5226,7 @@
                 }
 
                 // --- 脚本制作逻辑 ---
+                /** 按换行和句末标点将原文快速拆分为默认台词块。 */
                 const splitScript = () => {
                     if (!rawScript.value.trim()) return alert('请输入原文内容');
 
@@ -4729,6 +5255,7 @@
                     }));
                 };
 
+                /** 在选中项后或列表末尾插入 BGM 播放控制块。 */
                 const addBgmBlock = () => {
                     const newBlock = {
                         id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
@@ -4746,6 +5273,7 @@
                     }
                 };
 
+                /** 在选中项后或列表末尾插入背景图片控制块。 */
                 const addBgImageBlock = () => {
                     const newId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
                     const newBlock = {
@@ -4765,6 +5293,7 @@
                     }
                 };
 
+                /** 在选中项后或列表末尾插入使用默认值的台词块。 */
                 const addDialogueBlock = () => {
                     const newBlock = {
                         id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
@@ -4793,6 +5322,11 @@
                     }
                 };
 
+                /**
+                 * 删除指定脚本块并修正当前选中索引。
+                 * @param {number} index - 脚本块索引
+                 * @returns {void}
+                 */
                 const removeScriptLine = (index) => {
                     scriptLines.value.splice(index, 1);
                     if (selectedLineIndex.value === index) {
@@ -4802,11 +5336,21 @@
                     }
                 };
 
+                /**
+                 * 记录目标背景图片块并打开文件选择器。
+                 * @param {number} lineIndex - 背景图片块索引
+                 * @returns {void}
+                 */
                 const openBgImagePicker = (lineIndex) => {
                     pendingBgImageLineIndex.value = lineIndex;
                     if (bgImagePickerRef.value) bgImagePickerRef.value.click();
                 };
 
+                /**
+                 * 将选中的图片绑定到目标背景块并保存到素材存储。
+                 * @param {Event} event - 图片文件输入框 change 事件
+                 * @returns {Promise<void>} 图片保存完成或失败后兑现
+                 */
                 const handleBgImageFileChange = async (event) => {
                     const file = event.target.files && event.target.files[0];
                     const lineIndex = pendingBgImageLineIndex.value;
@@ -4832,6 +5376,11 @@
                     triggerAutoSave();
                 };
 
+                /**
+                 * 将背景图片提示词复制到剪贴板，并兼容旧浏览器回退方案。
+                 * @param {Object} line - 背景图片块
+                 * @returns {Promise<void>} 复制操作结束后兑现
+                 */
                 const copyBgImagePrompt = async (line) => {
                     const text = line?.bgImagePrompt || '';
                     if (!text) return;
@@ -4852,22 +5401,39 @@
                     }
                 };
 
+                /**
+                 * 根据内容高度自动调整文本域。
+                 * @param {Event} event - 文本域 input 事件
+                 * @returns {void}
+                 */
                 const autoResizeTextarea = (event) => {
                     const el = event.target;
                     el.style.height = 'auto';
                     el.style.height = el.scrollHeight + 'px';
                 };
 
+                /**
+                 * 为台词添加一个默认位于中点的音效引用。
+                 * @param {Object} line - 台词块
+                 * @returns {void}
+                 */
                 const addLineSfx = (line) => {
                     if (!line.sfx) line.sfx = [];
                     const defaultSfx = sfxLibrary.value.length > 0 ? sfxLibrary.value[0].name : 'New SFX';
                     line.sfx.push({ name: defaultSfx, position: 0.5 });
                 };
 
+                /**
+                 * 删除台词中的指定音效引用。
+                 * @param {Object} line - 台词块
+                 * @param {number} index - 音效引用索引
+                 * @returns {void}
+                 */
                 const removeLineSfx = (line, index) => {
                     if (line.sfx) line.sfx.splice(index, 1);
                 };
 
+                /** 停止顺序播放，并淡出当前 BGM、清理音频节点和舞台状态。 */
                 const stopScriptSequentially = () => {
                     isSequencePlaying.value = false;
                     currentSequenceIndex.value = -1;
@@ -4896,6 +5462,12 @@
                     }
                 };
 
+                /**
+                 * 淡出旧 BGM，并循环播放指定素材的剪辑区间。
+                 * @param {string} bgmName - BGM 资源名称
+                 * @param {number} [volume] - 脚本块音量系数
+                 * @returns {Promise<void>} 新 BGM 启动或加载失败后兑现
+                 */
                 const playBgm = async (bgmName, volume = 0.4) => {
                     // Stop any existing BGM
                     if (bgmAudioNode && bgmGainNode) {
@@ -4947,6 +5519,10 @@
                     }
                 };
 
+                /**
+                 * 从选中位置按时间轴顺序执行背景、BGM、台词、音效和停顿。
+                 * @returns {Promise<void>} 播放结束或手动停止后兑现
+                 */
                 const playScriptSequentially = async () => {
                     stopScriptSequentially();
                     isSequencePlaying.value = true;
@@ -5062,6 +5638,10 @@
                 };
 
                 // --- 视频生成（MP4 离线合成） ---
+/**
+ * 使用 WebCodecs 与 MP4 Muxer 离线合成当前脚本的视频和混合音频。
+ * @returns {Promise<void>} 视频下载完成、取消或失败后兑现
+ */
 const generateVideo = async () => {
                     const dialogueLines = scriptLines.value.filter(l => l.type === 'dialogue');
                     if (dialogueLines.length === 0) return alert('脚本为空');
@@ -5216,11 +5796,23 @@ const generateVideo = async () => {
                         // Yield to the event loop to allow the encoders' configuration tasks to complete.
                         await new Promise(r => setTimeout(r, 0));
 
+                        /**
+                         * 按固定帧率绘制背景转场并编码全部视频帧。
+                         * @returns {Promise<void>} 视频帧编码完成后兑现
+                         */
                         const renderVideoPromise = async () => {
                             const offscreenCanvas = new OffscreenCanvas(width, height);
                             const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
                             offscreenCtx.imageSmoothingEnabled = true;
                             offscreenCtx.imageSmoothingQuality = 'high';
+                            /**
+                             * 以 cover 模式将图片居中绘制到画布。
+                             * @param {CanvasRenderingContext2D} ctx - 画布上下文
+                             * @param {CanvasImageSource} img - 待绘制图片
+                             * @param {number} cw - 画布宽度
+                             * @param {number} ch - 画布高度
+                             * @returns {void}
+                             */
                             const drawCover = (ctx, img, cw, ch) => {
                                 const scale = Math.max(cw / img.width, ch / img.height);
                                 const dw = img.width * scale;
@@ -5336,6 +5928,11 @@ const generateVideo = async () => {
 
                 
 
+                /**
+                 * 使用当前 LLM 将小说原文分析为台词、BGM 与背景图片时间轴。
+                 * 再次触发时会取消当前分析任务。
+                 * @returns {Promise<void>} 分析、解析和状态同步结束后兑现
+                 */
                 const analyzeScript = async () => {
                     if (isAnalyzingScript.value) {
                         if (analysisAbortController.value) analysisAbortController.value.abort();
@@ -5508,6 +6105,12 @@ const generateVideo = async () => {
 
                             scriptLines.value = validParsed.map(item => {
                                 // 通用模糊匹配函数
+                                /**
+                                 * 在资源库中按精确名称或最短长度差进行模糊匹配。
+                                 * @param {string} target - 模型返回的资源名称
+                                 * @param {Array<Object>} library - 可用资源库
+                                 * @returns {string} 匹配的规范名称；无匹配时返回空字符串
+                                 */
                                 const findBestMatch = (target, library) => {
                                     if (!target) return '';
                                     const t = target.trim().toLowerCase();
@@ -5604,12 +6207,14 @@ const generateVideo = async () => {
 
 
                 // --- 聊天逻辑 ---
+                /** 清空聊天结果、推理内容和错误信息。 */
                 const clearAll = () => {
                     result.value = '';
                     reasoning.value = '';
                     error.value = '';
                 };
 
+                /** 取消当前流式 LLM 对话请求。 */
                 const stopGeneration = () => {
                     if (abortController.value) {
                         abortController.value.abort();
@@ -5618,6 +6223,10 @@ const generateVideo = async () => {
                     }
                 };
 
+                /**
+                 * 使用当前 LLM 配置发起流式对话并增量更新推理与正文。
+                 * @returns {Promise<void>} 流读取完成、取消或失败后兑现
+                 */
                 const send = async () => {
                     if (!currentConfig.value) return alert('请先选择一个有效的模型配置');
                     const cfg = currentConfig.value;
@@ -5714,6 +6323,11 @@ const generateVideo = async () => {
 
                 // --- TTS 逻辑 (SonicVale 协议) ---
 
+                /**
+                 * 接收旧版 TTS 测试工具的参考音频文件。
+                 * @param {Event} event - 文件输入框 change 事件
+                 * @returns {void}
+                 */
                 const handleFileUpload = (event) => {
                     const file = event.target.files[0];
                     if (file) {
@@ -5724,6 +6338,7 @@ const generateVideo = async () => {
                     }
                 };
 
+                /** 取消旧版 TTS 测试工具的合成请求。 */
                 const stopTtsGeneration = () => {
                     if (ttsAbortController.value) {
                         ttsAbortController.value.abort();
@@ -5732,6 +6347,10 @@ const generateVideo = async () => {
                     }
                 };
 
+                /**
+                 * 使用当前 IndexTTS2 配置执行旧版单段文本合成测试。
+                 * @returns {Promise<void>} 上传和合成流程结束后兑现
+                 */
                 const synthesizeAudio = async () => {
                     if (!currentTtsConfig.value) return alert('请选择 TTS 配置');
                     const textToSpeak = result.value || prompt.value;
@@ -5816,6 +6435,7 @@ const generateVideo = async () => {
                     }
                 };
 
+                /** 保存脚本分析与音色分析 Prompt 及其启用状态。 */
                 const savePrompt = () => {
                     localStorage.setItem('storyforge_prompt_template', customPromptTemplate.value);
                     localStorage.setItem('storyforge_use_custom_prompt', JSON.stringify(useCustomPrompt.value));
@@ -5824,12 +6444,14 @@ const generateVideo = async () => {
                     alert('Prompt 设置已保存');
                 };
 
+                /** 单独保存音色分析 Prompt 及其启用状态。 */
                 const saveVoicePrompt = () => {
                     localStorage.setItem('storyforge_voice_prompt_template', customVoicePromptTemplate.value);
                     localStorage.setItem('storyforge_use_custom_voice_prompt', JSON.stringify(useCustomVoicePrompt.value));
                     alert('音色分析 Prompt 设置已保存');
                 };
 
+                /** 经用户确认后恢复默认脚本分析与音色分析 Prompt。 */
                 const resetPrompt = () => {
                     if (confirm('确定要恢复默认 Prompt 吗？')) {
                         customPromptTemplate.value = defaultPromptTemplate;
@@ -5837,6 +6459,7 @@ const generateVideo = async () => {
                     }
                 };
 
+                /** 经用户确认后恢复默认音色分析 Prompt 并持久化。 */
                 const resetVoicePrompt = () => {
                     if (confirm('确定要恢复默认的音色分析 Prompt 吗？')) {
                         customVoicePromptTemplate.value = defaultVoicePromptTemplate;
@@ -5844,6 +6467,7 @@ const generateVideo = async () => {
                     }
                 };
 
+                /** 保存动态参考文本 Prompt、固定模板及对应开关。 */
                 const saveVoiceReferenceSettings = () => {
                     localStorage.setItem('storyforge_voice_reference_prompt_template', customVoiceReferencePromptTemplate.value);
                     localStorage.setItem('storyforge_use_dynamic_voice_reference_text', JSON.stringify(useDynamicVoiceReferenceText.value));
@@ -5852,6 +6476,7 @@ const generateVideo = async () => {
                     alert('Qwen / MiMo 参考文本设置已保存');
                 };
 
+                /** 经用户确认后恢复默认音色参考文本设置并持久化。 */
                 const resetVoiceReferenceSettings = () => {
                     if (confirm('确定要恢复默认的音色参考文本设置吗？')) {
                         customVoiceReferencePromptTemplate.value = defaultVoiceReferencePromptTemplate;
