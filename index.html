@@ -230,6 +230,7 @@
                     <div>
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Base URL</label>
                         <input v-model="ttsForm.baseUrl"
+                            @blur="syncTtsFormProtocolFromBaseUrl"
                             class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             placeholder="http://127.0.0.1:8300">
                     </div>
@@ -240,6 +241,7 @@
                             <option value="indextts2">IndexTTS2（仅传音频与情绪向量）</option>
                             <option value="reference-text-clone">参考文本克隆（传 prompt_text）</option>
                         </select>
+                        <p class="mt-1 text-[10px] text-slate-400">官方默认端口会自动匹配：8300 使用 IndexTTS2，8301–8306 使用参考文本克隆。</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -257,7 +259,7 @@
                     <div>
                         <div class="font-bold text-slate-800 text-sm">{{ conf.name }}</div>
                         <div class="text-xs text-slate-400 mt-1">{{ conf.baseUrl }}</div>
-                        <div class="text-xs text-slate-400 mt-1">{{ ttsProtocolLabel(conf.protocol) }}</div>
+                        <div class="text-xs text-slate-400 mt-1">{{ ttsProtocolLabel(conf.protocol, conf.baseUrl) }}</div>
                     </div>
                     <div class="flex gap-2">
                         <button @click="editTtsConfig(conf)"
@@ -1813,33 +1815,66 @@
                     indextts2: 'indextts2',
                     referenceTextClone: 'reference-text-clone'
                 };
+                // TTS-and-VoiceDesign 默认端口具有固定协议；用于修复旧配置被错误补成 IndexTTS2 的情况。
+                const TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT = Object.freeze({
+                    '8300': TTS_PROTOCOLS.indextts2,
+                    '8301': TTS_PROTOCOLS.referenceTextClone,
+                    '8302': TTS_PROTOCOLS.referenceTextClone,
+                    '8303': TTS_PROTOCOLS.referenceTextClone,
+                    '8304': TTS_PROTOCOLS.referenceTextClone,
+                    '8305': TTS_PROTOCOLS.referenceTextClone,
+                    '8306': TTS_PROTOCOLS.referenceTextClone
+                });
                 /**
-                 * 将未知或缺失的 TTS 协议归一化为兼容默认值。
+                 * 根据 TTS-and-VoiceDesign 的默认端口推断合成协议。
+                 * @param {string} baseUrl - TTS 服务根地址
+                 * @returns {string} 命中的协议标识；未知端口返回空字符串
+                 */
+                const inferTtsProtocolFromBaseUrl = (baseUrl) => {
+                    const rawUrl = String(baseUrl || '').trim();
+                    if (!rawUrl) return '';
+                    try {
+                        // 允许用户省略 http(s)://，协议推断不应因此失效。
+                        const parsedUrl = new URL(/^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`);
+                        return TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT[parsedUrl.port] || '';
+                    } catch {
+                        // 无法解析的地址留给保存与 fetch 阶段报告，未知地址仍尊重手动协议。
+                        return '';
+                    }
+                };
+                /**
+                 * 将 TTS 协议归一化；官方默认端口优先采用其固定能力映射。
                  * @param {string} value - 原始协议标识
+                 * @param {string} [baseUrl] - TTS 服务根地址
                  * @returns {string} 受支持的协议标识
                  */
-                const normalizeTtsProtocol = (value) =>
+                const normalizeTtsProtocol = (value, baseUrl = '') => {
+                    // 先纠正 8300–8306 的旧配置；未知端口才使用用户保存的协议。
+                    const inferredProtocol = inferTtsProtocolFromBaseUrl(baseUrl);
+                    if (inferredProtocol) return inferredProtocol;
                     // 唯一显式保留的特殊值是参考文本克隆协议。
-                    value === TTS_PROTOCOLS.referenceTextClone
+                    return value === TTS_PROTOCOLS.referenceTextClone
                         // 命中时返回规范常量。
                         ? TTS_PROTOCOLS.referenceTextClone
                         // 任何旧值、空值或未知值都回退到 IndexTTS2。
                         : TTS_PROTOCOLS.indextts2;
+                };
                 /**
                  * 判断 TTS 配置是否需要随参考音频传入参考文本。
                  * @param {Object | null | undefined} config - TTS 配置
                  * @returns {boolean} 是否使用参考文本克隆协议
                  */
                 const usesReferenceText = (config) =>
-                    normalizeTtsProtocol(config?.protocol) === TTS_PROTOCOLS.referenceTextClone;
+                    normalizeTtsProtocol(config?.protocol, config?.baseUrl) === TTS_PROTOCOLS.referenceTextClone;
                 /**
                  * 获取 TTS 协议的界面说明文字。
                  * @param {string} protocol - 协议标识
+                 * @param {string} [baseUrl] - TTS 服务根地址
                  * @returns {string} 协议中文标签
                  */
-                const ttsProtocolLabel = (protocol) =>
+                const ttsProtocolLabel = (protocol, baseUrl = '') =>
                     // 先规范化输入，再判断展示分支。
-                    normalizeTtsProtocol(protocol) === TTS_PROTOCOLS.referenceTextClone
+                    normalizeTtsProtocol(protocol, baseUrl) === TTS_PROTOCOLS.referenceTextClone
                         // 参考文本协议会向后端传 prompt_text。
                         ? '参考文本克隆（传 prompt_text）'
                         // 默认协议只需要参考音频和情绪向量。
@@ -3194,7 +3229,7 @@
                                  // 展开名称、地址、ID 等既有配置。
                                  ...config,
                                  // 覆盖为规范协议值。
-                                 protocol: normalizeTtsProtocol(config?.protocol)
+                                 protocol: normalizeTtsProtocol(config?.protocol, config?.baseUrl)
                              }))
                              : [];
                          // 将补齐后的协议立即回写，完成一次性数据升级。
@@ -3457,9 +3492,9 @@
                         return alert('请填写完整信息');
                     }
 
-                    // 清理 URL，并把未知协议收敛到 IndexTTS2。
+                    // 清理 URL，并按官方端口能力或用户选择确定协议。
                     ttsForm.value.baseUrl = ttsForm.value.baseUrl.trim();
-                    ttsForm.value.protocol = normalizeTtsProtocol(ttsForm.value.protocol);
+                    ttsForm.value.protocol = normalizeTtsProtocol(ttsForm.value.protocol, ttsForm.value.baseUrl);
                     // 编辑沿用原 ID，新建生成 ID。
                     const savedConfigId = ttsForm.value.id || Date.now().toString();
                     // 当前没有有效选择时，保存项应成为新的当前配置。
@@ -3491,8 +3526,14 @@
                 */
                 const editTtsConfig = (conf) => {
                     // 拷贝配置并补齐旧记录可能缺失的协议。
-                    ttsForm.value = { ...conf, protocol: normalizeTtsProtocol(conf.protocol) };
+                    ttsForm.value = { ...conf, protocol: normalizeTtsProtocol(conf.protocol, conf.baseUrl) };
                     isEditingTts.value = true;
+                };
+
+                /** 根据官方默认端口即时同步 TTS 表单协议；未知端口保留用户选择。 */
+                const syncTtsFormProtocolFromBaseUrl = () => {
+                    const inferredProtocol = inferTtsProtocolFromBaseUrl(ttsForm.value.baseUrl);
+                    if (inferredProtocol) ttsForm.value.protocol = inferredProtocol;
                 };
 
                 /**
@@ -3541,7 +3582,7 @@
                  * @returns {Object | null} 匹配的音色记录
                 */
                 const resolveCharacterTimbre = (char) => {
-                    if (!char || !char.voiceFile) return null;
+                    if (!char || (!char.voiceFile && !char.voiceAssetKey)) return null;
                     // 稳定 assetKey 比文件名可靠；旧工程再回退 refPath。
                     return timbres.value.find(t => char.voiceAssetKey && t.assetKey === char.voiceAssetKey)
                         || timbres.value.find(t => t.refPath === char.voiceFile)
@@ -3549,15 +3590,19 @@
                 };
 
                 /**
-                 * 获取角色绑定音色的参考文本。
+                 * 从同一份角色音色绑定中解析合成所需的参考音频路径与真实文本。
                  * @param {Object} char - 角色数据
-                 * @returns {string} 已去除首尾空白的参考文本
-                */
-                const resolveCharacterPromptText = (char) => {
-                    // 音色库是 promptText 主来源，角色副本用于兼容旧工程。
+                 * @returns {{ audioPath: string, promptText: string }} 已清理的合成参考信息
+                 */
+                const resolveCharacterSynthesisReference = (char) => {
+                    // 音色库是路径和 promptText 的主来源，角色副本用于兼容旧工程。
                     const timbre = resolveCharacterTimbre(char);
-                    // 后端要求精确参考文本，去掉不必要的首尾空白。
-                    return (timbre?.promptText || char?.voicePromptText || '').trim();
+                    return {
+                        // assetKey 命中的音色可能已更新 refPath，应与其 promptText 成组发送。
+                        audioPath: String(timbre?.refPath || char?.voiceFile || '').trim(),
+                        // 后端要求精确参考文本，去掉不必要的首尾空白。
+                        promptText: String(timbre?.promptText || char?.voicePromptText || '').trim()
+                    };
                 };
 
                 /**
@@ -3572,6 +3617,8 @@
                     char.voiceAssetKey = resolveCharacterVoiceAssetKey(char);
                     const timbre = resolveCharacterTimbre(char);
                     if (syncMetadata && timbre) {
+                        // assetKey 命中的音色可能已更换后端路径，角色引用应同步到当前 refPath。
+                        char.voiceFile = timbre.refPath || char.voiceFile || '';
                         // 音色库非空字段覆盖角色副本，空字段则保留旧数据。
                         char.voiceDescription = timbre.description || char.voiceDescription || '';
                         char.voicePromptText = timbre.promptText || char.voicePromptText || '';
@@ -4824,11 +4871,16 @@
                     try {
                         // 通过台词角色名找到当前脚本角色绑定。
                         const char = characters.value.find(c => c.name === line.role);
-                        if (!char || !char.voiceFile) {
-                            throw new Error(`角色 "${line.role}" 未绑定音色文件路径。\n\n请在左侧的角色列表中为该角色选择一个音色文件，或手动输入路径。`);
+                        if (!char) {
+                            throw new Error(`台词角色 "${line.role}" 不存在，请先检查角色列表。`);
                         }
                         // 合成前刷新角色 assetKey 和 promptText。
                         syncCharacterVoiceSelection(char);
+                        // audio_path 与 prompt_text 必须从同一份角色绑定音色记录取得。
+                        const synthesisReference = resolveCharacterSynthesisReference(char);
+                        if (!synthesisReference.audioPath) {
+                            throw new Error(`角色 "${line.role}" 未绑定音色文件路径。\n\n请在左侧的角色列表中为该角色选择一个音色文件，或手动输入路径。`);
+                        }
 
                         // 默认八维零向量代表没有额外情绪偏置。
                         let finalVector = [0, 0, 0, 0, 0, 0, 0, 0];
@@ -4851,14 +4903,14 @@
                         const cfg = currentTtsConfig.value;
                         const includePromptText = usesReferenceText(cfg);
                         // 只有参考文本克隆协议读取音色真实文本。
-                        const promptText = includePromptText ? resolveCharacterPromptText(char) : '';
+                        const promptText = includePromptText ? synthesisReference.promptText : '';
                         if (includePromptText && !promptText) {
                             throw new Error(`TTS 配置「${cfg.name}」需要参考音频文本，请在绑定音色中填写。`);
                         }
                         // 两类协议共享 text 和 audio_path。
                         const payload = {
                             text: line.text,
-                            audio_path: char.voiceFile
+                            audio_path: synthesisReference.audioPath
                         };
                         // 协议互斥：克隆服务收 prompt_text，IndexTTS2 收 emo_vector。
                         if (includePromptText) payload.prompt_text = promptText;
@@ -4869,11 +4921,11 @@
                         if (baseUrl.endsWith('/v1')) baseUrl = baseUrl.slice(0, -3);
 
                         // 尝试从浏览器素材存储恢复角色参考音频。
-                        const voiceFile = await loadStoredAssetBlob(char, char.voiceFile);
+                        const voiceFile = await loadStoredAssetBlob(char, synthesisReference.audioPath);
                         if (voiceFile) {
                             try {
                                 // 先检查后端是否已有同路径音频，避免每条台词都重复上传。
-                                const checkUrl = `${baseUrl}/v1/check/audio?file_name=${encodeURIComponent(char.voiceFile)}`;
+                                const checkUrl = `${baseUrl}/v1/check/audio?file_name=${encodeURIComponent(synthesisReference.audioPath)}`;
                                 const checkRes = await fetch(checkUrl, { signal: internalSignal });
                                 // 检查失败时默认视为服务端文件缺失。
                                 let exists = false;
@@ -4896,9 +4948,9 @@
                                 if (!exists || (includePromptText && promptText && supportsPromptTextStatus && !hasPromptText)) {
                                     const formData = new FormData();
                                     // 第三个参数显式指定上传文件名。
-                                    formData.append('audio', voiceFile, char.voiceFile);
+                                    formData.append('audio', voiceFile, synthesisReference.audioPath);
                                     // full_path 决定 TTS 后端保存和引用位置。
-                                    formData.append('full_path', char.voiceFile);
+                                    formData.append('full_path', synthesisReference.audioPath);
                                     // 克隆协议的新版后端同时保存音频真实文本。
                                     if (includePromptText && promptText) {
                                         formData.append('prompt_text', promptText);
@@ -5020,7 +5072,7 @@
 
                                         const char = characters.value.find(c => c.name === line.role);
 
-                                        if (!char || !char.voiceFile) {
+                                        if (!char || !resolveCharacterSynthesisReference(char).audioPath) {
 
                                             // 使用完整时间轴索引向用户报告界面中的实际行号。
                                             const lineIndex = scriptLines.value.findIndex(l => l.id === line.id);
@@ -8492,7 +8544,7 @@
                     saveConfig, editConfig, deleteConfig, resetForm,
                     // TTS 配置表单状态与对应 CRUD 操作。
                     ttsForm, isEditingTts,
-                    saveTtsConfig, editTtsConfig, deleteTtsConfig, resetTtsForm,
+                    saveTtsConfig, editTtsConfig, deleteTtsConfig, resetTtsForm, syncTtsFormProtocolFromBaseUrl,
 
                     // 当前脚本角色集合以及角色新增、删除入口。
                     characters, addCharacter, deleteCharacter,

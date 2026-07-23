@@ -56,6 +56,8 @@ bash start.sh
 
 参考文本克隆需要角色的参考音频文本。脚本台词生成会把当前绑定音色的准确参考文案作为 `prompt_text` 提交给对应克隆模型；IndexTTS2 的官方克隆接口不使用参考转写，继续只发送参考音频与情绪向量。完整的模型能力、接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
 
+对于上表中的官方默认端口，WebUI 会根据 `Base URL` 自动校正协议：`8300` 使用 `indextts2`，`8301` 至 `8306` 使用 `reference-text-clone`。这也会修复旧浏览器配置曾把非 `8300` 服务补成 IndexTTS2、进而漏传 `prompt_text` 的情况；其他端口仍采用配置中手动选择的协议。
+
 > 后端的 MOSS-SoundEffect `8311` 服务可独立生成音效，但当前 WebUI 尚未调用该接口；现有 SFX 来自用户导入的本地素材库。
 
 ## 推荐流程

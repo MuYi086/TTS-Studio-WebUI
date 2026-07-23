@@ -29,11 +29,13 @@ curl http://127.0.0.1:8300/v1/health
 
 “参考文本克隆”会读取角色音色的 `promptText`。该字段为空时，WebUI 会阻止合成并提示补充参考音频中实际说出的文字。
 
+WebUI 会按 TTS-and-VoiceDesign 的官方默认端口校正配置协议：`8300` 固定映射为 `indextts2`，`8301` 至 `8306` 固定映射为 `reference-text-clone`。因此旧 `localStorage` 配置即使曾因缺少 `protocol` 被补成 IndexTTS2，重新加载后也会按 `Base URL` 修正；未知端口继续尊重用户手动选择。
+
 ### 台词合成中的参考文案
 
 脚本工作台点击单条台词的“生成音频”按钮时，`generateLineAudio` 会从角色当前绑定的音色记录读取参考文案，并按以下边界传递：
 
-1. 使用“参考文本克隆”协议时，参考文案为必填；每次台词合成都会把它作为 `prompt_text` 加入 `POST /v2/synthesize` 的 JSON 请求体。
+1. 使用“参考文本克隆”协议时，参考文案为必填；每次台词合成都会从角色当前绑定的同一条音色记录取得 `audio_path` 与 `prompt_text`，并加入 `POST /v2/synthesize` 的 JSON 请求体。
 2. 自动补传参考音频时，WebUI 还会把参考文案作为表单字段提交给 `POST /v1/upload_audio`，供后端保存 sidecar。
 3. IndexTTS2 使用独立的 `indextts2` 协议，不读取或发送 `prompt_text`。
 
