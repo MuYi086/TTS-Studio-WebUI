@@ -1429,7 +1429,7 @@
                     :class="['w-full h-64 p-3 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-3', !useDynamicVoiceReferenceText ? 'bg-slate-100 text-slate-400' : 'bg-white text-slate-700']"
                     spellcheck="false"></textarea>
                 <div class="mt-2 text-xs text-slate-500">
-                    <span class="font-bold">动态 Prompt 可用变量:</span> ${charName}, ${voiceDescription}, ${characterContext}, ${rawScript}
+                    <span class="font-bold">动态 Prompt 可用变量:</span> ${charName}, ${voiceDescription}, ${characterContext}, ${rawScript}, ${voiceReferenceHardConstraints}。保存和发送请求时会自动展开或补齐硬约束，生成结果必须为 26 至 32 个字符（汉字和标点均计数），优先生成 30 个字符。
                 </div>
 
                 <div class="mt-5 mb-2 text-xs font-bold text-slate-600">固定文本与兼容回退</div>
@@ -2429,6 +2429,21 @@
                 // false 时角色分析固定使用 defaultVoicePromptTemplate。
                 const useCustomVoicePrompt = ref(false);
 
+                // 允许不同音色和语速留有浮动，同时把 30 个字符作为 7 至 10 秒参考音频的首选目标。
+                const VOICE_REFERENCE_TEXT_MIN_CHARACTERS = 26;
+                const VOICE_REFERENCE_TEXT_MAX_CHARACTERS = 32;
+                const VOICE_REFERENCE_TEXT_TARGET_CHARACTERS = 30;
+                // 首次生成加两次纠错；仍不合格时使用经过相同校验的固定回退文本。
+                const VOICE_REFERENCE_TEXT_MAX_ATTEMPTS = 3;
+                // 长度句单独复用，便于把 localStorage 中旧版长度规则迁移到当前范围。
+                const voiceReferenceLengthConstraint = `总长度必须为${VOICE_REFERENCE_TEXT_MIN_CHARACTERS}至${VOICE_REFERENCE_TEXT_MAX_CHARACTERS}个字符，汉字和标点都计数，绝不能超过${VOICE_REFERENCE_TEXT_MAX_CHARACTERS}个字符；优先生成恰好${VOICE_REFERENCE_TEXT_TARGET_CHARACTERS}个字符，安排一次自然逗号停顿，目标朗读时长为7至10秒；`;
+                // 硬约束单独维护，恢复旧模板、保存设置和发送 LLM 请求时都复用同一份文本。
+                const voiceReferenceHardConstraints = `跨模型建议和硬性输出约束（优先级最高；如与模板其他内容冲突，以本块为准）：
+1. 只输出一段会由单个说话人真实朗读的中文参考文案，不要标题、引号、解释或换行；
+2. ${voiceReferenceLengthConstraint}
+3. 使用一至两个连贯短句和一次自然停顿，保持稳定、自然的默认说话状态，不要哭喊、耳语、唱歌或切换角色；
+4. 内容应匹配目标口音、情绪、语速和力度，使用清晰易读的常用字，避免重复、绕口、生僻字及容易产生歧义的多音字；
+5. 只保留会被真实念出的文字和常规中文标点，不要舞台说明、括号标签、SSML、英文、阿拉伯数字、音频标签或元话语。`;
                 // 下方动态参考文本模板会根据音色描述和角色上下文生成真正被音色模型朗读的台词。
                 const defaultVoiceReferencePromptTemplate = `你是一名配音导演。请为角色“\${charName}”写一段用于音色设计和后续语音克隆的中文参考台词。
 
@@ -2440,18 +2455,73 @@
 
 要求：
 1. 内容符合角色身份、时代背景和默认气质，与音色描述保持一致，但不要照抄原剧情中的专有事件；
-2. 45至70个汉字，2至4句，表达自然连贯，可包含陈述句和一次自然问句或感叹句；
-3. 保持同一种稳定的默认说话状态，不要安排哭喊、耳语、唱歌等极端表演；
-4. 只使用会被真实念出的文字和常规中文标点，不要舞台说明、括号标签、SSML、英文、阿拉伯数字或生僻字；
-5. 不要出现“测试、校准、模型、参考音频、基准音色”等元话语；
-6. 只输出参考台词，不要标题、引号或解释。`;
+2. 表达自然连贯，句间衔接顺畅，不要照抄角色音色描述或复述下方约束；
+3. 严格遵守以下跨模型建议和硬性输出约束：
+
+${voiceReferenceHardConstraints}`;
+
+                /**
+                 * 展开旧模板中的硬约束变量，并为未声明当前长度约束的自定义模板补齐统一约束。
+                 * @param {string} template - 当前编辑值、已保存值或空值
+                 * @returns {string} 可直接展示、保存和发送的完整 Prompt
+                 */
+                const normalizeVoiceReferencePromptTemplate = (template) => {
+                    // 空模板回退到系统默认；非字符串历史值也不能进入字符串替换链路。
+                    const selectedTemplate = typeof template === 'string' && template.trim()
+                        ? template.trim()
+                        : defaultVoiceReferencePromptTemplate;
+                    // 修复曾保存为字面量的 ${voiceReferenceHardConstraints}，支持同一模板出现多次。
+                    const expandedTemplate = selectedTemplate
+                        .replace(
+                            /\${voiceReferenceHardConstraints}/g,
+                            voiceReferenceHardConstraints
+                        )
+                        // 已保存的系统长度句必须整体升级，避免旧 24 字上限与新规则同时进入请求。
+                        .replace(
+                            /总长度必须为\d+至\d+个字符，汉字和标点都计数，绝不能超过\d+个字符；(?:优先接近\d+个字符|优先生成恰好\d+个字符)，(?:安排一次自然逗号停顿，)?(?:使自然朗读接近10秒且不超过10秒|目标朗读时长为5至10秒并尽量接近10秒|目标朗读时长为7至10秒)；/g,
+                            voiceReferenceLengthConstraint
+                        );
+                    // 新默认模板或已迁移模板已经包含完整约束时直接返回，避免重复追加。
+                    if (expandedTemplate.includes(voiceReferenceHardConstraints)) return expandedTemplate;
+
+                    // 兼容已写明当前完整长度规则的模板，不在其末尾重复堆叠同义约束。
+                    const compactTemplate = expandedTemplate.replace(/\s+/g, '');
+                    const hasPublishedHardConstraints = compactTemplate.includes(voiceReferenceLengthConstraint.replace(/\s+/g, ''))
+                        && compactTemplate.includes('只输出参考台词')
+                        && compactTemplate.includes('SSML');
+                    if (hasPublishedHardConstraints) return expandedTemplate;
+
+                    // 旧系统默认或用户自定义模板没有硬约束时保留原文，并在末尾追加最高优先级规则。
+                    return `${expandedTemplate}\n\n${voiceReferenceHardConstraints}`;
+                };
+
+                /**
+                 * 规范化动态参考文本 Prompt 并替换所有运行时变量。
+                 * @param {string} template - textarea 当前模板
+                 * @param {Object} variables - 角色与脚本上下文变量
+                 * @returns {string} 可直接放入 Chat Completions 请求的完整提示词
+                 */
+                const renderVoiceReferencePromptTemplate = (template, variables) => {
+                    // 统一从规范化入口开始，保证硬约束变量不会以字面量进入请求 JSON。
+                    return normalizeVoiceReferencePromptTemplate(template)
+                        // 函数替换可避免变量值中的 $ 被 String.replace 当成特殊替换标记。
+                        .replace(/\${charName}/g, () => variables.charName)
+                        // 兼容旧模板使用的属性路径变量。
+                        .replace(/\${char\.name}/g, () => variables.charName)
+                        // 注入用户确认过的音色描述。
+                        .replace(/\${voiceDescription}/g, () => variables.voiceDescription)
+                        // 注入从脚本抽样的角色台词上下文。
+                        .replace(/\${characterContext}/g, () => variables.characterContext)
+                        // 注入截断后的小说原文作为补充背景。
+                        .replace(/\${rawScript}/g, () => variables.rawScript);
+                };
                 // 用户可编辑的动态参考文本 Prompt。
                 const customVoiceReferencePromptTemplate = ref(defaultVoiceReferencePromptTemplate);
                 // true 时优先请求 LLM 生成角色专属文本；无 LLM 时仍安全回退固定文本。
                 const useDynamicVoiceReferenceText = ref(true);
 
-                // 固定参考文本兼容旧版 Qwen 设置，并支持替换角色名。
-                const defaultQwenVoiceTextTemplate = "我是${charName}。风从远处吹来，树叶轻轻作响，熟悉的脚步声停在门外。你听见了吗？别着急，我们的故事才刚刚开始。";
+                // 固定参考文本兼容旧版 Qwen 设置；自定义版本仍支持替换角色名。
+                const defaultQwenVoiceTextTemplate = "微风轻轻吹过安静的窗前，我会把这段遥远的故事慢慢讲给你听。";
                 // 用户可编辑的固定参考文本副本。
                 const customQwenVoiceTextTemplate = ref(defaultQwenVoiceTextTemplate);
                 // true 时固定模式使用用户副本，否则使用系统固定文本。
@@ -3288,7 +3358,15 @@
 
                      // 动态角色参考文本 Prompt 使用新增独立键。
                      const savedVoiceReferencePrompt = localStorage.getItem('storyforge_voice_reference_prompt_template');
-                     if (savedVoiceReferencePrompt) customVoiceReferencePromptTemplate.value = savedVoiceReferencePrompt;
+                     if (savedVoiceReferencePrompt !== null) {
+                         // 展开旧版遗留的硬约束占位符，并把更早模板升级到当前强制字数规则。
+                         const normalizedVoiceReferencePrompt = normalizeVoiceReferencePromptTemplate(savedVoiceReferencePrompt);
+                         customVoiceReferencePromptTemplate.value = normalizedVoiceReferencePrompt;
+                         // 只覆盖同一个兼容键，不引入新键；刷新后 textarea 直接显示完整约束。
+                         if (normalizedVoiceReferencePrompt !== savedVoiceReferencePrompt) {
+                             localStorage.setItem('storyforge_voice_reference_prompt_template', normalizedVoiceReferencePrompt);
+                         }
+                     }
 
                      // 动态模式开关必须用 !== null 判断，因为字符串 "false" 也是合法已保存值。
                      const savedUseDynamicVoiceReference = localStorage.getItem('storyforge_use_dynamic_voice_reference_text');
@@ -3845,6 +3923,49 @@
                 };
 
                 /**
+                 * 使用与界面约定一致的 Unicode 字符口径检查动态参考文案。
+                 * @param {string} text - 清理后的 LLM 文本或固定回退文本
+                 * @returns {{valid: boolean, length: number, reason: string}} 校验结果
+                */
+                const validateVoiceReferenceText = (text) => {
+                    // Array.from 按 Unicode 码点计数，中文标点与汉字各计一个字符。
+                    const length = Array.from(String(text || '')).length;
+                    // 长度范围是进入音色生成链路的第一道硬约束。
+                    if (length < VOICE_REFERENCE_TEXT_MIN_CHARACTERS || length > VOICE_REFERENCE_TEXT_MAX_CHARACTERS) {
+                        return {
+                            valid: false,
+                            length,
+                            reason: `长度为 ${length} 个字符，应为 ${VOICE_REFERENCE_TEXT_MIN_CHARACTERS} 至 ${VOICE_REFERENCE_TEXT_MAX_CHARACTERS} 个字符`
+                        };
+                    }
+                    // 标签、JSON/Markdown 括号会成为不该念出的内容，因此同样拒绝。
+                    if (/[<>{}\[\]【】`]/.test(text)) {
+                        return {
+                            valid: false,
+                            length,
+                            reason: '包含标签或结构化符号'
+                        };
+                    }
+                    // 只有长度和内容结构同时合格才能写入角色参考文案。
+                    return { valid: true, length, reason: '' };
+                };
+
+                /**
+                 * 根据前一次程序实测结果构造纠错 Prompt，避免让模型自行猜测字符数。
+                 * @param {string} basePrompt - 已包含角色上下文和统一硬约束的初始 Prompt
+                 * @param {string} failedText - 前一次未通过校验的正文
+                 * @param {{length: number, reason: string}} validation - 前一次程序校验结果
+                 * @returns {string} 下一次独立请求使用的完整 Prompt
+                */
+                const buildVoiceReferenceCorrectionPrompt = (basePrompt, failedText, validation) => `${basePrompt}
+
+纠错要求（优先级最高）：
+上一版正文：${failedText}
+程序实测上一版${validation.reason}。请完整重写，不要只在末尾机械增删文字。
+新正文优先写成恰好${VOICE_REFERENCE_TEXT_TARGET_CHARACTERS}个字符；程序只接受${VOICE_REFERENCE_TEXT_MIN_CHARACTERS}至${VOICE_REFERENCE_TEXT_MAX_CHARACTERS}个字符，汉字和标点都计数。
+输出前请在内部逐字符检查，但最终仍然只输出自然连贯的参考文案，不要输出计数、标题、引号或解释。`;
+
+                /**
                  * 按设置动态生成或回退到固定角色参考文本。
                  * @param {Object} char - 角色数据
                  * @param {AbortSignal} signal - LLM 请求取消信号
@@ -3865,35 +3986,46 @@
 
                     // 复用角色抽样逻辑，让参考台词符合角色身份和语言风格。
                     const characterContext = buildCharacterContext(char.name);
-                    // 空自定义模板回退系统模板。
-                    const template = customVoiceReferencePromptTemplate.value.trim()
-                        || defaultVoiceReferencePromptTemplate;
-                    // 逐项替换模板变量；原文只截前 3000 字符控制请求体长度。
-                    const promptText = template
-                        // 注入当前角色名的简写变量。
-                        .replace(/\${charName}/g, char.name)
-                        // 兼容旧模板使用的属性路径变量。
-                        .replace(/\${char\.name}/g, char.name)
-                        // 注入用户确认过的音色描述。
-                        .replace(/\${voiceDescription}/g, char.voiceDescription.trim())
-                        // 注入从脚本抽样的角色台词上下文。
-                        .replace(/\${characterContext}/g, characterContext)
-                        // 注入截断后的小说原文作为补充背景。
-                        .replace(/\${rawScript}/g, rawScript.value.substring(0, 3000));
-                    // 发起非流式纯文本请求，并复用任务取消信号。
-                    const generatedText = await requestLlmPlainText(promptText, signal, '参考文本');
+                    // 请求前再次规范化并替换全部变量，确保现场编辑也不能移除或漏传统一硬约束。
+                    const promptText = renderVoiceReferencePromptTemplate(
+                        customVoiceReferencePromptTemplate.value,
+                        {
+                            charName: char.name,
+                            voiceDescription: char.voiceDescription.trim(),
+                            characterContext,
+                            // 原文只截前 3000 字符控制请求体长度。
+                            rawScript: rawScript.value.substring(0, 3000)
+                        }
+                    );
+                    // 首次失败后把程序实测字符数反馈给模型，最多再纠错两次。
+                    let requestPrompt = promptText;
+                    let lastValidation = null;
+                    for (let attempt = 1; attempt <= VOICE_REFERENCE_TEXT_MAX_ATTEMPTS; attempt += 1) {
+                        // 每次均发起独立非流式请求，并复用角色任务的取消信号。
+                        const generatedText = await requestLlmPlainText(requestPrompt, signal, '参考文本');
+                        // 所有尝试复用同一个本地校验入口，避免 Prompt 与运行时口径分叉。
+                        const validation = validateVoiceReferenceText(generatedText);
+                        // 只有通过硬校验的模型结果才允许写入角色卡片。
+                        if (validation.valid) return generatedText;
 
-                    // 给模型留少量容错，但拒绝过短无代表性或过长难稳定朗读的结果。
-                    if (generatedText.length < 20 || generatedText.length > 120) {
-                        throw new Error(`LLM 生成的参考文本长度为 ${generatedText.length} 字，应控制在 20 至 120 字之间`);
-                    }
-                    // 标签、JSON/Markdown 括号会成为不该念出的内容，因此直接拒绝。
-                    if (/[<>{}\[\]【】`]/.test(generatedText)) {
-                        throw new Error('LLM 生成的参考文本包含标签或结构化符号，请调整参考文本 Prompt 后重试');
+                        lastValidation = validation;
+                        console.warn(`参考文案第 ${attempt} 次生成未通过校验：${validation.reason}`);
+                        // 下一次请求携带实际失败文本和前端计数结果，引导模型定向重写。
+                        if (attempt < VOICE_REFERENCE_TEXT_MAX_ATTEMPTS) {
+                            requestPrompt = buildVoiceReferenceCorrectionPrompt(promptText, generatedText, validation);
+                        }
                     }
 
-                    // 返回文本框展示值，后续只有用户点击“生成音色”才会提交给音色设计服务。
-                    return generatedText;
+                    // 模型连续失败时优先使用用户自定义且合格的固定文本，否则使用内置 29 字回退。
+                    const fallbackText = [fixedText, defaultQwenVoiceTextTemplate]
+                        .find(text => validateVoiceReferenceText(text).valid);
+                    // 内置固定文本也受同一校验保护；理论上仅在常量被错误修改时才会进入此分支。
+                    if (!fallbackText) {
+                        throw new Error(`LLM 连续 ${VOICE_REFERENCE_TEXT_MAX_ATTEMPTS} 次未生成合格参考文本，且固定回退文本无效：${lastValidation?.reason || '未知原因'}`);
+                    }
+                    console.warn(`LLM 连续 ${VOICE_REFERENCE_TEXT_MAX_ATTEMPTS} 次未生成合格参考文本，已使用固定回退文本。`);
+                    // 回退文本仍写入可编辑文本框，用户确认后才会进入音色设计请求。
+                    return fallbackText;
                 };
 
                 /**
@@ -8464,8 +8596,11 @@
 
                 /** 保存动态参考文本 Prompt、固定模板及对应开关。 */
                 const saveVoiceReferenceSettings = () => {
-                    // 保存通过 LLM 生成动态参考文本的 Prompt 模板。
-                    localStorage.setItem('storyforge_voice_reference_prompt_template', customVoiceReferencePromptTemplate.value);
+                    // 保存前展开或补齐硬约束，并立即回写 textarea，保证界面值与请求值一致。
+                    const normalizedVoiceReferencePrompt = normalizeVoiceReferencePromptTemplate(customVoiceReferencePromptTemplate.value);
+                    customVoiceReferencePromptTemplate.value = normalizedVoiceReferencePrompt;
+                    // 保存通过 LLM 生成动态参考文本的完整 Prompt 模板。
+                    localStorage.setItem('storyforge_voice_reference_prompt_template', normalizedVoiceReferencePrompt);
                     // 保存是否启用动态参考文本链路。
                     localStorage.setItem('storyforge_use_dynamic_voice_reference_text', JSON.stringify(useDynamicVoiceReferenceText.value));
                     // 保存 Qwen 音色设计使用的固定参考文本模板。
