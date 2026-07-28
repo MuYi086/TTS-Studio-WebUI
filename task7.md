@@ -1,0 +1,11 @@
+这些conda环境你帮我删除:
+dots_tts
+longcat_audiodit
+moss-tts
+moss-tts-py310
+omnivoice
+seed_tts_eval
+seed_tts_sim
+对应删除当前项目对应这写conda环境的tts模型引用也一并处理，
+包括`~/github/TTS-and-VoiceDesign`项目中的使用和引用也清理干净
+然后告诉我conda环境中audio_eval,unitale-tts-local里面对应的是什么tts模型，在TTS-and-VoiceDesign和TTS-Studio-WebUI项目是否有使用到

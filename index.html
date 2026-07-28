@@ -241,7 +241,7 @@
                             <option value="indextts2">IndexTTS2（仅传音频与情绪向量）</option>
                             <option value="reference-text-clone">参考文本克隆（传 prompt_text）</option>
                         </select>
-                        <p class="mt-1 text-[10px] text-slate-400">官方默认端口会自动匹配：8300 使用 IndexTTS2，8301–8306 使用参考文本克隆。</p>
+                        <p class="mt-1 text-[10px] text-slate-400">官方默认端口会自动匹配：8300 使用 IndexTTS2，8305 与 8306 使用参考文本克隆。</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -1912,10 +1912,6 @@
                 // TTS-and-VoiceDesign 默认端口具有固定协议；用于修复旧配置被错误补成 IndexTTS2 的情况。
                 const TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT = Object.freeze({
                     '8300': TTS_PROTOCOLS.indextts2,
-                    '8301': TTS_PROTOCOLS.referenceTextClone,
-                    '8302': TTS_PROTOCOLS.referenceTextClone,
-                    '8303': TTS_PROTOCOLS.referenceTextClone,
-                    '8304': TTS_PROTOCOLS.referenceTextClone,
                     '8305': TTS_PROTOCOLS.referenceTextClone,
                     '8306': TTS_PROTOCOLS.referenceTextClone
                 });
@@ -1943,7 +1939,7 @@
                  * @returns {string} 受支持的协议标识
                  */
                 const normalizeTtsProtocol = (value, baseUrl = '') => {
-                    // 先纠正 8300–8306 的旧配置；未知端口才使用用户保存的协议。
+                    // 先纠正当前后端的默认端口配置；未知端口才使用用户保存的协议。
                     const inferredProtocol = inferTtsProtocolFromBaseUrl(baseUrl);
                     if (inferredProtocol) return inferredProtocol;
                     // 唯一显式保留的特殊值是参考文本克隆协议。

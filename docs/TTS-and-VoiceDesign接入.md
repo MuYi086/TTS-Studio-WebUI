@@ -1,6 +1,6 @@
 # TTS-and-VoiceDesign 接入
 
-本文只描述当前 WebUI 已调用的接口边界。模型路径、Conda（Python 环境管理工具）依赖与完整 API（应用程序接口）示例以 [后端 README](https://github.com/MuYi086/TTS-and-VoiceDesign/blob/main/README.md) 为准。
+本文只描述当前 WebUI 已调用的接口边界。模型路径、Conda（Python 环境管理工具）依赖与完整 API 示例以 [后端 README](https://github.com/MuYi086/TTS-and-VoiceDesign/blob/main/README.md) 为准。
 
 ## 启动与健康检查
 
@@ -9,9 +9,11 @@
 ```bash
 bash start.sh
 curl http://127.0.0.1:8300/v1/health
+curl http://127.0.0.1:8305/v1/health
+curl http://127.0.0.1:8306/v1/health
 ```
 
-默认启动 `8300` 至 `8306`，以及 `8311`。接入 TTS 时，服务需要兼容：
+接入 TTS 时，服务需要兼容：
 
 - `GET /v1/check/audio?file_name=...`
 - `POST /v1/upload_audio`
@@ -20,38 +22,26 @@ curl http://127.0.0.1:8300/v1/health
 | 服务 | 端口 | WebUI 协议 | 前端发送的合成关键字段 |
 | --- | ---: | --- | --- |
 | IndexTTS2 | `8300` | `indextts2` | `audio_path`、`text`、`emo_vector` |
-| dots.tts-base | `8301` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
-| LongCat-AudioDiT-1B | `8302` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
-| MOSS-TTS-Local-Transformer | `8303` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
-| OmniVoice | `8304` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
 | Qwen3-TTS-12Hz-1.7B-Base | `8305` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
 | VoxCPM2 | `8306` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
 
+WebUI 会按后端默认端口校正协议：`8300` 固定映射为 `indextts2`，`8305` 与 `8306` 固定映射为 `reference-text-clone`。未知端口继续尊重用户手动选择。
+
+## 台词合成中的参考文案
+
 “参考文本克隆”会读取角色音色的 `promptText`。该字段为空时，WebUI 会阻止合成并提示补充参考音频中实际说出的文字。
 
-WebUI 会按 TTS-and-VoiceDesign 的官方默认端口校正配置协议：`8300` 固定映射为 `indextts2`，`8301` 至 `8306` 固定映射为 `reference-text-clone`。因此旧 `localStorage` 配置即使曾因缺少 `protocol` 被补成 IndexTTS2，重新加载后也会按 `Base URL` 修正；未知端口继续尊重用户手动选择。
-
-### 台词合成中的参考文案
-
-脚本工作台点击单条台词的“生成音频”按钮时，`generateLineAudio` 会从角色当前绑定的音色记录读取参考文案，并按以下边界传递：
-
 1. 使用“参考文本克隆”协议时，参考文案为必填；每次台词合成都会从角色当前绑定的同一条音色记录取得 `audio_path` 与 `prompt_text`，并加入 `POST /v2/synthesize` 的 JSON 请求体。
-2. 自动补传参考音频时，WebUI 还会把参考文案作为表单字段提交给 `POST /v1/upload_audio`，供后端保存 sidecar。
+2. 自动补传参考音频时，WebUI 还会把参考文案作为表单字段提交给 `POST /v1/upload_audio`，供后端保存 sidecar（伴随音频保存的文本文件）。
 3. IndexTTS2 使用独立的 `indextts2` 协议，不读取或发送 `prompt_text`。
 
-对于支持参考文案的模型，后端以本次合成请求里的 `prompt_text` 为第一优先级，再回退到上传时保存的 sidecar（伴随音频保存的文本文件）。各服务最终处理方式如下：
+对于支持参考文案的模型，后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar。
 
 | 服务 | 后端对 `prompt_text` 的处理 |
 | --- | --- |
-| IndexTTS2 | 请求模型不声明该字段；官方 `IndexTTS2.infer` 克隆签名只使用 `spk_audio_prompt` |
-| dots.tts-base | 原样传给官方 `DotsTtsRuntime.generate(prompt_text=...)`；官方推荐参考音频与准确转写配对 |
-| LongCat-AudioDiT-1B | 原样传入并与目标文本拼接；缺失时可按后端配置自动转写 |
-| MOSS-TTS-Local-Transformer | 有文案时走官方 continuation 克隆（参考转写 + 目标文本 + 前缀音频）；缺失时保留 reference 音频克隆 |
-| OmniVoice | 映射为模型的 `ref_text`；缺失时可使用本地 ASR（自动语音识别） |
-| Qwen3-TTS-12Hz-1.7B-Base | 映射为官方 `ref_text`；缺失时退回 `x-vector-only`，音色克隆质量可能降低 |
-| VoxCPM2 | 同时传 `prompt_text`、`prompt_wav_path` 与 `reference_wav_path`，使用官方 Ultimate Cloning 路径 |
-
-能力依据均来自模型维护方资料：[IndexTTS2](https://github.com/index-tts/index-tts)、[dots.tts-base](https://huggingface.co/rednote-hilab/dots.tts-base)、[LongCat-AudioDiT](https://github.com/meituan-longcat/LongCat-AudioDiT)、[MOSS-TTS-Local-Transformer-v1.5](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5)、[OmniVoice](https://github.com/k2-fsa/OmniVoice)、[Qwen3-TTS Base](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base) 和 [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2)。
+| IndexTTS2 | 请求模型不声明该字段；官方克隆签名只使用参考音频。 |
+| Qwen3-TTS-12Hz-1.7B-Base | 映射为官方 `ref_text`；缺失时退回仅参考音频克隆。 |
+| VoxCPM2 | 同时传 `prompt_text`、`prompt_wav_path` 与 `reference_wav_path`，使用 Ultimate Cloning 路径。 |
 
 ## 音色设计
 
@@ -62,32 +52,10 @@ WebUI 会按 TTS-and-VoiceDesign 的官方默认端口校正配置协议：`8300
 | Qwen | `POST http://127.0.0.1:8300/v1/qwen/design` | `text`、`voice_description` |
 | MiMo | `POST http://127.0.0.1:8300/v1/mimo/design` | `text`、`voice_description` |
 
-角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：点击“生成参考文案”后，前端使用当前 LLM，根据角色名、音色描述和角色上下文生成文本并写入角色卡片的“参考文案”文本框；用户可以检查或编辑文本，再点击“生成音色”。系统默认 Prompt 要求结果为 26 至 32 个字符、优先为 30 个字符（汉字和标点均计数）；运行时会使用同一口径校验，不合格时携带程序实测字符数自动纠错，包含首次生成在内最多请求 3 次，仍不合格才使用经过相同校验的固定回退文案。“生成音色”不会再次调用 LLM，只把当时确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen 或 MiMo。多次点击生成时，WebUI 会以全局先进先出队列一次只请求一个音色设计接口；每项成功后立即写入音色库和角色卡片，再继续下一项。排队中的角色显示“排队中”，再次点击可取消该项；正在执行的角色仍可停止当前请求。
+角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：用户可以检查或编辑参考文案，再点击“生成音色”。生成音色不会再次调用 LLM，只把确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen 或 MiMo。
 
-### 跨模型通用的参考音频建议
-
-七个克隆模型没有共同发布同一套官方规范。综合各模型的明确建议和实现边界，WebUI 采用以下工程统一值：
-
-- 只使用已获得说话人授权并会明确标识为 AI 合成的素材。
-- 使用 5 至 10 秒的单人连续自然语音，并尽量接近 10 秒；片段应信息完整，不能通过拖长静音凑时长。
-- 优先保留无损 WAV（波形音频文件）母版；跨模型母版可使用 48 kHz、16-bit PCM（脉冲编码调制）、单声道，各后端 worker（工作进程）再按模型要求重采样，不能用升采样伪造高频信息。
-- 保持清晰、干净且只有一个说话人，避免重叠人声、背景音乐、明显环境噪声、强混响、削波、电子变声和过度降噪伪影；剪掉大段首尾静音，但保留完整起音和尾音。
-- 参考片段应体现目标口音、情绪、语速和力度；模型可能同时复制音色之外的韵律与口音。跨语言克隆应先用同语言参考建立基线。
-- 除不消费参考转写的 IndexTTS2 外，`promptText` 必须与音频逐字一致，包括语气词和重复，且不能写入没有实际读出的标签或说明。
-
-根据 22 至 24 个字符生成约 7 秒音频的实测反馈，默认动态参考文案调整为 26 至 32 个字符，并要求优先生成 30 个字符、安排一次自然逗号停顿；固定回退文案为 29 个字符。该范围以 7 至 10 秒为工程目标，同时为不同音色和语速保留余量。实际音色设计 WAV 时长仍会受所选模型、标点停顿和语速影响，生成后应试听并核对时长与保存的 `promptText` 是否逐字一致。
-
-返回音频会写入浏览器本地音色库，再按当前 TTS 配置同步。实际提交给音色设计接口的 `text` 会原样保存为角色的 `voicePromptText` 和音色的 `promptText`，供工程恢复与参考文本克隆使用；因此参考文案不得包含不会被念出的舞台说明、音频标签或 SSML（语音合成标记语言）。
-
-Prompt 管理继续兼容旧键 `storyforge_qwen_voice_text_template` 和 `storyforge_use_custom_qwen_voice_text`，并新增：
-
-- `storyforge_voice_reference_prompt_template`：角色专属参考文本的 LLM Prompt。
-- `storyforge_use_dynamic_voice_reference_text`：是否启用动态参考文本。
-
-加载、保存和发送动态参考文本 Prompt 时，WebUI 都会展开 `${voiceReferenceHardConstraints}`，把已保存的旧长度句迁移为当前范围，或在模板没有统一规则时自动补到末尾。因此旧 `localStorage` 中保存的系统模板和用户自定义主体都会保留，但实际 textarea 与 LLM 请求不再出现未展开的占位符，并始终包含 26 至 32 个字符、优先为 30 个字符的硬约束。LLM 返回后仍有独立长度和结构校验；不合格结果不会写入角色参考文案，而是触发最多两次纠错，全部失败后才写入合格的固定回退文案。
-
-旧版中已经启用自定义 Qwen 固定文本的用户，在首次升级且不存在新开关键时会继续使用固定模式；其他用户默认启用动态模式。未配置 LLM 时，动态模式会安全回退到固定文本。
+参考音频必须已获得说话人授权、清晰且仅含一位说话人；参考文案应与实际语音逐字一致，不能写入未朗读的舞台说明、音频标签或 SSML（语音合成标记语言）。生成的参考音频和文案保存在浏览器本地音色库，并作为后续克隆的对应材料。
 
 ## `8311` SoundEffect 状态
 
-后端 `8311` 提供 MOSS-SoundEffect v2.0 的 `POST /v1/generate`，请求结束后释放相应 worker 的模型与显存。当前 WebUI 没有该接口的客户端、配置或脚本工作流按钮：可以将独立生成的音效导入 SFX 素材库，但不能宣称 WebUI 已自动生成或自动编排该音效。
+后端 `8311` 提供 MOSS-SoundEffect v2.0 的 `POST /v1/generate`，请求结束后释放对应 worker 的模型与显存。当前 WebUI 没有该接口的客户端、配置或脚本工作流按钮：可以将独立生成的音效导入 SFX 素材库，但不能宣称 WebUI 已自动生成或自动编排该音效。
