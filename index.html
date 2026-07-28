@@ -833,8 +833,9 @@
                                     </button>
                                     <button @click="generateQwenVoice(char)"
                                         :disabled="char.isAnalyzing || char.isGeneratingVoicePrompt"
+                                        :title="char.isVoiceGenerationQueued ? '已加入生成队列；再次点击可取消排队' : ''"
                                         :class="['px-2 py-1.5 border rounded text-[10px] font-bold transition-colors flex justify-center items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed', char.isGeneratingVoice ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 'bg-pink-50 text-pink-600 border-pink-100 hover:bg-pink-100']">
-                                        <span v-if="char.isGeneratingVoice" class="animate-spin">⏳</span>{{ char.isGeneratingVoice ? '停止音色' : '生成音色' }}
+                                        <span v-if="char.isGeneratingVoice" class="animate-spin">⏳</span>{{ char.isGeneratingVoice ? (char.isVoiceGenerationQueued ? '排队中' : '停止音色') : '生成音色' }}
                                     </button>
                                 </div>
                             </div>
@@ -1907,6 +1908,10 @@
                 // 角色库状态
                 // 角色属于当前脚本，不是全局资源；切换脚本时会整体替换。
                 const characters = ref([]);
+                // 音色设计服务一次只能稳定处理一项任务；队列项保存点击时确认的输入和配置快照。
+                const voiceGenerationQueue = [];
+                // 仅由队列调度器维护，避免多次点击并发调用同一后端模型。
+                let isProcessingVoiceGenerationQueue = false;
 
                 // 音色库状态
                 // 音色库是工程级资源，多个脚本角色可通过 refPath/assetKey 复用。
@@ -2041,6 +2046,7 @@
                                 isAnalyzing,
                                 isGeneratingVoicePrompt,
                                 isGeneratingVoice,
+                                isVoiceGenerationQueued,
                                 voicePromptAbortController,
                                 abortController,
                                 ...rest
@@ -4126,33 +4132,18 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 /**
-                 * 使用用户确认的音色描述和参考文案生成参考音频，并同步到 TTS 服务与音色库。
+                 * 执行一项已排到队首的音色生成任务，并在成功后立即更新音色库与角色绑定。
                  *
-                 * 此阶段只消费角色当前的 `voiceDescription` 与 `voicePromptText`，不会再隐式调用 LLM。
+                 * 队列项在点击时固定输入和服务配置，避免等待期间的界面编辑或配置切换影响已确认任务。
                  *
-                 * @param {Object} char - 角色数据
+                 * @param {Object} job - 音色生成队列项
                  * @returns {Promise<void>} 生成、上传和本地保存流程结束后兑现
                 */
-                const generateQwenVoice = async (char) => {
-                    // 再次点击正在生成的角色时取消原任务。
-                    if (char.isGeneratingVoice) {
-                        if (char.abortController) char.abortController.abort();
-                        return;
-                    }
-
-                    // 防御模板之外的直接调用，确保文案请求不会在音色任务启动后覆盖输入。
-                    if (char.isGeneratingVoicePrompt) return alert('请先完成或停止参考文案生成任务');
-                    // 在任何异步操作前固定用户确认的两个输入，避免请求期间的界面改动造成数据错配。
-                    const voiceDescription = char.voiceDescription?.trim() || '';
-                    const textToUse = char.voicePromptText?.trim() || '';
-                    // 生成链路需要 TTS 服务用于回传参考音频、音色设计端点及两个非空输入。
-                    if (!currentTtsConfig.value) return alert('请先选择 TTS 服务');
-                    if (!selectedVoiceDesign.value?.url) return alert('请先选择音色模型');
-                    if (!voiceDescription) return alert('请先填写音色描述');
-                    if (!textToUse) return alert('请先生成或填写参考文案');
-
-                    // 标记角色级加载状态并记录耗时，用于生成失败提示。
-                    char.isGeneratingVoice = true;
+                const runVoiceGenerationJob = async (job) => {
+                    const { char, voiceDescription, textToUse, cfg, voiceDesign } = job;
+                    // 任务出队后改为执行中状态，模板会把按钮恢复为“停止音色”。
+                    char.isVoiceGenerationQueued = false;
+                    // 记录耗时，用于生成失败提示。
                     const startTime = Date.now();
                     // 同一个 signal 贯穿音色生成和上传两个网络阶段。
                     const controller = new AbortController();
@@ -4165,8 +4156,6 @@ ${voiceReferenceHardConstraints}`;
                     }, 1800000);
 
                     try {
-                        // 固定本次任务使用的 TTS 配置快照。
-                        const cfg = currentTtsConfig.value;
                         // TTS 配置允许用户填写到 /v1，本页需要服务根地址拼接多个端点。
                         let baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '');
                         if (baseUrl.endsWith('/v1')) baseUrl = baseUrl.slice(0, -3);
@@ -4177,12 +4166,12 @@ ${voiceReferenceHardConstraints}`;
                             text: textToUse
                         };
                         // 服务名用于构造可读文件名前缀；非法文件字符转为下划线。
-                        const designModelName = selectedVoiceDesign.value?.name || 'voice';
+                        const designModelName = voiceDesign.name || 'voice';
                         const filenamePrefix = designModelName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'voice';
 
                         // 1. 调用当前选择的音色模型生成音频
                         // no-store 防止浏览器缓存相同请求而复用旧音频。
-                        const genRes = await fetch(selectedVoiceDesign.value.url, {
+                        const genRes = await fetch(voiceDesign.url, {
                             // 音色设计服务使用 JSON POST 请求。
                             method: 'POST',
                             // 声明请求体为 JSON。
@@ -4311,8 +4300,93 @@ ${voiceReferenceHardConstraints}`;
                         // 结束时必须取消定时器，否则它会在 30 分钟后误取消新任务。
                         clearTimeout(timeoutId);
                         char.isGeneratingVoice = false;
+                        delete char.isVoiceGenerationQueued;
                         delete char.abortController;
                     }
+                };
+
+                /**
+                 * 顺序执行全局音色生成队列；任一任务失败或取消后仍继续下一项。
+                 * @returns {Promise<void>} 当前可见队列清空后兑现
+                */
+                const processVoiceGenerationQueue = async () => {
+                    // 已有调度器时由它继续消费新入队任务，不能再启动并行循环。
+                    if (isProcessingVoiceGenerationQueue) return;
+                    isProcessingVoiceGenerationQueue = true;
+
+                    try {
+                        // shift 始终取最早点击、仍未取消的任务，保证严格 FIFO 顺序。
+                        while (voiceGenerationQueue.length > 0) {
+                            const job = voiceGenerationQueue.shift();
+                            try {
+                                await runVoiceGenerationJob(job);
+                            } catch (error) {
+                                // 兜住任务执行中的意外异常，防止单项错误阻断后续队列。
+                                console.error('音色生成队列任务发生意外错误:', error);
+                                job.char.isGeneratingVoice = false;
+                                delete job.char.isVoiceGenerationQueued;
+                                delete job.char.abortController;
+                            }
+                        }
+                    } finally {
+                        isProcessingVoiceGenerationQueue = false;
+                    }
+                };
+
+                /**
+                 * 从尚未执行的音色生成队列中移除指定角色的任务。
+                 * @param {Object} char - 角色数据
+                 * @returns {boolean} 是否成功取消排队任务
+                */
+                const cancelQueuedVoiceGeneration = (char) => {
+                    const queueIndex = voiceGenerationQueue.findIndex(job => job.char === char);
+                    if (queueIndex === -1) return false;
+                    voiceGenerationQueue.splice(queueIndex, 1);
+                    char.isGeneratingVoice = false;
+                    delete char.isVoiceGenerationQueued;
+                    return true;
+                };
+
+                /**
+                 * 将用户确认的音色生成请求加入全局 FIFO 队列。
+                 *
+                 * 同一时刻只执行队首任务；每项成功后会立即写入页面和本地音色库，再开始下一项。
+                 *
+                 * @param {Object} char - 角色数据
+                 * @returns {void}
+                */
+                const generateQwenVoice = (char) => {
+                    // 再次点击排队中的角色时取消排队；执行中的角色仍按原行为中断请求。
+                    if (char.isGeneratingVoice) {
+                        if (char.isVoiceGenerationQueued && cancelQueuedVoiceGeneration(char)) return;
+                        if (char.abortController) char.abortController.abort();
+                        return;
+                    }
+
+                    // 防御模板之外的直接调用，确保文案请求不会在音色任务启动后覆盖输入。
+                    if (char.isGeneratingVoicePrompt) return alert('请先完成或停止参考文案生成任务');
+                    // 在入队前固定用户确认的两个输入，避免排队期间的界面改动造成数据错配。
+                    const voiceDescription = char.voiceDescription?.trim() || '';
+                    const textToUse = char.voicePromptText?.trim() || '';
+                    // 生成链路需要 TTS 服务用于回传参考音频、音色设计端点及两个非空输入。
+                    if (!currentTtsConfig.value) return alert('请先选择 TTS 服务');
+                    if (!selectedVoiceDesign.value?.url) return alert('请先选择音色模型');
+                    if (!voiceDescription) return alert('请先填写音色描述');
+                    if (!textToUse) return alert('请先生成或填写参考文案');
+
+                    // 角色保持加载状态以禁止修改请求输入；队列状态用于区分“排队中”和“执行中”。
+                    char.isGeneratingVoice = true;
+                    char.isVoiceGenerationQueued = true;
+                    // 服务配置与音色模型同样需要快照，确保队列内任务不会被之后的选择改写。
+                    voiceGenerationQueue.push({
+                        char,
+                        voiceDescription,
+                        textToUse,
+                        cfg: { ...currentTtsConfig.value },
+                        voiceDesign: { ...selectedVoiceDesign.value }
+                    });
+                    // 不等待队列清空；当前任务完成后 Vue 会立即渲染，再由调度器继续下一项。
+                    void processVoiceGenerationQueue();
                 };
 
 
