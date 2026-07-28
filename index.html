@@ -35,11 +35,11 @@
             color: #1f2937;
         }
 
-        /* 随机背景与毛玻璃特效 */
+        /* Bing 每日背景与毛玻璃特效 */
         body {
             background-color: #f1f5f9;
-            /* Fallback color */
-            background-image: url('https://picsum.photos/1920/1080');
+            /* 接口不可用或首次加载失败时保持本地渐变，不依赖随机第三方图片。 */
+            background-image: var(--app-background-image, linear-gradient(135deg, #dbeafe 0%, #f8fafc 48%, #e0e7ff 100%));
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -1790,6 +1790,99 @@
                 // 当前主标签页；默认进入脚本工作台。
                 const activeTab = ref('script');
 
+                // Bing 原始元数据接口不提供浏览器跨域读取所需的 CORS 响应头，因此使用只返回 Bing 图片 URL 的兼容中转。
+                const BING_DAILY_IMAGE_RELAY_URL = 'https://bing.biturl.top/?resolution=1920&format=json&index=0&mkt=zh-CN';
+                // 页面背景缓存与既有配置、工程存档分离，避免影响任何兼容键或 schema。
+                const BING_DAILY_BACKGROUND_DATE_KEY = 'storyforge_bing_daily_background_date';
+                const BING_DAILY_BACKGROUND_URL_KEY = 'storyforge_bing_daily_background_url';
+
+                /**
+                 * 获取浏览器本地时区的日期键，用于判断背景缓存是否属于今天。
+                 * @param {Date} [date=new Date()] - 用于计算的本地时间
+                 * @returns {string} YYYY-MM-DD 格式的本地日期
+                */
+                const getLocalDateKey = (date = new Date()) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                /**
+                 * 验证中转返回的是 HTTPS 的 Bing 图片地址，避免把未知地址写入 CSS。
+                 * @param {unknown} rawUrl - 接口返回的原始图片地址
+                 * @returns {string} 可安全用于页面背景的 Bing 图片地址；无效时为空字符串
+                */
+                const normalizeBingDailyImageUrl = (rawUrl) => {
+                    try {
+                        const imageUrl = new URL(String(rawUrl || ''));
+                        const isBingHost = /(^|\.)bing\.(com|net)$/i.test(imageUrl.hostname);
+                        return imageUrl.protocol === 'https:' && isBingHost ? imageUrl.href : '';
+                    } catch {
+                        return '';
+                    }
+                };
+
+                /**
+                 * 将图片 URL 写入全局 CSS 变量，使 body 背景立即更新。
+                 * @param {string} imageUrl - 已校验的 HTTPS Bing 图片地址
+                 * @returns {void}
+                */
+                const applyDailyBackgroundImage = (imageUrl) => {
+                    // URL 构造器会编码引号；仍转义反斜杠和双引号，保持 CSS url() 边界明确。
+                    const cssSafeUrl = imageUrl.replace(/[\\"]/g, '\\$&');
+                    document.body.style.setProperty('--app-background-image', `url("${cssSafeUrl}")`);
+                };
+
+                /**
+                 * 读取当天已缓存的 Bing 图片地址；过期、无效或无法访问 localStorage 时返回空值。
+                 * @returns {string} 当天缓存的图片 URL；不存在或无效时为空字符串
+                */
+                const getCachedBingDailyBackground = () => {
+                    try {
+                        if (localStorage.getItem(BING_DAILY_BACKGROUND_DATE_KEY) !== getLocalDateKey()) return '';
+                        return normalizeBingDailyImageUrl(localStorage.getItem(BING_DAILY_BACKGROUND_URL_KEY));
+                    } catch (error) {
+                        // 无痕模式、禁用存储等环境仍可继续在线获取，只是不使用缓存。
+                        console.warn('无法读取 Bing 每日背景缓存:', error);
+                        return '';
+                    }
+                };
+
+                /**
+                 * 首次打开或跨天时获取并缓存当天 Bing 图片；同一天则直接使用本地缓存。
+                 * @returns {Promise<void>} 缓存命中或网络请求处理完成后兑现
+                */
+                const initializeBingDailyBackground = async () => {
+                    const cachedImageUrl = getCachedBingDailyBackground();
+                    if (cachedImageUrl) {
+                        applyDailyBackgroundImage(cachedImageUrl);
+                        return;
+                    }
+
+                    try {
+                        // no-store 确保跨天后元数据请求不会复用浏览器的旧 JSON 响应。
+                        const response = await fetch(BING_DAILY_IMAGE_RELAY_URL, { cache: 'no-store' });
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        const payload = await response.json();
+                        const imageUrl = normalizeBingDailyImageUrl(payload?.url);
+                        if (!imageUrl) throw new Error('未返回有效的 Bing 图片地址');
+
+                        // 先应用新图片，再尽力缓存；存储异常不应影响当天背景展示。
+                        applyDailyBackgroundImage(imageUrl);
+                        try {
+                            // 先写 URL 再写日期；第二步失败时下次仍会按旧日期重新获取，避免旧 URL 被误标为今天。
+                            localStorage.setItem(BING_DAILY_BACKGROUND_URL_KEY, imageUrl);
+                            localStorage.setItem(BING_DAILY_BACKGROUND_DATE_KEY, getLocalDateKey());
+                        } catch (storageError) {
+                            console.warn('无法写入 Bing 每日背景缓存:', storageError);
+                        }
+                    } catch (error) {
+                        // 网络或中转异常时保留 CSS 渐变回退，不能阻塞主应用初始化。
+                        console.warn('获取 Bing 每日背景失败，继续使用本地回退背景:', error);
+                    }
+                };
+
                 // 标签切换立即写入旧版兼容键，刷新后可恢复用户所在页面。
                 watch(activeTab, (newValue) => {
                     localStorage.setItem('storyforge_activeTab', newValue);
@@ -3262,6 +3355,9 @@ ${voiceReferenceHardConstraints}`;
                 // 读取持久化配置
                 // 页面挂载后依次恢复轻量偏好和大型工程；此时模板与 DOM 引用已经可用。
                 onMounted(async () => {
+
+                     // 页面背景独立于工程恢复；同一天直接取 localStorage，跨天才请求当天 Bing 图片。
+                     void initializeBingDailyBackground();
 
                      // 仅保留 LLM 和 TTS 的配置持久化 (API Key 等)
                      // 第 1 阶段：恢复 LLM 列表，API Key 等敏感配置不进入可分享工程文件。
