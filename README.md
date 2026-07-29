@@ -43,16 +43,16 @@ bash start.sh
 | --- | --- | --- |
 | IndexTTS2 | `http://127.0.0.1:8300` | `IndexTTS2（仅传音频与情绪向量）` |
 | Qwen3-TTS-12Hz-1.7B-Base | `http://127.0.0.1:8305` | `参考文本克隆（传 prompt_text）` |
-| VoxCPM2 | `http://127.0.0.1:8306` | `参考文本克隆（传 prompt_text）` |
+| VoxCPM2 | `http://127.0.0.1:8306` | `VoxCPM2（极致 / 可控克隆）` |
 
 `8300` 还提供：
 
 - `POST /v1/qwen/design`
 - `POST /v1/mimo/design`
 
-参考文本克隆需要角色的参考音频文本。脚本台词生成会把当前绑定音色的准确参考文案作为 `prompt_text` 提交给对应克隆模型；IndexTTS2 的官方克隆接口不使用参考转写，继续只发送参考音频与情绪向量。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
+Qwen3-TTS 的参考文本克隆需要角色参考音频的准确文本。VoxCPM2 则在每条 `dialogue` 上保存 `clone_mode`、`delivery_profile` 和 `needs_review`：默认 `ultimate` + `baseline` 会提交准确的 `prompt_text`；选中非基线表演档位后切换到 `controllable`，提交受限的 `control_instruction`，且不发送 `prompt_text`。这两个 VoxCPM2 路径互斥，目的是保持音色克隆稳定，同时只在明确的表演节点改变节奏与表达，并不把它当作响度控制。IndexTTS2 继续只发送参考音频与情绪向量。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
 
-对于官方默认端口，WebUI 会自动校正协议：`8300` 使用 `indextts2`，`8305` 与 `8306` 使用 `reference-text-clone`。其他端口仍采用配置中手动选择的协议。
+对于官方默认端口，WebUI 会自动校正协议：`8300` 使用 `indextts2`，`8305` 使用 `reference-text-clone`，`8306` 使用 `voxcpm2`。其他端口仍采用配置中手动选择的协议。
 
 > 后端 `8311` 的 MOSS-SoundEffect 服务可独立生成音效；当前 WebUI 尚未调用该接口，现有 SFX 来自用户导入的本地素材库。
 

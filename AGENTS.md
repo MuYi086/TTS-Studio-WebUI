@@ -13,7 +13,7 @@
 
 ## 兼容性与职责
 
-改动存储、工程导入导出、模型调用或音频时间轴前，必须先读 [`webUI/P0-兼容性红线.md`](webUI/P0-兼容性红线.md)。不得破坏 `UnitaleDB`、旧 `localStorage` 键、工程 schema、资产键和 `dialogue` / `bgm` / `bgImage` 的时间轴语义。
+不得破坏 `UnitaleDB`、旧 `localStorage` 键、工程 schema、资产键和 `dialogue` / `bgm` / `bgImage` 的时间轴语义。
 
 当前应用仍集中在 `index.html`，修改时按“配置与 Prompt、存储兼容、模型调用、播放导出、页面展示”分区维护，不要把同一转换逻辑复制到多个函数。工程导入导出和 IndexedDB 兼容逻辑优先复用 `project-storage.js`，音色设计目录优先复用 `voice-design.js`。修改前先检查 `git status`，不得覆盖无关用户修改。
 

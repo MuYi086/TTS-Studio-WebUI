@@ -240,8 +240,9 @@
                             class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                             <option value="indextts2">IndexTTS2（仅传音频与情绪向量）</option>
                             <option value="reference-text-clone">参考文本克隆（传 prompt_text）</option>
+                            <option value="voxcpm2">VoxCPM2（极致 / 可控克隆）</option>
                         </select>
-                        <p class="mt-1 text-[10px] text-slate-400">官方默认端口会自动匹配：8300 使用 IndexTTS2，8305 与 8306 使用参考文本克隆。</p>
+                        <p class="mt-1 text-[10px] text-slate-400">官方默认端口会自动匹配：8300 使用 IndexTTS2，8305 使用参考文本克隆，8306 使用 VoxCPM2 双模式克隆。</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -1141,6 +1142,27 @@
                                         </select>
                                     </div>
 
+                                    <!-- VoxCPM2 克隆与表演计划：独立于 IndexTTS2 情绪向量，供逐句切换极致/可控克隆。 -->
+                                    <div class="w-40 flex-shrink-0 space-y-1 flex flex-col justify-center">
+                                        <select v-model="line.clone_mode" @change="updateCloneMode(line)"
+                                            class="w-full px-2 py-1.5 text-xs border rounded bg-indigo-50 focus:ring-1 focus:ring-indigo-500 outline-none text-indigo-700 font-bold"
+                                            title="VoxCPM2：极致克隆继承参考音频细节；可控克隆使用下方表演档位">
+                                            <option value="ultimate">Vox：极致克隆</option>
+                                            <option value="controllable">Vox：可控克隆</option>
+                                        </select>
+                                        <select v-model="line.delivery_profile" @change="updateDeliveryProfile(line)"
+                                            class="w-full px-2 py-1 text-[10px] border rounded bg-slate-50 focus:ring-1 focus:ring-indigo-500 outline-none text-slate-600"
+                                            title="可控克隆使用固定表演档位；选择非基线档位会自动切换为可控克隆">
+                                            <option v-for="profile in voxcpmDeliveryProfiles" :key="profile.value"
+                                                :value="profile.value">{{ profile.label }}</option>
+                                        </select>
+                                        <label class="flex items-center gap-1 text-[10px] text-amber-700 cursor-pointer" title="极端表演需在生成后人工试听">
+                                            <input v-model="line.needs_review" type="checkbox" :disabled="line.clone_mode !== 'controllable'"
+                                                class="w-3 h-3 rounded border-amber-300 text-amber-600 focus:ring-amber-500 disabled:opacity-40">
+                                            生成后需试听
+                                        </label>
+                                    </div>
+
                                     <!-- 停顿间隔 -->
                                     <div class="w-16 flex-shrink-0 space-y-1 flex flex-col justify-center">
                                         <div
@@ -1904,16 +1926,18 @@
                 const isEditing = ref(false);
 
                 // TTS 配置状态
-                // 两类前端协议决定 /v2/synthesize 使用 emo_vector 还是 prompt_text。
+                // 三类前端协议决定 /v2/synthesize 使用情绪向量、参考文本或 VoxCPM2 双模式克隆。
                 const TTS_PROTOCOLS = {
                     indextts2: 'indextts2',
-                    referenceTextClone: 'reference-text-clone'
+                    referenceTextClone: 'reference-text-clone',
+                    // VoxCPM2 同时支持极致克隆和可控克隆，因此不再与只传 prompt_text 的协议混为一类。
+                    voxcpm2: 'voxcpm2'
                 };
                 // TTS-and-VoiceDesign 默认端口具有固定协议；用于修复旧配置被错误补成 IndexTTS2 的情况。
                 const TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT = Object.freeze({
                     '8300': TTS_PROTOCOLS.indextts2,
                     '8305': TTS_PROTOCOLS.referenceTextClone,
-                    '8306': TTS_PROTOCOLS.referenceTextClone
+                    '8306': TTS_PROTOCOLS.voxcpm2
                 });
                 /**
                  * 根据 TTS-and-VoiceDesign 的默认端口推断合成协议。
@@ -1942,10 +1966,10 @@
                     // 先纠正当前后端的默认端口配置；未知端口才使用用户保存的协议。
                     const inferredProtocol = inferTtsProtocolFromBaseUrl(baseUrl);
                     if (inferredProtocol) return inferredProtocol;
-                    // 唯一显式保留的特殊值是参考文本克隆协议。
-                    return value === TTS_PROTOCOLS.referenceTextClone
+                    // Qwen 参考文本克隆和 VoxCPM2 的两种克隆模式都需显式保留。
+                    return [TTS_PROTOCOLS.referenceTextClone, TTS_PROTOCOLS.voxcpm2].includes(value)
                         // 命中时返回规范常量。
-                        ? TTS_PROTOCOLS.referenceTextClone
+                        ? value
                         // 任何旧值、空值或未知值都回退到 IndexTTS2。
                         : TTS_PROTOCOLS.indextts2;
                 };
@@ -1955,7 +1979,63 @@
                  * @returns {boolean} 是否使用参考文本克隆协议
                  */
                 const usesReferenceText = (config) =>
-                    normalizeTtsProtocol(config?.protocol, config?.baseUrl) === TTS_PROTOCOLS.referenceTextClone;
+                    [TTS_PROTOCOLS.referenceTextClone, TTS_PROTOCOLS.voxcpm2]
+                        .includes(normalizeTtsProtocol(config?.protocol, config?.baseUrl));
+                /** 判断当前 TTS 配置是否为支持逐句表演计划的 VoxCPM2 服务。 */
+                const usesVoxCpm2 = (config) =>
+                    normalizeTtsProtocol(config?.protocol, config?.baseUrl) === TTS_PROTOCOLS.voxcpm2;
+                /** 只有 VoxCPM2 的极致克隆需要 prompt_text；可控克隆必须省略它。 */
+                const shouldSendPromptText = (config, line) =>
+                    usesReferenceText(config)
+                    && (!usesVoxCpm2(config) || line?.clone_mode !== 'controllable');
+
+                // VoxCPM2 的表演档位是固定词表；避免把 LLM 任意生成的长提示直接传给模型。
+                const VOXCPM_DELIVERY_PROFILES = Object.freeze([
+                    { value: 'baseline', label: '默认基线（极致）' },
+                    { value: 'suspense', label: '克制悬疑' },
+                    { value: 'fear', label: '恐惧发现' },
+                    { value: 'urgent', label: '危机急促' },
+                    { value: 'restrained', label: '压抑收束' }
+                ]);
+                const VOXCPM_CONTROL_INSTRUCTIONS = Object.freeze({
+                    suspense: '克制紧张，略慢，关键处停顿，吐字清晰',
+                    fear: '呼吸稍紧，短句清楚，声音收束但不耳语',
+                    urgent: '短促有力，节奏略快，重音明确但不喊叫',
+                    restrained: '情绪内收，略慢，句尾收束，吐字清晰'
+                });
+                const getNormalizedVoxCpmPlan = (line) => {
+                    const requestedProfile = VOXCPM_DELIVERY_PROFILES.some(item => item.value === line?.delivery_profile)
+                        ? line.delivery_profile
+                        : 'baseline';
+                    const controllable = line?.clone_mode === 'controllable' && requestedProfile !== 'baseline';
+                    return {
+                        clone_mode: controllable ? 'controllable' : 'ultimate',
+                        delivery_profile: controllable ? requestedProfile : 'baseline',
+                        needs_review: controllable && line?.needs_review === true
+                    };
+                };
+                /** 将导入、LLM 返回或用户编辑的台词计划收敛为可安全请求 VoxCPM2 的固定状态。 */
+                const normalizeVoxCpmLinePlan = (line) => {
+                    if (!line) return;
+                    Object.assign(line, getNormalizedVoxCpmPlan(line));
+                };
+                /** 用户切换克隆模式时同步保持有效的档位组合。 */
+                const updateCloneMode = (line) => {
+                    if (!line) return;
+                    if (line.clone_mode === 'controllable' && line.delivery_profile === 'baseline') {
+                        line.delivery_profile = 'suspense';
+                    }
+                    normalizeVoxCpmLinePlan(line);
+                };
+                /** 选择非基线表演档位即进入可控克隆；回到基线则恢复极致克隆。 */
+                const updateDeliveryProfile = (line) => {
+                    if (!line) return;
+                    line.clone_mode = line.delivery_profile === 'baseline' ? 'ultimate' : 'controllable';
+                    normalizeVoxCpmLinePlan(line);
+                };
+                /** 为可控克隆构造官方约定的短自然语言 Control Instruction。 */
+                const buildVoxCpmControlInstruction = (line) =>
+                    VOXCPM_CONTROL_INSTRUCTIONS[getNormalizedVoxCpmPlan(line).delivery_profile] || '';
                 /**
                  * 获取 TTS 协议的界面说明文字。
                  * @param {string} protocol - 协议标识
@@ -1967,8 +2047,10 @@
                     normalizeTtsProtocol(protocol, baseUrl) === TTS_PROTOCOLS.referenceTextClone
                         // 参考文本协议会向后端传 prompt_text。
                         ? '参考文本克隆（传 prompt_text）'
+                        : normalizeTtsProtocol(protocol, baseUrl) === TTS_PROTOCOLS.voxcpm2
+                            ? 'VoxCPM2（极致 / 可控克隆）'
                         // 默认协议只需要参考音频和情绪向量。
-                        : 'IndexTTS2（仅传音频与情绪向量）';
+                            : 'IndexTTS2（仅传音频与情绪向量）';
                 // 用户维护的 TTS 服务配置列表。
                 const ttsConfigs = ref([]);
                 // TTS 新增/编辑共用表单，默认使用 IndexTTS2 协议。
@@ -2005,7 +2087,7 @@
                 // 音色库状态
                 // 音色库是工程级资源，多个脚本角色可通过 refPath/assetKey 复用。
                 const timbres = ref([]);
-                // promptText 是参考音频真实说出的文字，参考文本克隆协议必须使用。
+                // promptText 是参考音频真实说出的文字，Qwen 与 VoxCPM2 极致克隆需要使用。
                 const timbreForm = ref({ id: '', name: '', description: '', promptText: '', refPath: '', assetKey: '' });
                 // 控制音色表单提交时新增还是覆盖已有记录。
                 const isEditingTimbre = ref(false);
@@ -2388,6 +2470,21 @@
    - 请根据上下文判断情绪的强烈程度。
    - **旁白强度**: 如果旁白有情绪（如伤心、害怕），强度必须很弱（建议选择 "微弱" 或 "稍弱"）。如果旁白是 "平静" 情绪，强度应为 "中等"。
 
+# VoxCPM2 克隆与表演计划
+仅为每个 type="dialogue" 对象额外输出以下字段；它们独立于 emotion 与 intensity，不能互相替代：
+
+- \`clone_mode\`: 只能为 \`"ultimate"\` 或 \`"controllable"\`。
+- \`delivery_profile\`: 只能为 \`"baseline"\`、\`"suspense"\`、\`"fear"\`、\`"urgent"\`、\`"restrained"\`。
+- \`needs_review\`: 布尔值；仅在极端或非语言表演需要生成后人工试听时为 \`true\`。
+
+决策规则：
+1. 默认使用 \`"ultimate"\` + \`"baseline"\`。不得仅因文本属于悬疑、惊悚，或 emotion 不是“平静”而切换可控模式。
+2. 仅当该句或紧邻的说话人提示明确要求改变角色默认表演方式，例如低声、发抖、咬牙、急促、强忍、突然提高语气、停顿后说，才使用 \`"controllable"\`。
+3. 低声、恐惧与紧张不等于绝对音量变小；优先通过克制、节奏、停顿和清晰咬字表现。除非原文明示，不要规划为耳语、喊叫或持续极端音量。
+4. 出现耳语、尖叫、哭喊、明显喘息、笑声或其他非语言表演时，使用 \`"controllable"\`，并将 \`needs_review\` 设为 \`true\`。
+5. 同一角色在连续同一表演节拍中的相邻台词，应保持相同的 \`clone_mode\` 和 \`delivery_profile\`；当表演目标变化时，应在自然语义边界拆分台词。
+6. 说话人提示语必须仍作为旁白保留，但其中的表演线索应同步用于规划相邻角色台词，不得写入 \`text_content\`。
+
 # 规则
 
 ## 1. 拆分与识别
@@ -2434,7 +2531,7 @@
 ## 6. 输出格式
 - **严格 JSON**: 输出格式必须是严格的 JSON 数组，不包含任何额外说明或代码块标记。
 - **数组元素**: 必须是以下两种对象之一：
-  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "...", "emotion": "...", "intensity": "...", "break_duration": 0, "filter": "...", "sfx": [...]}\`
+  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "...", "emotion": "...", "intensity": "...", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0, "filter": "...", "sfx": [...]}\`
   2. **BGM对象**: \`{"type": "bgm", "action": "play", "name": "..."}\` 或 \`{"type": "bgm", "action": "stop"}\`
   - **严禁生成** \`{"type": "sfx", ...}\` 这种独立音效块。音效必须包含在台词对象的 \`sfx\` 字段中。
 
@@ -2469,14 +2566,14 @@
 ## 输出:
 [
 \${bgmExampleLine}
-  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion": "害怕", "intensity": "强烈", "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "平静", "intensity": "中等", "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion": "害怕", "intensity": "较强", "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "平静", "intensity": "中等", "break_duration": 0\${sfxExample}},
-  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion": "惊喜", "intensity": "微弱", "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion": "低落", "intensity": "中等", "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "平静", "intensity": "中等", "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion": "害怕", "intensity": "强烈", "break_duration": 0}
+  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion": "害怕", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "urgent", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion": "害怕", "intensity": "较强", "clone_mode": "controllable", "delivery_profile": "suspense", "needs_review": false, "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0\${sfxExample}},
+  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion": "害怕", "intensity": "微弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion": "害怕", "intensity": "稍弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion": "害怕", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0}
 ]
 
 # 输入内容
@@ -4309,7 +4406,7 @@ ${voiceReferenceHardConstraints}`;
                         const formData = new FormData();
                         formData.append('audio', file);
                         formData.append('full_path', filename);
-                        // 参考文本克隆协议必须把音频真实文本与文件一起保存到后端。
+                        // Qwen 与 VoxCPM2 极致克隆会使用音频真实文本；同步上传时保留 sidecar 以兼容后端。
                         if (usesReferenceText(cfg)) {
                             formData.append('prompt_text', textToUse);
                         }
@@ -4535,7 +4632,7 @@ ${voiceReferenceHardConstraints}`;
                     // 归一化服务根地址，后续拼接 /v1 接口。
                     let baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '');
                     if (baseUrl.endsWith('/v1')) baseUrl = baseUrl.slice(0, -3);
-                    // 仅参考文本克隆服务关心 promptText。
+                    // Qwen 与 VoxCPM2 的极致克隆会使用 promptText；同步时一并补传 sidecar。
                     const includePromptText = usesReferenceText(cfg);
                     console.log(`正在同步音色文件到服务器: ${baseUrl}`);
 
@@ -5174,6 +5271,8 @@ ${voiceReferenceHardConstraints}`;
                         }
                         // 合成前刷新角色 assetKey 和 promptText。
                         syncCharacterVoiceSelection(char);
+                        // 台词计划来自 LLM、工程恢复或手工编辑；请求前再次收敛，避免非法组合进入后端。
+                        normalizeVoxCpmLinePlan(line);
                         // audio_path 与 prompt_text 必须从同一份角色绑定音色记录取得。
                         const synthesisReference = resolveCharacterSynthesisReference(char);
                         if (!synthesisReference.audioPath) {
@@ -5199,8 +5298,11 @@ ${voiceReferenceHardConstraints}`;
 
                         // 固定本次任务的 TTS 配置，并判断协议分支。
                         const cfg = currentTtsConfig.value;
-                        const includePromptText = usesReferenceText(cfg);
-                        // 只有参考文本克隆协议读取音色真实文本。
+                        const isVoxCpm2 = usesVoxCpm2(cfg);
+                        const isVoxCpm2Controllable = isVoxCpm2 && line.clone_mode === 'controllable';
+                        // Qwen 始终使用参考转写；VoxCPM2 只有极致克隆才发送 prompt_text。
+                        const includePromptText = shouldSendPromptText(cfg, line);
+                        // 只有需要参考转写的协议读取音色真实文本。
                         const promptText = includePromptText ? synthesisReference.promptText : '';
                         if (includePromptText && !promptText) {
                             throw new Error(`TTS 配置「${cfg.name}」需要参考音频文本，请在绑定音色中填写。`);
@@ -5210,9 +5312,23 @@ ${voiceReferenceHardConstraints}`;
                             text: line.text,
                             audio_path: synthesisReference.audioPath
                         };
-                        // 协议互斥：克隆服务收 prompt_text，IndexTTS2 收 emo_vector。
-                        if (includePromptText) payload.prompt_text = promptText;
-                        else payload.emo_vector = finalVector;
+                        // Qwen 的参考文本克隆固定传 prompt_text；VoxCPM2 在两种官方模式间显式切换。
+                        if (isVoxCpm2) {
+                            payload.clone_mode = isVoxCpm2Controllable ? 'controllable' : 'ultimate';
+                            if (isVoxCpm2Controllable) {
+                                const controlInstruction = buildVoxCpmControlInstruction(line);
+                                if (!controlInstruction) {
+                                    throw new Error('VoxCPM2 可控克隆需要选择非“默认基线”的表演档位。');
+                                }
+                                payload.control_instruction = controlInstruction;
+                            } else {
+                                payload.prompt_text = promptText;
+                            }
+                        } else if (includePromptText) {
+                            payload.prompt_text = promptText;
+                        } else {
+                            payload.emo_vector = finalVector;
+                        }
 
                         // 归一化服务根地址，用于 check、upload 和 synthesize 三个端点。
                         let baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '');
@@ -7047,6 +7163,10 @@ ${voiceReferenceHardConstraints}`;
                         // 默认情绪与强度可直接映射到当前情绪预设。
                         emotion: '平静',
                         intensity: '中等',
+                        // 手动拆分不推断表演，默认使用参考文本驱动的极致克隆基线。
+                        clone_mode: 'ultimate',
+                        delivery_profile: 'baseline',
+                        needs_review: false,
                         // 空名称表示不应用音频滤镜。
                         filter: '',
                         // 保存当前切分得到的原文句段。
@@ -7135,6 +7255,10 @@ ${voiceReferenceHardConstraints}`;
                         // 默认使用平静、中等的情绪组合。
                         emotion: '平静',
                         intensity: '中等',
+                        // 手动新增台词沿用最安全的 VoxCPM2 极致克隆基线。
+                        clone_mode: 'ultimate',
+                        delivery_profile: 'baseline',
+                        needs_review: false,
                         // 空滤镜名称表示保持原始合成声音。
                         filter: '',
                         // 文本留空等待用户输入。
@@ -8327,12 +8451,19 @@ ${voiceReferenceHardConstraints}`;
                                     matchedBgmName = findBestMatch(rawName, bgmLibrary.value) || rawName;
                                 }
 
+                                // 缺失 type 时会按 dialogue 处理，因此克隆计划也必须沿用同一默认值。
+                                const lineType = item.type || 'dialogue';
+                                // 仅 dialogue 使用的 VoxCPM2 计划在此统一校验；BGM/bgImage 仍保留安全基线字段但不会进入合成。
+                                const voxcpmPlan = lineType === 'dialogue'
+                                    ? getNormalizedVoxCpmPlan(item)
+                                    : { clone_mode: 'ultimate', delivery_profile: 'baseline', needs_review: false };
+
                                 // 返回页面时间轴要求的完整块对象，覆盖三类块的字段超集。
                                 return {
                                     // 每个模型项获得稳定的运行时块 ID。
                                     id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                                     // 缺少 type 时按最常见的 dialogue 处理。
-                                    type: item.type || 'dialogue',
+                                    type: lineType,
                                     // 兼容模型输出的两种角色字段，并为缺失值使用旁白。
                                     role: item.role_name || item.role || '旁白',
                                     // 兼容 text_content、text 和 content 三种正文命名。
@@ -8340,6 +8471,10 @@ ${voiceReferenceHardConstraints}`;
                                     // 情绪和强度缺失时使用当前产品默认值。
                                     emotion: item.emotion || '平静',
                                     intensity: item.intensity || '中等',
+                                    // 逐句 VoxCPM2 克隆与表演计划；默认极致克隆，旧 LLM 输出同样安全兼容。
+                                    clone_mode: voxcpmPlan.clone_mode,
+                                    delivery_profile: voxcpmPlan.delivery_profile,
+                                    needs_review: voxcpmPlan.needs_review,
                                     // 使用上面匹配出的规范滤镜名。
                                     filter: matchedFilter,
                                     // 保存已规范化的行内音效数组。
@@ -8662,9 +8797,9 @@ ${voiceReferenceHardConstraints}`;
                             throw new Error(`服务端未找到音频 "${ttsRefPath.value}"，且未选择本地文件进行上传。`);
                         }
 
-                        // 旧测试表单没有参考文本输入，因此不支持 reference-text-clone 协议。
+                        // 旧测试表单没有参考文案或 VoxCPM2 模式选择，因此不支持这些克隆协议。
                         if (usesReferenceText(cfg)) {
-                            throw new Error('参考文本克隆请在脚本工作台中使用已绑定的音色；此测试工具未提供参考音频文本输入。');
+                            throw new Error('参考文本克隆与 VoxCPM2 双模式克隆请在脚本工作台中使用已绑定的音色；此测试工具未提供参考文案或表演档位。');
                         }
 
                         // 构造 IndexTTS2 v2 合成协议所需的文本、音频路径与情绪文本。
@@ -8876,6 +9011,9 @@ ${voiceReferenceHardConstraints}`;
 
                     // 可分配角色、当前试听 ID，以及单条音频生成/试听/清理入口。
                     availableRoles, isAuditioningId, generateLineAudio, playLineAudio, clearLineAudio,
+                    // 台词级 VoxCPM2 极致/可控克隆计划与用户覆盖操作。
+                    voxcpmDeliveryProfiles: VOXCPM_DELIVERY_PROFILES,
+                    updateCloneMode, updateDeliveryProfile,
 
                     // 资源库预览播放器状态与统一预览键函数。
                     playPreview, previewPlayingFile, getPreviewTrackKey,

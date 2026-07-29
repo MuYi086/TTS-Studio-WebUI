@@ -23,25 +23,27 @@ curl http://127.0.0.1:8306/v1/health
 | --- | ---: | --- | --- |
 | IndexTTS2 | `8300` | `indextts2` | `audio_path`、`text`、`emo_vector` |
 | Qwen3-TTS-12Hz-1.7B-Base | `8305` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
-| VoxCPM2 | `8306` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
+| VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`clone_mode`，再二选一传 `prompt_text` 或 `control_instruction` |
 
-WebUI 会按后端默认端口校正协议：`8300` 固定映射为 `indextts2`，`8305` 与 `8306` 固定映射为 `reference-text-clone`。未知端口继续尊重用户手动选择。
+WebUI 会按后端默认端口校正协议：`8300` 固定映射为 `indextts2`，`8305` 固定映射为 `reference-text-clone`，`8306` 固定映射为 `voxcpm2`。未知端口继续尊重用户手动选择。
 
-## 台词合成中的参考文案
+## 台词合成中的参考文案与 VoxCPM2 表演计划
 
-“参考文本克隆”会读取角色音色的 `promptText`。该字段为空时，WebUI 会阻止合成并提示补充参考音频中实际说出的文字。
+Qwen3-TTS 的“参考文本克隆”会读取角色音色的 `promptText`。该字段为空时，WebUI 会阻止合成并提示补充参考音频中实际说出的文字。
 
-1. 使用“参考文本克隆”协议时，参考文案为必填；每次台词合成都会从角色当前绑定的同一条音色记录取得 `audio_path` 与 `prompt_text`，并加入 `POST /v2/synthesize` 的 JSON 请求体。
+1. 使用 `reference-text-clone` 协议时，参考文案为必填；每次台词合成都会从角色当前绑定的同一条音色记录取得 `audio_path` 与 `prompt_text`，并加入 `POST /v2/synthesize` 的 JSON 请求体。
 2. 自动补传参考音频时，WebUI 还会把参考文案作为表单字段提交给 `POST /v1/upload_audio`，供后端保存 sidecar（伴随音频保存的文本文件）。
-3. IndexTTS2 使用独立的 `indextts2` 协议，不读取或发送 `prompt_text`。
+3. VoxCPM2 的每条台词保存 `clone_mode`（`ultimate` 或 `controllable`）、`delivery_profile`（`baseline`、`suspense`、`fear`、`urgent`、`restrained`）与 `needs_review`。`ultimate` + `baseline` 要求准确参考文案并发送 `prompt_text`；非基线档位会切换为 `controllable`，发送固定词表生成的 `control_instruction`，且不发送 `prompt_text`。
+4. `needs_review` 只是极端或非语言表演的人工试听标记，不参与模型参数。`delivery_profile` 只控制表演方式，不保证或直接设定最终响度；成片响度仍应在合成后统一检测和归一化。
+5. IndexTTS2 使用独立的 `indextts2` 协议，不读取或发送 `prompt_text`。
 
-对于支持参考文案的模型，后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar。
+Qwen3-TTS 和 VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar；VoxCPM2 可控克隆不会读取或传递 sidecar。
 
 | 服务 | 后端对 `prompt_text` 的处理 |
 | --- | --- |
 | IndexTTS2 | 请求模型不声明该字段；官方克隆签名只使用参考音频。 |
 | Qwen3-TTS-12Hz-1.7B-Base | 映射为官方 `ref_text`；缺失时退回仅参考音频克隆。 |
-| VoxCPM2 | 同时传 `prompt_text`、`prompt_wav_path` 与 `reference_wav_path`，使用 Ultimate Cloning 路径。 |
+| VoxCPM2 | `clone_mode="ultimate"` 同时传 `prompt_text`、`prompt_wav_path` 与 `reference_wav_path`，使用 Ultimate Cloning；`clone_mode="controllable"` 只传 `reference_wav_path`，将 `control_instruction` 编码在目标文本前。两种路径互斥。 |
 
 ## 音色设计
 

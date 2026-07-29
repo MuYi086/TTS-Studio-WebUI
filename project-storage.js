@@ -1,7 +1,9 @@
 (function (global) {
     const PROJECT_KIND = 'unitale-project';
-    const PROJECT_SCHEMA_VERSION = 3;
-    const PROJECT_VERSION_LABEL = '3.0';
+    const PROJECT_SCHEMA_VERSION = 4;
+    const PROJECT_VERSION_LABEL = '4.0';
+    const VOXCPM_CLONE_MODES = new Set(['ultimate', 'controllable']);
+    const VOXCPM_DELIVERY_PROFILES = new Set(['baseline', 'suspense', 'fear', 'urgent', 'restrained']);
 
     function cloneData(value) {
         if (value === undefined) return undefined;
@@ -160,6 +162,15 @@
     function normalizeDialogueLine(line, id) {
         const source = line && typeof line === 'object' ? cloneData(line) : {};
         const trim = normalizeTrimRange(source, 0, 1);
+        const deliveryProfile = VOXCPM_DELIVERY_PROFILES.has(source.delivery_profile)
+            ? source.delivery_profile
+            : 'baseline';
+        // 旧工程无计划字段时始终落到高保真的极致克隆基线，避免导入后意外改变朗读方式。
+        const cloneMode = VOXCPM_CLONE_MODES.has(source.clone_mode)
+            && source.clone_mode === 'controllable'
+            && deliveryProfile !== 'baseline'
+            ? 'controllable'
+            : 'ultimate';
 
         return {
             ...source,
@@ -169,6 +180,11 @@
             text: source.text_content || source.text || source.content || '',
             emotion: source.emotion || '平静',
             intensity: source.intensity || '中等',
+            // VoxCPM2 表演计划独立于 IndexTTS2 的 emotion / intensity，不能混用两者的语义。
+            clone_mode: cloneMode,
+            delivery_profile: cloneMode === 'controllable' ? deliveryProfile : 'baseline',
+            // 极端表演只做人工试听标记，不会改变模型请求参数。
+            needs_review: cloneMode === 'controllable' && source.needs_review === true,
             filter: source.filter || '',
             sfx: ensureArray(source.sfx).map((item) => ({
                 name: item && item.name ? item.name : '',
