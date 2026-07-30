@@ -3,7 +3,12 @@
     const PROJECT_SCHEMA_VERSION = 4;
     const PROJECT_VERSION_LABEL = '4.0';
     const VOXCPM_CLONE_MODES = new Set(['ultimate', 'controllable']);
-    const VOXCPM_DELIVERY_PROFILES = new Set(['baseline', 'suspense', 'fear', 'urgent', 'restrained']);
+    const VOXCPM_DELIVERY_PROFILES = new Set(['baseline', 'expressive', 'suspense', 'fear', 'urgent', 'restrained']);
+    // VoxCPM2 官方支持的非语言标签；工程中只保存标签名，后端统一负责拼接为 [tag]。
+    const VOXCPM_NONVERBAL_TAGS = new Set([
+        'laughing', 'sigh', 'Uhm', 'Shh', 'Question-ah', 'Question-ei',
+        'Question-en', 'Question-oh', 'Surprise-wa', 'Surprise-yo', 'Dissatisfaction-hnn'
+    ]);
 
     function cloneData(value) {
         if (value === undefined) return undefined;
@@ -64,6 +69,20 @@
         });
 
         return { byPath, byName };
+    }
+
+    /**
+     * 规范化台词的 VoxCPM2 非语言标签。
+     * 兼容导入时的字符串/数组输入，但只保留官方白名单中的第一个标签，避免模型目标文本出现多个标签。
+     * @param {unknown} value 原始标签
+     * @returns {string[]} 长度为 0 或 1 的官方标签数组
+     */
+    function normalizeVoxCpmNonverbalTags(value) {
+        const candidates = Array.isArray(value) ? value : (typeof value === 'string' ? [value] : []);
+        const validTag = candidates
+            .map((item) => typeof item === 'string' ? item.trim() : '')
+            .find((item) => VOXCPM_NONVERBAL_TAGS.has(item));
+        return validTag ? [validTag] : [];
     }
 
     function normalizeLibraryItem(kind, item) {
@@ -162,15 +181,20 @@
     function normalizeDialogueLine(line, id) {
         const source = line && typeof line === 'object' ? cloneData(line) : {};
         const trim = normalizeTrimRange(source, 0, 1);
+        const nonverbalTags = normalizeVoxCpmNonverbalTags(source.voxcpm_nonverbal_tags);
         const deliveryProfile = VOXCPM_DELIVERY_PROFILES.has(source.delivery_profile)
             ? source.delivery_profile
             : 'baseline';
         // 旧工程无计划字段时始终落到高保真的极致克隆基线，避免导入后意外改变朗读方式。
-        const cloneMode = VOXCPM_CLONE_MODES.has(source.clone_mode)
+        const cloneMode = nonverbalTags.length > 0
+            || (VOXCPM_CLONE_MODES.has(source.clone_mode)
             && source.clone_mode === 'controllable'
-            && deliveryProfile !== 'baseline'
+            && deliveryProfile !== 'baseline')
             ? 'controllable'
             : 'ultimate';
+        const resolvedDeliveryProfile = cloneMode === 'controllable'
+            ? (deliveryProfile === 'baseline' ? 'expressive' : deliveryProfile)
+            : 'baseline';
 
         return {
             ...source,
@@ -182,9 +206,10 @@
             intensity: source.intensity || '中等',
             // VoxCPM2 表演计划独立于 IndexTTS2 的 emotion / intensity，不能混用两者的语义。
             clone_mode: cloneMode,
-            delivery_profile: cloneMode === 'controllable' ? deliveryProfile : 'baseline',
+            delivery_profile: resolvedDeliveryProfile,
+            voxcpm_nonverbal_tags: nonverbalTags,
             // 极端表演只做人工试听标记，不会改变模型请求参数。
-            needs_review: cloneMode === 'controllable' && source.needs_review === true,
+            needs_review: cloneMode === 'controllable' && (source.needs_review === true || nonverbalTags.length > 0),
             filter: source.filter || '',
             sfx: ensureArray(source.sfx).map((item) => ({
                 name: item && item.name ? item.name : '',
@@ -358,10 +383,12 @@
         PROJECT_KIND,
         PROJECT_SCHEMA_VERSION,
         PROJECT_VERSION_LABEL,
+        VOXCPM_NONVERBAL_TAGS: Array.from(VOXCPM_NONVERBAL_TAGS),
         cloneData,
         createId,
         sanitizeFilename,
         createAssetKey,
+        normalizeVoxCpmNonverbalTags,
         normalizeProjectEnvelope,
         stripRuntimeProjectEnvelope
     };

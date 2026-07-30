@@ -19,31 +19,21 @@ curl http://127.0.0.1:8306/v1/health
 - `POST /v1/upload_audio`
 - `POST /v2/synthesize`
 
-| 服务 | 端口 | WebUI 协议 | 前端发送的合成关键字段 |
+| 当前 WebUI 合成服务 | 端口 | WebUI 协议 | 前端发送的合成关键字段 |
 | --- | ---: | --- | --- |
-| IndexTTS2 | `8300` | `indextts2` | `audio_path`、`text`、`emo_vector` |
-| Qwen3-TTS-12Hz-1.7B-Base | `8305` | `reference-text-clone` | `audio_path`、`text`、`prompt_text` |
-| VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`clone_mode`，再二选一传 `prompt_text` 或 `control_instruction` |
+| VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`clone_mode`，再二选一传 `prompt_text` 或 `control_instruction`，以及 `nonverbal_tags` |
 
-WebUI 会按后端默认端口校正协议：`8300` 固定映射为 `indextts2`，`8305` 固定映射为 `reference-text-clone`，`8306` 固定映射为 `voxcpm2`。未知端口继续尊重用户手动选择。
+WebUI 新建 TTS 配置固定为 `voxcpm2`。`8300` 与 `8305` 的历史配置会保留在浏览器中，但不出现在当前合成选择器、不可编辑且绝不会被调用；页面不会把它们静默改为 `8306`。后端仍保留这些服务，供其自身兼容场景使用。
 
 ## 台词合成中的参考文案与 VoxCPM2 表演计划
 
-Qwen3-TTS 的“参考文本克隆”会读取角色音色的 `promptText`。该字段为空时，WebUI 会阻止合成并提示补充参考音频中实际说出的文字。
+1. VoxCPM2 的每条台词保存 `clone_mode`（`ultimate` 或 `controllable`）、`delivery_profile`（`baseline`、`expressive`、`suspense`、`fear`、`urgent`、`restrained`）、`voxcpm_nonverbal_tags`（最多一个官方标签）与 `needs_review`。
+2. `ultimate` + `baseline` 要求角色绑定的准确参考文案，并发送 `prompt_text`；`controllable` 发送固定档位产生的短 `control_instruction`，不发送 `prompt_text` 或 sidecar。
+3. `nonverbal_tags` 是后端请求字段，来自工程字段 `voxcpm_nonverbal_tags`。允许 `laughing`、`sigh`、`Uhm`、`Shh`、`Question-ah`、`Question-ei`、`Question-en`、`Question-oh`、`Surprise-wa`、`Surprise-yo`、`Dissatisfaction-hnn`；标签只能在原文明确有可听见反应时使用，不得写入正文或参考文案。标签强制 `controllable`、默认 `expressive` 并将 `needs_review` 设为 `true`。
+4. 后端对每个文本分片将最终模型文本拼成 `(control_instruction)[tag]正文`，并在调用模型前向终端输出该文本、分片序号和克隆模式；不输出参考音频转写。
+5. `needs_review` 只是人工试听标记，不参与模型参数。`delivery_profile` 只控制表演方式，不保证或直接设定最终响度；成片响度仍应在合成后统一检测和归一化。
 
-1. 使用 `reference-text-clone` 协议时，参考文案为必填；每次台词合成都会从角色当前绑定的同一条音色记录取得 `audio_path` 与 `prompt_text`，并加入 `POST /v2/synthesize` 的 JSON 请求体。
-2. 自动补传参考音频时，WebUI 还会把参考文案作为表单字段提交给 `POST /v1/upload_audio`，供后端保存 sidecar（伴随音频保存的文本文件）。
-3. VoxCPM2 的每条台词保存 `clone_mode`（`ultimate` 或 `controllable`）、`delivery_profile`（`baseline`、`suspense`、`fear`、`urgent`、`restrained`）与 `needs_review`。`ultimate` + `baseline` 要求准确参考文案并发送 `prompt_text`；非基线档位会切换为 `controllable`，发送固定词表生成的 `control_instruction`，且不发送 `prompt_text`。
-4. `needs_review` 只是极端或非语言表演的人工试听标记，不参与模型参数。`delivery_profile` 只控制表演方式，不保证或直接设定最终响度；成片响度仍应在合成后统一检测和归一化。
-5. IndexTTS2 使用独立的 `indextts2` 协议，不读取或发送 `prompt_text`。
-
-Qwen3-TTS 和 VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar；VoxCPM2 可控克隆不会读取或传递 sidecar。
-
-| 服务 | 后端对 `prompt_text` 的处理 |
-| --- | --- |
-| IndexTTS2 | 请求模型不声明该字段；官方克隆签名只使用参考音频。 |
-| Qwen3-TTS-12Hz-1.7B-Base | 映射为官方 `ref_text`；缺失时退回仅参考音频克隆。 |
-| VoxCPM2 | `clone_mode="ultimate"` 同时传 `prompt_text`、`prompt_wav_path` 与 `reference_wav_path`，使用 Ultimate Cloning；`clone_mode="controllable"` 只传 `reference_wav_path`，将 `control_instruction` 编码在目标文本前。两种路径互斥。 |
+VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar；可控克隆不会读取或传递 sidecar。
 
 ## 音色设计
 

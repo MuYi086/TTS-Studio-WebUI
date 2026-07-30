@@ -39,10 +39,8 @@ bash start.sh
 
 然后在“模型配置”中保存并选中 LLM 与 TTS 配置。
 
-| 后端服务 | Base URL | WebUI 协议 |
+| 当前 WebUI 台词合成服务 | Base URL | 协议 |
 | --- | --- | --- |
-| IndexTTS2 | `http://127.0.0.1:8300` | `IndexTTS2（仅传音频与情绪向量）` |
-| Qwen3-TTS-12Hz-1.7B-Base | `http://127.0.0.1:8305` | `参考文本克隆（传 prompt_text）` |
 | VoxCPM2 | `http://127.0.0.1:8306` | `VoxCPM2（极致 / 可控克隆）` |
 
 `8300` 还提供：
@@ -50,9 +48,9 @@ bash start.sh
 - `POST /v1/qwen/design`
 - `POST /v1/mimo/design`
 
-Qwen3-TTS 的参考文本克隆需要角色参考音频的准确文本。VoxCPM2 则在每条 `dialogue` 上保存 `clone_mode`、`delivery_profile` 和 `needs_review`：默认 `ultimate` + `baseline` 会提交准确的 `prompt_text`；选中非基线表演档位后切换到 `controllable`，提交受限的 `control_instruction`，且不发送 `prompt_text`。这两个 VoxCPM2 路径互斥，目的是保持音色克隆稳定，同时只在明确的表演节点改变节奏与表达，并不把它当作响度控制。IndexTTS2 继续只发送参考音频与情绪向量。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
+当前 WebUI 的台词合成只会调用 VoxCPM2。每条 `dialogue` 保存 `clone_mode`、`delivery_profile`、`voxcpm_nonverbal_tags` 与 `needs_review`：默认 `ultimate` + `baseline` 会提交准确的 `prompt_text`；选中非基线档位或明确的非语言反应时切换到 `controllable`，提交受限的 `control_instruction`，且不发送 `prompt_text`。非语言标签只允许官方白名单中的一个，出现标签必定标记为需试听；后端会在模型调用前输出最终拼接文本。这两个 VoxCPM2 路径互斥，表演档位不直接控制最终响度。历史 IndexTTS2/Qwen3-TTS 配置会保留在浏览器中供删除，但不会显示在合成选择器、不可编辑，也不会被调用；不会把 `8300` 或 `8305` 自动改写为 `8306`。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
 
-对于官方默认端口，WebUI 会自动校正协议：`8300` 使用 `indextts2`，`8305` 使用 `reference-text-clone`，`8306` 使用 `voxcpm2`。其他端口仍采用配置中手动选择的协议。
+新建 TTS 配置固定为 VoxCPM2；本机默认端口为 `8306`。旧端口映射仅用于识别历史配置并将其隔离出当前合成链路。
 
 > 后端 `8311` 的 MOSS-SoundEffect 服务可独立生成音效；当前 WebUI 尚未调用该接口，现有 SFX 来自用户导入的本地素材库。
 
