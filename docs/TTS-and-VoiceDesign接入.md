@@ -43,8 +43,11 @@ VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_
 | --- | --- | --- |
 | Qwen | `POST http://127.0.0.1:8300/v1/qwen/design` | `text`、`voice_description` |
 | MiMo | `POST http://127.0.0.1:8300/v1/mimo/design` | `text`、`voice_description` |
+| VoxCPM2 | `POST http://127.0.0.1:8300/v1/voxcpm2/design` | `text`、`voice_description` |
 
-角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：用户可以检查或编辑参考文案，再点击“生成音色”。生成音色不会再次调用 LLM，只把确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen 或 MiMo。
+VoxCPM2 使用独立的 `/v1/voxcpm2/design` 路由，不与 Qwen 音色设计接口混用。后端由专用模块和 worker 将请求转换为官方格式 `(音色描述)正文`，不需要参考音频，默认使用 `cfg_value=2.0`、`inference_timesteps=10`。官方文档示例写死 `seed=42` 是为了复现实验结果，并不表示该值具有特殊音质增益；项目统一继续使用 VoxCPM2 默认种子 `20260614`，需要对比或复现单次样本时才显式传入 `seed`。
+
+角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：用户可以检查或编辑参考文案，再点击“生成音色”。生成音色不会再次调用 LLM，只把确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen、MiMo 或 VoxCPM2。
 
 参考音频必须已获得说话人授权、清晰且仅含一位说话人；参考文案应与实际语音逐字一致，不能写入未朗读的舞台说明、音频标签或 SSML（语音合成标记语言）。生成的参考音频和文案保存在浏览器本地音色库，并作为后续克隆的对应材料。
 

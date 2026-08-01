@@ -750,7 +750,7 @@
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">音色模型</label>
                         <select v-model="selectedVoiceDesignUrl"
                             class="w-full px-2 py-1.5 border rounded-md text-xs bg-white outline-none focus:ring-1 focus:ring-blue-500">
-                            <option v-for="design in voiceDesigns" :key="voiceDesignKey(design)" :value="voiceDesignKey(design)">
+                            <option v-for="design in voiceDesigns" :key="design.url" :value="design.url">
                                 {{ design.name }}
                             </option>
                         </select>
@@ -1397,8 +1397,8 @@
                     :class="['w-full h-[60vh] p-3 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-3', !useCustomPrompt ? 'bg-slate-100 text-slate-400' : 'bg-white text-slate-700']"
                     spellcheck="false"></textarea>
                 <div class="mt-2 text-xs text-slate-500">
-                    <span class="font-bold">可用变量:</span> ${sfxSection}, ${bgmSection}, ${bgmExampleLine}, ${sfxExample},
-                    ${rawScript}
+                    <span class="font-bold">可用变量:</span> ${emotionList}, ${sfxSection}, ${bgmSection},
+                    ${filterSection}, ${bgmExampleLine}, ${sfxExample}, ${bgImageCount}, ${rawScript}
                 </div>
 
                 <hr class="my-6 border-slate-200">
@@ -2065,9 +2065,7 @@
                     // 默认 Qwen 音色设计端点。
                     { name: 'Qwen', url: 'http://127.0.0.1:8300/v1/qwen/design' },
                     // 默认 MiMo 音色设计端点。
-                    { name: 'MIMO', url: 'http://127.0.0.1:8300/v1/mimo/design' },
-                    // VoxCPM2 使用独立的音色设计端点，不与 Qwen 混用。
-                    { name: 'VoxCPM2', url: 'http://127.0.0.1:8300/v1/voxcpm2/design' }
+                    { name: 'MIMO', url: 'http://127.0.0.1:8300/v1/mimo/design' }
                 ];
                 // 优先采用外部脚本注入的目录，使用户可只改 voice-design.js 扩展模型。
                 const voiceDesigns = ref(
@@ -2078,10 +2076,8 @@
                         // 模块缺失数据时仍保持页面基本功能。
                         : fallbackVoiceDesigns
                 );
-                // 使用端点加名称作为稳定键，避免自定义目录中出现重复 URL 时无法区分。
-                const voiceDesignKey = (design) => `${design?.url || ''}::${design?.provider || design?.name || ''}`;
-                // 保存端点加 provider 的稳定键，而不是数组索引，目录顺序变化时仍可恢复选择。
-                const selectedVoiceDesignUrl = ref(voiceDesignKey(voiceDesigns.value[0]));
+                // 保存实际端点而不是数组索引，目录顺序变化时仍可恢复选择。
+                const selectedVoiceDesignUrl = ref(voiceDesigns.value[0]?.url || '');
 
                 // 角色库状态
                 // 角色属于当前脚本，不是全局资源；切换脚本时会整体替换。
@@ -2460,6 +2456,24 @@
                 const defaultPromptTemplate = `你的任务是将给定小说内容拆分为台词和旁白，并生成可直接交给 VoxCPM2 的逐句表演计划。
 **注意：emotion 与 intensity 仅用于 WebUI 的剧本元数据和人工查看，不会映射为 TTS 参数；不要把它们当作模型控制指令。**
 
+# VoxCPM2 长文本克隆稳定性（最高优先级）
+VoxCPM2 的每个 \`dialogue\` 对象都会作为一个独立的语音合成单元处理。为了减少长句后半段的音色漂移和 pitch（音调）累积上扬，请把原文规划成“每段可独立朗读、每段独立克隆”的短段：每段都沿用该角色同一份 reference audio（参考音频）和同一组生成参数，不要把上一段的音频或状态当作下一段的续推输入。
+
+- **按自然语义切分，不按固定字数硬切**：优先在句号、问号、感叹号、分号等完整语义边界切分；长句再考虑逗号或明显的自然换气点。禁止在短语、定语、专名、数字、引号内容或一个完整动作中间截断。
+- **旁白软目标**：中文旁白每个 \`dialogue\` 优先控制在 **25–45 个汉字**，大致是一口气说完的一句话。25–45 是软目标，不是必须凑齐或必须截断的硬限制；原句较短就保持完整，原句较长才在最近的自然语义停顿处拆分。
+- **角色对白**：以一个完整、自然的说话意图和一口气为单位，尽量不要超过 45 个汉字；短促对白、感叹词和原文中无法与其他角色内容合并的短句可以短于 25 个汉字，禁止为了补足字数改写或拼接无关内容。
+- **独立生成边界**：相邻的同一角色台词可以保持相同的 \`clone_mode\` 与 \`delivery_profile\`，但每个对象的 \`text_content\` 必须本身可独立合成；不要输出“接上句”“续读”“继续上一段”等依赖前文的文本。
+- **段间静音**：如果为了长文本稳定性在逗号、分号或自然换气处拆段，前一个对象的 \`break_duration\` 设置为 **0.1–0.2 秒**（优先 0.15）；句号、问号、感叹号已有较强停顿时不要机械叠加静音，只有剧情确实需要更长停顿才增加。该字段表示当前对象结束后的静音，不得写入 \`text_content\`。
+- **连续旁白合并**：同一连续叙述优先合并到一个自然段内，再按上述软目标拆分；不要把“老李的声音在发抖”“他转过身来”这类短动作或说话人提示机械切成大量碎片。只有角色切换、音效、明显时间跳跃或语义边界确实需要时才拆开。
+
+以上规则只决定合成分段和停顿，不得改变原文内容；每个 \`text_content\` 必须逐字保留原文，不得增删、总结、改写或补写。
+
+## 长旁白分段示例（仅示意，不是固定字数模板）
+原文：夜里十一点，办公室只剩走廊尽头的灯还亮着，窗外的雨声贴着玻璃一阵阵响，空调的冷风从头顶慢慢压下来。
+应优先按自然换气处分成两个独立对象，并在逗号处保留约 0.15 秒的段间静音：
+\`{"type":"dialogue","role_name":"旁白","text_content":"夜里十一点，办公室只剩走廊尽头的灯还亮着，窗外的雨声贴着玻璃一阵阵响，","break_duration":0.15}\`
+\`{"type":"dialogue","role_name":"旁白","text_content":"空调的冷风从头顶慢慢压下来。","break_duration":0}\`
+
 \${sfxSection}
 
 \${bgmSection}
@@ -2497,11 +2511,13 @@
 
 ## 1. 拆分与识别
 - **完整保留**: 必须完整保留原文内容，不得遗漏、删改或省略任何字句。
-- **严禁删改**: **绝对禁止**删除原文中的说话人提示语（如“他低声说”、“笑着问道”）。这些内容必须作为“旁白”单独提取出来。
+- **严禁删改**: **绝对禁止**删除原文中的说话人提示语（如“他低声说”、“笑着问道”）。这些内容必须保留并归入 \'旁白\'，但可以和相邻的连续叙述合并；不得把它改归到说话角色的台词中。
 - **内容提取**: 提取对话内容和所有非对话的旁白。
 - **角色识别**: 根据小说内容分析说话人。旁白的角色名统一标记为“旁白”。
-- **长度控制**: 文本拆分长度要适中。**避免过碎**（不要把每一句短句都拆成独立一行），也**避免过长**（单行文本建议不超过 50-80 字，过长的旁白请在句号处适当拆分）。
-- **旁白处理**: 连续的旁白内容应优先合并，除非中间需要插入音效、有明显的时间跳跃，或合并后长度过长。
+- **分段优先级**: 先保证自然语义和一口气的完整性，再参考 25–45 字旁白软目标；禁止为了满足字数在语义中间硬切，也禁止把多个无关句子拼成长段。
+- **过长处理**: 旁白或对白超过一口气可自然朗读的长度时，按“。！？；”优先、逗号和自然换气点其次的顺序拆分；每个分段都要能使用同一参考音频独立生成。
+- **旁白处理**: 连续的旁白内容应优先合并后再按自然停顿拆分，除非中间需要插入音效、有明显的时间跳跃、角色切换，或合并后超过上述软目标。
+- **停顿处理**: 在逗号、分号或自然换气处拆分时，前一段的 \`break_duration\` 通常填 0.1–0.2 秒；不要把停顿写入正文，也不要对每一个标点机械加停顿。
 
 ## 3. 音效插入 (sfx)
 - 如果情节需要（如“摔门而去”、“雷声大作”），且音效库中有对应素材，请在 JSON 对象中添加 \`sfx\` 字段。
@@ -2581,12 +2597,12 @@
 [
 \${bgmExampleLine}
   {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion": "害怕", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "urgent", "voxcpm_nonverbal_tags": [], "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0.15},
   {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion": "害怕", "intensity": "较强", "clone_mode": "controllable", "delivery_profile": "suspense", "needs_review": false, "break_duration": 0.5},
   {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0\${sfxExample}},
   {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion": "害怕", "intensity": "微弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0.5},
   {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion": "害怕", "intensity": "稍弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0.15},
   {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion": "害怕", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0}
 ]
 
@@ -3586,17 +3602,14 @@ ${voiceReferenceHardConstraints}`;
                          useDynamicVoiceReferenceText.value = !useCustomQwenVoiceText.value;
                      }
 
-                    // 第 5 阶段：恢复音色设计端点；同时兼容旧版只保存 URL 的键。
-                    const savedVoiceDesignUrl = localStorage.getItem('storyforge_voice_design_url');
-                    const savedVoiceDesign = voiceDesigns.value.find(design =>
-                        voiceDesignKey(design) === savedVoiceDesignUrl || design.url === savedVoiceDesignUrl
-                    );
-                    // 新版优先按稳定键恢复，旧版 URL 则匹配第一个兼容项（通常是 Qwen）。
-                    if (savedVoiceDesign) {
-                        selectedVoiceDesignUrl.value = voiceDesignKey(savedVoiceDesign);
-                    // 失效选择回退到当前目录第一项。
-                    } else if (voiceDesigns.value.length > 0) {
-                        selectedVoiceDesignUrl.value = voiceDesignKey(voiceDesigns.value[0]);
+                     // 第 5 阶段：恢复音色设计端点，仅接受当前目录仍存在的 URL。
+                     const savedVoiceDesignUrl = localStorage.getItem('storyforge_voice_design_url');
+                     // 只有目录中仍存在的 URL 才能恢复为当前选择。
+                     if (savedVoiceDesignUrl && voiceDesigns.value.some(design => design.url === savedVoiceDesignUrl)) {
+                         selectedVoiceDesignUrl.value = savedVoiceDesignUrl;
+                     // 失效选择回退到当前目录第一项。
+                     } else if (voiceDesigns.value.length > 0) {
+                         selectedVoiceDesignUrl.value = voiceDesigns.value[0].url;
                      }
 
                      // 恢复脚本分析期望的背景图片数量，并过滤 NaN 与负数。
@@ -3687,8 +3700,8 @@ ${voiceReferenceHardConstraints}`;
                 };
                 /** 当前选择的音色设计服务；未匹配时回退到首项。 */
                 const selectedVoiceDesign = computed(() => {
-                    // 稳定键包含名称，避免自定义目录中的同 URL 项无法区分。
-                    return voiceDesigns.value.find(design => voiceDesignKey(design) === selectedVoiceDesignUrl.value) || voiceDesigns.value[0] || null;
+                    // URL 是持久化主键；目录更新导致 URL 失效时回退首个可用服务。
+                    return voiceDesigns.value.find(design => design.url === selectedVoiceDesignUrl.value) || voiceDesigns.value[0] || null;
                 });
                 // ==================== 6. LLM/TTS 配置管理 ====================
 
@@ -8991,10 +9004,10 @@ ${voiceReferenceHardConstraints}`;
 
                     // 当前脚本角色集合以及角色新增、删除入口。
                     characters, addCharacter, deleteCharacter,
-                    // LLM 音色分析、参考文案生成和 Qwen/MiMo/VoxCPM2 音色生成入口。
+                    // LLM 音色分析、参考文案生成和 Qwen/MiMo 音色生成入口。
                     analyzeCharacterVoice, generateVoiceReferenceText, generateQwenVoice,
                     // 音色设计服务目录、当前选择和角色绑定同步状态。
-                    voiceDesigns, voiceDesignKey, selectedVoiceDesignUrl, syncCharacterVoiceSelection,
+                    voiceDesigns, selectedVoiceDesignUrl, syncCharacterVoiceSelection,
 
                     // 音色资源库、编辑表单、选中项及 CRUD/文件上传入口。
                     timbres, timbreForm, isEditingTimbre, selectedTimbreId,
