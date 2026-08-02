@@ -216,7 +216,7 @@
                 </div>
             </div>
 
-            <h2 class="text-lg font-bold text-slate-800 border-b pb-2 pt-6">VoxCPM2 语音合成配置</h2>
+            <h2 class="text-lg font-bold text-slate-800 border-b pb-2 pt-6">本地语音合成模型配置</h2>
             <!-- 添加/编辑表单 -->
             <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
                 <h3 class="text-sm font-bold text-slate-700 mb-4">{{ isEditingTts ? '编辑 TTS 配置' : '添加新 TTS 配置' }}</h3>
@@ -225,19 +225,24 @@
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">配置名称</label>
                         <input v-model="ttsForm.name"
                             class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            placeholder="例如: 本机 VoxCPM2">
+                            placeholder="例如: 本机 Qwen3-TTS">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Base URL</label>
                         <input v-model="ttsForm.baseUrl"
                             @blur="syncTtsFormProtocolFromBaseUrl"
                             class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            placeholder="http://127.0.0.1:8306">
+                            placeholder="http://127.0.0.1:8305">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">合成协议</label>
-                        <div class="w-full px-3 py-2 border rounded-lg text-sm bg-slate-100 text-slate-600">VoxCPM2（极致 / 可控克隆）</div>
-                        <p class="mt-1 text-[10px] text-slate-400">当前脚本合成唯一使用 VoxCPM2；默认本机端口为 8306。历史 IndexTTS2/Qwen3 配置会保留，但不可编辑或调用。</p>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">合成模型</label>
+                        <select v-model="ttsForm.modelId" @change="syncTtsFormProtocolFromBaseUrl"
+                            class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option v-for="option in ttsModelOptions" :key="option.id" :value="option.id">
+                                {{ ttsModelLabel(option) }}
+                            </option>
+                        </select>
+                        <p class="mt-1 text-[10px] text-slate-400">8305 使用 qwen3-tts；8306 根据选择的模型把请求分发到 voxcpm2 或 Ming-omni-tts-0.5B worker。</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -255,10 +260,10 @@
                     <div>
                         <div class="font-bold text-slate-800 text-sm">{{ conf.name }}</div>
                         <div class="text-xs text-slate-400 mt-1">{{ conf.baseUrl }}</div>
-                        <div class="text-xs text-slate-400 mt-1">{{ ttsProtocolLabel(conf.protocol, conf.baseUrl) }}</div>
+                        <div class="text-xs text-slate-400 mt-1">{{ ttsProtocolLabel(conf.protocol, conf.baseUrl, conf.modelId) }}</div>
                     </div>
                     <div class="flex gap-2">
-                        <button v-if="usesVoxCpm2(conf)" @click="editTtsConfig(conf)"
+                        <button v-if="!conf.builtin" @click="editTtsConfig(conf)"
                             class="text-xs text-blue-600 hover:underline font-medium">编辑</button>
                         <button @click="deleteTtsConfig(conf.id)"
                             class="text-xs text-red-500 hover:underline font-medium">删除</button>
@@ -747,13 +752,16 @@
             <div class="w-full lg:w-60 flex-shrink-0 space-y-4">
                 <div class="bg-slate-100 p-4 rounded-xl border border-slate-200">
                     <div class="mb-4 pb-4 border-b border-slate-200">
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">音色模型</label>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">音色设计模型</label>
                         <select v-model="selectedVoiceDesignUrl"
                             class="w-full px-2 py-1.5 border rounded-md text-xs bg-white outline-none focus:ring-1 focus:ring-blue-500">
                             <option v-for="design in voiceDesigns" :key="voiceDesignKey(design)" :value="voiceDesignKey(design)">
-                                {{ design.name }}
+                                {{ voiceDesignLabel(design) }}
                             </option>
                         </select>
+                        <p v-if="selectedVoiceDesign" class="mt-1 text-[10px] text-slate-400 leading-relaxed">
+                            {{ selectedVoiceDesign.type === 'cloud_api' ? '云端接口' : '本地 Conda worker' }} · {{ selectedVoiceDesign.provider || selectedVoiceDesign.name }}
+                        </p>
                     </div>
                     <h3 class="text-sm font-bold text-slate-700 mb-3 flex justify-between items-center">
                         角色列表
@@ -906,8 +914,8 @@
                                 class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white w-full"
                                 title="选择用于生成的 TTS 服务">
                                 <option value="" disabled>-- 选择 TTS 模型 --</option>
-                                <option v-for="conf in activeVoxCpmTtsConfigs" :key="conf.id" :value="conf.id">
-                                    {{ conf.name }}
+                                <option v-for="conf in activeTtsConfigs" :key="conf.id" :value="conf.id">
+                                    {{ ttsModelLabel(conf) }}
                                 </option>
                             </select>
 
@@ -950,12 +958,12 @@
                         <h3 class="text-sm font-bold text-slate-700">2. 脚本台词列表 ({{ scriptLines.length }} 行)</h3>
                         <div class="flex flex-col gap-1 md:min-w-[280px]">
                             <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">当前 TTS 合成模型</label>
-                            <select v-model="currentTtsConfigId" :disabled="activeVoxCpmTtsConfigs.length === 0"
+                            <select v-model="currentTtsConfigId" :disabled="activeTtsConfigs.length === 0"
                                 class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:bg-slate-100 disabled:text-slate-400"
                                 title="选择当前脚本台词列表使用的 TTS 模型">
-                                <option value="" disabled>{{ activeVoxCpmTtsConfigs.length === 0 ? '-- 请先在模型配置中添加 VoxCPM2 配置 --' : '-- 选择 VoxCPM2 模型 --' }}</option>
-                                <option v-for="conf in activeVoxCpmTtsConfigs" :key="conf.id" :value="conf.id">
-                                    {{ conf.name }}
+                                <option value="" disabled>{{ activeTtsConfigs.length === 0 ? '-- 暂无可用 TTS 模型 --' : '-- 选择 TTS 模型 --' }}</option>
+                                <option v-for="conf in activeTtsConfigs" :key="conf.id" :value="conf.id">
+                                    {{ ttsModelLabel(conf) }}
                                 </option>
                             </select>
                         </div>
@@ -1932,17 +1940,43 @@
                 const isEditing = ref(false);
 
                 // TTS 配置状态
-                // 当前脚本合成仅允许 VoxCPM2；保留旧协议常量仅用于识别和隔离历史配置，绝不再发起其请求。
+                // 本地服务按模型能力分组；8306 同时承载 VoxCPM2 与 Ming，具体由 backend 字段分发。
                 const TTS_PROTOCOLS = {
                     indextts2: 'indextts2',
                     referenceTextClone: 'reference-text-clone',
-                    // VoxCPM2 同时支持极致克隆和可控克隆，因此不再与只传 prompt_text 的协议混为一类。
-                    voxcpm2: 'voxcpm2'
+                    qwen3Tts: 'qwen3-tts',
+                    voxcpm2: 'voxcpm2',
+                    ming: 'ming-omni-tts'
                 };
-                // TTS-and-VoiceDesign 历史默认端口映射仅用于标记旧配置，不能把旧服务静默改接到 VoxCPM2。
+                const TTS_MODEL_OPTIONS = Object.freeze([
+                    {
+                        id: 'qwen3-tts',
+                        name: 'Qwen3-TTS Base',
+                        backend: 'qwen3-tts',
+                        protocol: TTS_PROTOCOLS.qwen3Tts,
+                        baseUrl: 'http://127.0.0.1:8305',
+                        environment: 'qwen3-tts'
+                    },
+                    {
+                        id: 'voxcpm2',
+                        name: 'VoxCPM2',
+                        backend: 'voxcpm2',
+                        protocol: TTS_PROTOCOLS.voxcpm2,
+                        baseUrl: 'http://127.0.0.1:8306',
+                        environment: 'voxcpm2'
+                    },
+                    {
+                        id: 'ming-omni-tts',
+                        name: 'Ming-omni-tts 0.5B',
+                        backend: 'ming',
+                        protocol: TTS_PROTOCOLS.ming,
+                        baseUrl: 'http://127.0.0.1:8306',
+                        environment: 'Ming-omni-tts-0.5B'
+                    }
+                ]);
+                // 端口可推断 Qwen/Vox；8306 的 Ming 必须由 modelId/backend 明确指定。
                 const TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT = Object.freeze({
-                    '8300': TTS_PROTOCOLS.indextts2,
-                    '8305': TTS_PROTOCOLS.referenceTextClone,
+                    '8305': TTS_PROTOCOLS.qwen3Tts,
                     '8306': TTS_PROTOCOLS.voxcpm2
                 });
                 /**
@@ -1966,24 +2000,49 @@
                  * 将 TTS 协议归一化；官方默认端口优先采用其固定能力映射。
                  * @param {string} value - 原始协议标识
                  * @param {string} [baseUrl] - TTS 服务根地址
+                 * @param {string} [modelId] - 模型标识
                  * @returns {string} 受支持的协议标识
                  */
-                const normalizeTtsProtocol = (value, baseUrl = '') => {
+                const normalizeTtsProtocol = (value, baseUrl = '', modelId = '') => {
+                    const option = TTS_MODEL_OPTIONS.find(item => item.id === modelId);
+                    if (option) return option.protocol;
                     // 先纠正当前后端的默认端口配置；未知端口才使用用户保存的协议。
                     const inferredProtocol = inferTtsProtocolFromBaseUrl(baseUrl);
                     if (inferredProtocol) return inferredProtocol;
-                    // 仅用于保留历史配置的真实协议标识；新建配置会固定为 VoxCPM2。
-                    return [TTS_PROTOCOLS.referenceTextClone, TTS_PROTOCOLS.voxcpm2].includes(value)
-                        // 命中时返回规范常量。
-                        ? value
-                        // 缺失或未知协议按历史 IndexTTS2 处理，以便从当前合成入口隔离。
-                        : TTS_PROTOCOLS.indextts2;
+                    return Object.values(TTS_PROTOCOLS).includes(value) ? value : TTS_PROTOCOLS.indextts2;
                 };
+                const getTtsBackend = (config) => {
+                    const explicit = String(config?.backend || '').trim().toLowerCase();
+                    if (explicit === 'ming' || explicit.includes('ming') || explicit.includes('omni')) return 'ming';
+                    if (explicit === 'qwen3-tts' || explicit.includes('qwen')) return 'qwen3-tts';
+                    const modelId = String(config?.modelId || '').toLowerCase();
+                    if (modelId.includes('ming') || modelId.includes('omni')) return 'ming';
+                    if (modelId.includes('qwen')) return 'qwen3-tts';
+                    if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.qwen3Tts) return 'qwen3-tts';
+                    if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.voxcpm2) return 'voxcpm2';
+                    return '';
+                };
+                // 选择框使用稳定、短小的产品标识；环境名仍保留在配置和状态信息中。
+                const TTS_MODEL_LABELS = Object.freeze({
+                    'qwen3-tts': 'Qwen3-TTS',
+                    voxcpm2: 'VoxCPM2',
+                    ming: 'Ming-omni-tts-0.5B'
+                });
+                const ttsModelLabel = (config) => {
+                    const backend = getTtsBackend(config);
+                    if (TTS_MODEL_LABELS[backend]) return TTS_MODEL_LABELS[backend];
+                    return String(config?.name || config?.modelId || 'TTS').trim().replace(/\s+/g, '-');
+                };
+                const isSupportedTts = (config) => ['qwen3-tts', 'voxcpm2', 'ming'].includes(getTtsBackend(config));
                 /** 判断当前 TTS 配置是否为支持逐句表演计划的 VoxCPM2 服务。 */
                 const usesVoxCpm2 = (config) =>
-                    normalizeTtsProtocol(config?.protocol, config?.baseUrl) === TTS_PROTOCOLS.voxcpm2;
-                /** 当前页面唯一可选择、可调用的 TTS 配置。 */
-                const activeVoxCpmTtsConfigs = computed(() => ttsConfigs.value.filter(usesVoxCpm2));
+                    getTtsBackend(config) === 'voxcpm2';
+                /** 参考文本克隆协议；三个本地合成模型都使用角色参考音频。 */
+                const usesReferenceText = (config) => isSupportedTts(config);
+                /** 当前页面可选择、可调用的 TTS 配置。 */
+                const activeTtsConfigs = computed(() => ttsConfigs.value.filter(isSupportedTts));
+                // 兼容旧模板/工程脚本中的名称，后续新逻辑统一使用 activeTtsConfigs。
+                const activeVoxCpmTtsConfigs = activeTtsConfigs;
 
                 // VoxCPM2 的表演档位是固定词表；避免把 LLM 任意生成的长提示直接传给模型。
                 const VOXCPM_DELIVERY_PROFILES = Object.freeze([
@@ -2049,25 +2108,59 @@
                  * @param {string} [baseUrl] - TTS 服务根地址
                  * @returns {string} 协议中文标签
                  */
-                const ttsProtocolLabel = (protocol, baseUrl = '') =>
-                    // 先规范化输入，再判断展示分支。
-                    normalizeTtsProtocol(protocol, baseUrl) === TTS_PROTOCOLS.voxcpm2
-                            ? 'VoxCPM2（极致 / 可控克隆）'
-                            : '历史配置（当前版本不可用于合成）';
+                const ttsProtocolLabel = (protocol, baseUrl = '', modelId = '') => {
+                    const backend = getTtsBackend({ protocol, baseUrl, modelId });
+                    const option = TTS_MODEL_OPTIONS.find(item => item.backend === backend);
+                    return option ? `${option.name}（${option.environment}）` : '历史配置（当前版本不可用于合成）';
+                };
                 // 用户维护的 TTS 服务配置列表。
                 const ttsConfigs = ref([]);
-                // 新增配置固定使用 VoxCPM2；历史记录仍原样保存，便于用户自行删除。
-                const ttsForm = ref({ id: '', name: '', baseUrl: '', protocol: TTS_PROTOCOLS.voxcpm2 });
+                // 新增配置默认使用 VoxCPM2；modelId 决定 8306 是否切换到 Ming worker。
+                const ttsForm = ref({ id: '', name: '', baseUrl: '', modelId: 'voxcpm2', backend: 'voxcpm2', protocol: TTS_PROTOCOLS.voxcpm2 });
                 // 标识 TTS 表单当前处于新增还是编辑模式。
                 const isEditingTts = ref(false);
+                const createDefaultTtsConfigs = () => TTS_MODEL_OPTIONS.map(option => ({
+                    id: `builtin-${option.id}`,
+                    name: option.name,
+                    baseUrl: option.baseUrl,
+                    modelId: option.id,
+                    backend: option.backend,
+                    protocol: option.protocol,
+                    environment: option.environment,
+                    builtin: true
+                }));
+                const normalizeTtsConfig = (config) => {
+                    const source = config && typeof config === 'object' ? { ...config } : {};
+                    const inferredModel = source.modelId || (String(source.name || '').toLowerCase().includes('ming') ? 'ming-omni-tts' : '');
+                    const option = TTS_MODEL_OPTIONS.find(item => item.id === inferredModel)
+                        || TTS_MODEL_OPTIONS.find(item => item.backend === source.backend)
+                        || (String(source.baseUrl || '').includes(':8305') ? TTS_MODEL_OPTIONS[0] : null)
+                        || (String(source.baseUrl || '').includes(':8306') ? TTS_MODEL_OPTIONS[1] : null);
+                    const modelId = option?.id || source.modelId || '';
+                    const backend = source.backend || option?.backend || '';
+                    return {
+                        ...source,
+                        id: source.id || `tts-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                        name: source.name || option?.name || '本地 TTS',
+                        baseUrl: String(source.baseUrl || option?.baseUrl || '').trim(),
+                        modelId,
+                        backend,
+                        protocol: normalizeTtsProtocol(source.protocol, source.baseUrl, modelId),
+                        environment: source.environment || option?.environment || ''
+                    };
+                };
                 // voice-design.js 未加载或未提供配置时使用的本地后端默认端点。
                 const fallbackVoiceDesigns = [
                     // 默认 Qwen 音色设计端点。
-                    { name: 'Qwen', url: 'http://127.0.0.1:8300/v1/qwen/design' },
+                    { name: 'Qwen3-TTS VoiceDesign', provider: 'qwen', type: 'local_model', environment: 'qwen3-voiceDesign', url: 'http://127.0.0.1:8300/v1/qwen/design' },
+                    // 默认 MOSS 音色设计端点。
+                    { name: 'MOSS VoiceGenerator', provider: 'moss', type: 'local_model', environment: 'moss-voiceGenerator', url: 'http://127.0.0.1:8300/v1/moss/design' },
+                    // 默认 Ming 音色设计端点。
+                    { name: 'Ming-omni-tts 0.5B', provider: 'ming', type: 'local_model', environment: 'Ming-omni-tts-0.5B', url: 'http://127.0.0.1:8300/v1/Ming/design' },
                     // 默认 MiMo 音色设计端点。
-                    { name: 'MIMO', url: 'http://127.0.0.1:8300/v1/mimo/design' },
+                    { name: 'MiMo TTS VoiceDesign', provider: 'mimo', type: 'cloud_api', url: 'http://127.0.0.1:8300/v1/mimo/design' },
                     // VoxCPM2 使用独立的音色设计端点，不与 Qwen 混用。
-                    { name: 'VoxCPM2', url: 'http://127.0.0.1:8300/v1/voxcpm2/design' }
+                    { name: 'VoxCPM2 VoiceDesign', provider: 'voxcpm2', type: 'local_model', environment: 'voxcpm2', url: 'http://127.0.0.1:8300/v1/voxcpm2/design' }
                 ];
                 // 优先采用外部脚本注入的目录，使用户可只改 voice-design.js 扩展模型。
                 const voiceDesigns = ref(
@@ -2080,6 +2173,15 @@
                 );
                 // 使用端点加名称作为稳定键，避免自定义目录中出现重复 URL 时无法区分。
                 const voiceDesignKey = (design) => `${design?.url || ''}::${design?.provider || design?.name || ''}`;
+                const voiceDesignLabel = (design) => {
+                    const hint = `${design?.provider || ''} ${design?.name || ''} ${design?.environment || ''}`.toLowerCase();
+                    if (hint.includes('qwen')) return 'Qwen3-VoiceDesign';
+                    if (hint.includes('moss')) return 'MOSS-VoiceGenerator';
+                    if (hint.includes('ming')) return 'Ming-omni-tts-0.5B';
+                    if (hint.includes('mimo')) return 'MiMo-VoiceDesign';
+                    if (hint.includes('voxcpm')) return 'VoxCPM2-VoiceDesign';
+                    return String(design?.name || design?.environment || 'VoiceDesign').trim().replace(/\s+/g, '-');
+                };
                 // 保存端点加 provider 的稳定键，而不是数组索引，目录顺序变化时仍可恢复选择。
                 const selectedVoiceDesignUrl = ref(voiceDesignKey(voiceDesigns.value[0]));
 
@@ -3496,32 +3598,31 @@ ${voiceReferenceHardConstraints}`;
                      }
  
                      // 读取 TTS 配置
-                     // 第 2 阶段：恢复 TTS 服务列表，并为旧记录补齐 protocol。
+                     // 第 2 阶段：恢复 TTS 服务列表，并补齐模型、后端与协议。
                      const savedTts = localStorage.getItem('storyforge_tts_configs');
+                     let parsedTtsConfigs = [];
                      if (savedTts) {
-                         // localStorage 内容先解析为未知结构。
-                         const parsedTtsConfigs = JSON.parse(savedTts);
-                         // 仅数组有效；每项标记其历史协议，但保留原记录，绝不把旧地址自动迁移至 8306。
-                         ttsConfigs.value = Array.isArray(parsedTtsConfigs)
-                             // 数组中的每个旧配置都保留原字段。
-                             ? parsedTtsConfigs.map((config) => ({
-                                 // 展开名称、地址、ID 等既有配置。
-                                 ...config,
-                                 // 覆盖为规范协议值。
-                                 protocol: normalizeTtsProtocol(config?.protocol, config?.baseUrl)
-                             }))
-                             : [];
-                         // 将补齐后的协议立即回写，完成一次性数据升级。
-                         localStorage.setItem('storyforge_tts_configs', JSON.stringify(ttsConfigs.value));
+                         try {
+                             const parsed = JSON.parse(savedTts);
+                             parsedTtsConfigs = Array.isArray(parsed) ? parsed.map(normalizeTtsConfig) : [];
+                         } catch (error) {
+                             console.warn('TTS 配置解析失败，将使用本地默认模型:', error);
+                         }
                      }
+                     const configuredBackends = new Set(parsedTtsConfigs.map(config => getTtsBackend(config)));
+                     ttsConfigs.value = [
+                         ...createDefaultTtsConfigs().filter(config => !configuredBackends.has(config.backend)),
+                         ...parsedTtsConfigs
+                     ];
+                     localStorage.setItem('storyforge_tts_configs', JSON.stringify(ttsConfigs.value));
  
-                     // 仅恢复仍可执行 VoxCPM2 合成的选择；历史配置不会进入当前调用路径。
+                     // 恢复仍可执行的本地模型选择；历史配置不会进入当前调用路径。
                      const savedTtsId = localStorage.getItem('unitale_ttsConfigId');
-                     if (savedTtsId && activeVoxCpmTtsConfigs.value.some(c => c.id === savedTtsId)) {
+                     if (savedTtsId && activeTtsConfigs.value.some(c => c.id === savedTtsId)) {
                          currentTtsConfigId.value = savedTtsId;
-                     // 失效或缺失 ID 时默认选择首个可用 VoxCPM2 配置。
-                     } else if (activeVoxCpmTtsConfigs.value.length > 0) {
-                         currentTtsConfigId.value = activeVoxCpmTtsConfigs.value[0].id;
+                     // 失效或缺失 ID 时默认选择首个可用本地模型。
+                     } else if (activeTtsConfigs.value.length > 0) {
+                         currentTtsConfigId.value = activeTtsConfigs.value[0].id;
                      } else {
                          // 空列表明确设为空，避免残留无效选择。
                          currentTtsConfigId.value = '';
@@ -3664,8 +3765,7 @@ ${voiceReferenceHardConstraints}`;
 
                 /** 当前选中的 TTS 配置；无有效选项时为 null。 */
                 const currentTtsConfig = computed(() => {
-                    // 与 LLM 相同，配置对象完全由当前 ID 派生；历史协议不得绕过选择器进入合成。
-                    return activeVoxCpmTtsConfigs.value.find(c => c.id === currentTtsConfigId.value) || null;
+                    return activeTtsConfigs.value.find(c => c.id === currentTtsConfigId.value) || null;
                 });
                 /**
                  * 保证当前 TTS 配置 ID 指向有效配置，并可优先选择指定 ID。
@@ -3674,16 +3774,16 @@ ${voiceReferenceHardConstraints}`;
                 */
                 const ensureCurrentTtsConfigSelection = (preferredId = '') => {
                     // 调用方指定的优先 ID 存在时直接选中。
-                    if (preferredId && activeVoxCpmTtsConfigs.value.some(c => c.id === preferredId)) {
+                    if (preferredId && activeTtsConfigs.value.some(c => c.id === preferredId)) {
                         currentTtsConfigId.value = preferredId;
                         return;
                     }
                     // 当前 ID 仍有效时保持用户原选择。
-                    if (currentTtsConfigId.value && activeVoxCpmTtsConfigs.value.some(c => c.id === currentTtsConfigId.value)) {
+                    if (currentTtsConfigId.value && activeTtsConfigs.value.some(c => c.id === currentTtsConfigId.value)) {
                         return;
                     }
                     // 原选择失效后回退第一项；空列表则清空 ID。
-                    currentTtsConfigId.value = activeVoxCpmTtsConfigs.value[0]?.id || '';
+                    currentTtsConfigId.value = activeTtsConfigs.value[0]?.id || '';
                 };
                 /** 当前选择的音色设计服务；未匹配时回退到首项。 */
                 const selectedVoiceDesign = computed(() => {
@@ -3776,23 +3876,25 @@ ${voiceReferenceHardConstraints}`;
 
                 /** 校验并新增或更新 TTS 配置，同时维持有效选中项。 */
                 const saveTtsConfig = () => {
-                    // TTS 不要求 API Key，但必须有名称和基础地址。
+                    // TTS 不要求 API Key，但必须有名称和基础地址/模型。
                     if (!ttsForm.value.name || !ttsForm.value.baseUrl) {
                         return alert('请填写完整信息');
                     }
 
-                    // 清理 URL；新增与编辑的唯一可用协议固定为 VoxCPM2，8300/8305 不得冒充 Vox 服务。
+                    // 清理 URL，并把模型选择同步到后端分发字段。
                     ttsForm.value.baseUrl = ttsForm.value.baseUrl.trim();
-                    ttsForm.value.protocol = TTS_PROTOCOLS.voxcpm2;
-                    if (!usesVoxCpm2(ttsForm.value)) {
-                        return alert('当前版本只能添加 VoxCPM2 服务。请使用实际的 VoxCPM2 地址（本机默认 http://127.0.0.1:8306），不会自动改写旧服务端口。');
+                    const option = TTS_MODEL_OPTIONS.find(item => item.id === ttsForm.value.modelId);
+                    if (option) {
+                        ttsForm.value.backend = option.backend;
+                        ttsForm.value.protocol = option.protocol;
+                        ttsForm.value.environment = option.environment;
                     }
                     // 编辑沿用原 ID，新建生成 ID。
                     const savedConfigId = ttsForm.value.id || Date.now().toString();
                     // 当前没有有效选择时，保存项应成为新的当前配置。
                     const shouldPreferSavedConfig = !currentTtsConfigId.value
                         || currentTtsConfigId.value === savedConfigId
-                        || !activeVoxCpmTtsConfigs.value.some(c => c.id === currentTtsConfigId.value);
+                        || !activeTtsConfigs.value.some(c => c.id === currentTtsConfigId.value);
 
                     // 编辑模式按 ID 替换，新建模式追加到列表。
                     if (isEditingTts.value) {
@@ -3817,16 +3919,25 @@ ${voiceReferenceHardConstraints}`;
                  * @returns {void}
                 */
                 const editTtsConfig = (conf) => {
-                    // 仅 VoxCPM2 记录可编辑；历史配置在列表中只允许删除。
-                    if (!usesVoxCpm2(conf)) return alert('历史 TTS 配置当前不可编辑；如不再需要可直接删除。');
-                    // 拷贝配置并固定 VoxCPM2 协议。
-                    ttsForm.value = { ...conf, protocol: normalizeTtsProtocol(conf.protocol, conf.baseUrl) };
+                    if (conf.builtin) return;
+                    ttsForm.value = {
+                        ...conf,
+                        protocol: normalizeTtsProtocol(conf.protocol, conf.baseUrl, conf.modelId),
+                        modelId: conf.modelId || (getTtsBackend(conf) === 'ming' ? 'ming-omni-tts' : getTtsBackend(conf))
+                    };
                     isEditingTts.value = true;
                 };
 
-                /** 表单协议固定为 VoxCPM2；地址校验会在保存时拒绝历史默认端口。 */
+                /** 模型切换时同步协议、后端分发标识和默认服务地址。 */
                 const syncTtsFormProtocolFromBaseUrl = () => {
-                    ttsForm.value.protocol = TTS_PROTOCOLS.voxcpm2;
+                    const option = TTS_MODEL_OPTIONS.find(item => item.id === ttsForm.value.modelId);
+                    if (!option) return;
+                    ttsForm.value.backend = option.backend;
+                    ttsForm.value.protocol = option.protocol;
+                    ttsForm.value.environment = option.environment;
+                    if (!ttsForm.value.baseUrl || /^https?:\/\/127\.0\.0\.1:(8305|8306)$/.test(ttsForm.value.baseUrl.trim())) {
+                        ttsForm.value.baseUrl = option.baseUrl;
+                    }
                 };
 
                 /**
@@ -3835,6 +3946,8 @@ ${voiceReferenceHardConstraints}`;
                  * @returns {void}
                 */
                 const deleteTtsConfig = (id) => {
+                    const target = ttsConfigs.value.find(config => config.id === id);
+                    if (target?.builtin) return alert('内置模型不可删除；如不使用可在脚本工作台切换其他模型。');
                     if (!confirm('确定删除此 TTS 配置吗？')) return;
                     // 删除后立即持久化，并由选择修复器保留/回退有效 ID。
                     ttsConfigs.value = ttsConfigs.value.filter(c => c.id !== id);
@@ -3845,7 +3958,7 @@ ${voiceReferenceHardConstraints}`;
                 /** 重置 TTS 配置表单和编辑状态。 */
                 const resetTtsForm = () => {
                     // 新配置默认使用 VoxCPM2。
-                    ttsForm.value = { id: '', name: '', baseUrl: '', protocol: TTS_PROTOCOLS.voxcpm2 };
+                    ttsForm.value = { id: '', name: '', baseUrl: '', modelId: 'voxcpm2', backend: 'voxcpm2', protocol: TTS_PROTOCOLS.voxcpm2 };
                     isEditingTts.value = false;
                 };
 
@@ -5285,40 +5398,39 @@ ${voiceReferenceHardConstraints}`;
                         }
                         // 合成前刷新角色 assetKey 和 promptText。
                         syncCharacterVoiceSelection(char);
-                        // 台词计划来自 LLM、工程恢复或手工编辑；请求前再次收敛，避免非法组合进入后端。
-                        normalizeVoxCpmLinePlan(line);
                         // audio_path 与 prompt_text 必须从同一份角色绑定音色记录取得。
                         const synthesisReference = resolveCharacterSynthesisReference(char);
                         if (!synthesisReference.audioPath) {
                             throw new Error(`角色 "${line.role}" 未绑定音色文件路径。\n\n请在左侧的角色列表中为该角色选择一个音色文件，或手动输入路径。`);
                         }
 
-                        // 固定本次任务的唯一 TTS 配置；情绪字段仅保留为剧本元数据，不再转换为其他模型参数。
+                        // 固定本次任务的唯一 TTS 配置；情绪字段仅保留为剧本元数据。
                         const cfg = currentTtsConfig.value;
-                        if (!usesVoxCpm2(cfg)) {
-                            throw new Error('当前脚本合成仅支持 VoxCPM2，请在模型配置中选择可用的 VoxCPM2 服务。');
-                        }
-                        const isVoxCpm2Controllable = line.clone_mode === 'controllable';
-                        // VoxCPM2 极致克隆必须传真实参考文本；可控克隆必须省略它。
+                        const backend = getTtsBackend(cfg);
+                        const isVoxCpm2Controllable = backend === 'voxcpm2' && line.clone_mode === 'controllable';
+                        // 三个本地克隆模型都优先使用音色绑定中的真实参考文本。
                         const promptText = isVoxCpm2Controllable ? '' : synthesisReference.promptText;
                         if (!isVoxCpm2Controllable && !promptText) {
-                            throw new Error(`VoxCPM2 极致克隆需要角色「${line.role}」绑定音色的真实参考文本。`);
+                            throw new Error(`${cfg.name} 需要角色「${line.role}」绑定音色的真实参考文本。`);
                         }
-                        // VoxCPM2 共享正文和参考音频，并显式声明克隆模式。
                         const payload = {
                             text: line.text,
                             audio_path: synthesisReference.audioPath,
-                            clone_mode: isVoxCpm2Controllable ? 'controllable' : 'ultimate',
-                            nonverbal_tags: line.voxcpm_nonverbal_tags || []
+                            backend,
+                            prompt_text: promptText
                         };
+                        if (backend === 'voxcpm2') {
+                            // VoxCPM2 的极致/可控克隆计划只对该后端生效。
+                            normalizeVoxCpmLinePlan(line);
+                            payload.clone_mode = isVoxCpm2Controllable ? 'controllable' : 'ultimate';
+                            payload.nonverbal_tags = line.voxcpm_nonverbal_tags || [];
+                        }
                         if (isVoxCpm2Controllable) {
                             const controlInstruction = buildVoxCpmControlInstruction(line);
                             if (!controlInstruction) {
                                 throw new Error('VoxCPM2 可控克隆需要选择有效的固定表演档位。');
                             }
                             payload.control_instruction = controlInstruction;
-                        } else {
-                            payload.prompt_text = promptText;
                         }
 
                         // 归一化服务根地址，用于 check、upload 和 synthesize 三个端点。
@@ -5350,14 +5462,14 @@ ${voiceReferenceHardConstraints}`;
                                     supportsPromptTextStatus = Object.prototype.hasOwnProperty.call(checkData, 'has_prompt_text');
                                 }
                                 // 文件缺失，或新版克隆后端明确缺参考文本时补传。
-                                if (!exists || (!isVoxCpm2Controllable && promptText && supportsPromptTextStatus && !hasPromptText)) {
+                                if (!exists || (promptText && supportsPromptTextStatus && !hasPromptText)) {
                                     const formData = new FormData();
                                     // 第三个参数显式指定上传文件名。
                                     formData.append('audio', voiceFile, synthesisReference.audioPath);
                                     // full_path 决定 TTS 后端保存和引用位置。
                                     formData.append('full_path', synthesisReference.audioPath);
                                     // 克隆协议的新版后端同时保存音频真实文本。
-                                    if (!isVoxCpm2Controllable && promptText) {
+                                    if (promptText) {
                                         formData.append('prompt_text', promptText);
                                     }
                                     // 保持原实现：发送补传请求，后续 synthesize 再决定最终是否成功。
@@ -8973,8 +9085,8 @@ ${voiceReferenceHardConstraints}`;
                     // 通用聊天测试的输入、输出、推理、错误与加载状态。
                     prompt, result, reasoning, error, loading,
 
-                    // 当前可用的 VoxCPM2 配置及全部（含历史）配置；历史项仅供删除，不可进入合成。
-                    currentTtsConfigId, ttsConfigs, activeVoxCpmTtsConfigs, usesVoxCpm2, ttsRefPath, ttsEmoText,
+                    // 当前可用的本地 TTS 配置及全部配置；历史项不会进入合成。
+                    currentTtsConfigId, ttsConfigs, activeTtsConfigs, activeVoxCpmTtsConfigs, usesVoxCpm2, getTtsBackend, ttsModelLabel, ttsModelOptions: TTS_MODEL_OPTIONS, ttsRefPath, ttsEmoText,
                     // 旧测试工具生成结果、请求状态和错误信息。
                     audioUrl, ttsLoading, ttsError,
                     // 根据当前协议计算的界面显示名称。
@@ -8994,7 +9106,7 @@ ${voiceReferenceHardConstraints}`;
                     // LLM 音色分析、参考文案生成和 Qwen/MiMo/VoxCPM2 音色生成入口。
                     analyzeCharacterVoice, generateVoiceReferenceText, generateQwenVoice,
                     // 音色设计服务目录、当前选择和角色绑定同步状态。
-                    voiceDesigns, voiceDesignKey, selectedVoiceDesignUrl, syncCharacterVoiceSelection,
+                    voiceDesigns, voiceDesignKey, voiceDesignLabel, selectedVoiceDesign, selectedVoiceDesignUrl, syncCharacterVoiceSelection,
 
                     // 音色资源库、编辑表单、选中项及 CRUD/文件上传入口。
                     timbres, timbreForm, isEditingTimbre, selectedTimbreId,
