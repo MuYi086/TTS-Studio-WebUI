@@ -1,0 +1,25 @@
+/** Step-Audio-EditX 官方 paralinguistic 可用标签，key 保留正文中应插入的方括号。 */
+window.StepAudioEditXParalinguisticTags = Object.freeze([
+    { key: '[sigh]', value: 'Sighing sound' },
+    { key: '[inhale]', value: 'Inhaling sound' },
+    { key: '[laugh]', value: 'Laughter sound' },
+    { key: '[chuckle]', value: 'Chuckling sound' },
+    { key: '[exhale]', value: 'Exhaling sound' },
+    { key: '[clears throat]', value: 'Throat clearing sound' },
+    { key: '[snort]', value: 'Snorting sound' },
+    { key: '[giggle]', value: 'Giggling sound' },
+    { key: '[cough]', value: 'Coughing sound' },
+    { key: '[breath]', value: 'Breathing sound' },
+    { key: '[uhm]', value: 'Hesitation sound: "Uhm"' },
+    { key: '[Confirmation-en]', value: 'Confirming: "En"' },
+    { key: '[Surprise-oh]', value: 'Expressing surprise: "Oh"' },
+    { key: '[Surprise-ah]', value: 'Expressing surprise: "Ah"' },
+    { key: '[Surprise-wa]', value: 'Expressing surprise: "Wa"' },
+    { key: '[Surprise-yo]', value: 'Expressing surprise: "Yo"' },
+    { key: '[Dissatisfaction-hnn]', value: 'Dissatisfied sound: "Hnn"' },
+    { key: '[Question-ei]', value: 'Questioning: "Ei"' },
+    { key: '[Question-ah]', value: 'Questioning: "Ah"' },
+    { key: '[Question-en]', value: 'Questioning: "En"' },
+    { key: '[Question-yi]', value: 'Questioning: "Yi"' },
+    { key: '[Question-oh]', value: 'Questioning: "Oh"' }
+]);

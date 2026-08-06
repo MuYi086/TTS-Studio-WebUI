@@ -35,6 +35,24 @@ WebUI 新建 TTS 配置固定为 `voxcpm2`。`8300` 与 `8305` 的历史配置�
 
 VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar；可控克隆不会读取或传递 sidecar。
 
+## Step-Audio-EditX 单行编辑
+
+WebUI 将 Step-Audio-EditX 作为原始台词生成后的独立编辑步骤，不替换 `audioAssetKey` 对应的原始音频。点击“使用Step-Audio-EditX”时，浏览器会把当前行播放按钮绑定的原始音频上传到主服务 `8300`，并使用当前行文本作为 `prompt_text` 和 `generated_text`。当前页面的按钮固定发送：
+
+```json
+{
+  "prompt_audio": "step-audio-editx/<line-id>.wav",
+  "prompt_text": "当前行文本",
+  "generated_text": "当前行文本",
+  "edit_type": "emotion",
+  "edit_info": "coldness"
+}
+```
+
+接口是 `POST http://127.0.0.1:8300/v1/step-audio-editx/edit`。其中 `prompt_audio` 必须先经 `POST /v1/upload_audio` 上传，`edit_type` 和 `edit_info` 是 JSON 字段名，分别对应官方 CLI 的 `--edit-type`、`--edit-info`。当前前端仅自动发起 `emotion` 编辑，`edit_info` 必须来自 [`editConfig/emotion.js`](../editConfig/emotion.js)；后端同时接受官方的 `style`、`paralinguistic`、`denoise`、`vad` 和 `speed` 类型。编辑结果保存到 `stepAudioEditXAudioAssetKey`，可独立试听、删除、导出和导入。
+
+后端需配置 `STEP_AUDIO_EDITX_CONDA_ENV`、`STEP_AUDIO_EDITX_MODEL_DIR`、`STEP_AUDIO_TOKENIZER_PATH` 与 `STEP_AUDIO_EDITX_CODE_PATH`。`GET /v1/health` 的 `available.step_audio_editx` 可检查模型、tokenizer、源码与 worker 文件是否齐备；它不替代实际 CUDA/vLLM 推理验证。
+
 ## 音色设计
 
 默认可选端点：

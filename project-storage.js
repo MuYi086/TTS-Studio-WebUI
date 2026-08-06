@@ -202,7 +202,8 @@
             type: 'dialogue',
             role: source.role_name || source.role || '旁白',
             text: source.text_content || source.text || source.content || '',
-            emotion: source.emotion || '平静',
+            // 缺少 emotion 时回退到 Step-Audio-EditX 官方情绪词表中的中性近似标签。
+            emotion: source.emotion || 'coldness',
             intensity: source.intensity || '中等',
             // VoxCPM2 表演计划独立于 IndexTTS2 的 emotion / intensity，不能混用两者的语义。
             clone_mode: cloneMode,
@@ -223,7 +224,11 @@
             speed: toNumber(source.speed, 1.0),
             audioAssetKey: source.audioAssetKey || `line_audio_${id}`,
             audioUrl: '',
-            isGenerating: false
+            isGenerating: false,
+            // Step-Audio-EditX 结果和原台词音频分开持久化，删除编辑结果不会影响原始合成。
+            stepAudioEditXAudioAssetKey: source.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${id}`,
+            stepAudioEditXAudioUrl: '',
+            isStepAudioEditXEditing: false
         };
     }
 
@@ -368,9 +373,12 @@
                 scriptLines: ensureArray(script.data.scriptLines).map((line) => {
                     const safe = cloneData(line) || {};
                     delete safe.audioUrl;
+                    delete safe.stepAudioEditXAudioUrl;
                     delete safe.imageUrl;
                     delete safe.isGenerating;
+                    delete safe.isStepAudioEditXEditing;
                     delete safe.abortController;
+                    delete safe.stepAudioEditXAbortController;
                     return safe;
                 })
             }

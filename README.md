@@ -12,6 +12,7 @@
 - 为角色绑定本地参考音频，或以 Qwen / MiMo 生成参考音色和可编辑的参考文案。
 - 在音色、SFX 与 BGM 资源库中显示波形、试听进度和可视化裁剪范围。
 - 单行或批量调用本地 TTS（文本转语音）服务；合成前会校验并上传参考音频。
+- 剧本的 `emotion` 默认使用 Step-Audio-EditX 官方情绪标签；可将已生成的单行音频按该标签再次编辑，并保留原始与编辑结果供分别试听、删除和工程恢复。
 - 在浏览器内混入 SFX、BGM 与滤波器，顺序预览并导出 `SRT`、`WAV`、`MP4`。
 - 将工程结构和资产一起导出为 JSON 工程文件，用于备份和恢复。
 
@@ -48,10 +49,13 @@ bash start.sh
 - `POST /v1/qwen/design`
 - `POST /v1/mimo/design`
 - `POST /v1/voxcpm2/design`
+- `POST /v1/step-audio-editx/edit`
 
 `/v1/voxcpm2/design` 是独立的 VoxCPM2 音色设计接口，不与 Qwen 的 `/v1/qwen/design` 混用。它按 VoxCPM2 官方格式生成无参考音频音色，默认使用 `cfg_value=2.0`、`inference_timesteps=10` 和项目默认 `seed=20260614`。官方示例中的 `seed=42` 用于固定随机结果、方便复现，不代表固定音质提升。
 
 当前 WebUI 的台词合成只会调用 VoxCPM2。每条 `dialogue` 保存 `clone_mode`、`delivery_profile`、`voxcpm_nonverbal_tags` 与 `needs_review`：默认 `ultimate` + `baseline` 会提交准确的 `prompt_text`；选中非基线档位或明确的非语言反应时切换到 `controllable`，提交受限的 `control_instruction`，且不发送 `prompt_text`。非语言标签只允许官方白名单中的一个，出现标签必定标记为需试听；后端会在模型调用前输出最终拼接文本。这两个 VoxCPM2 路径互斥，表演档位不直接控制最终响度。历史 IndexTTS2/Qwen3-TTS 配置会保留在浏览器中供删除，但不会显示在合成选择器、不可编辑，也不会被调用；不会把 `8300` 或 `8305` 自动改写为 `8306`。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
+
+Step-Audio-EditX 编辑按钮固定使用当前行已生成的原始音频作为 `prompt_audio`、当前行文本作为 `prompt_text` 和 `generated_text`，并发送 `edit_type="emotion"`、`edit_info=line.emotion`。因此点击前必须先生成原始台词，且 `emotion` 必须是 [`editConfig/emotion.js`](editConfig/emotion.js) 中的官方标签。编辑结果以独立资产键保存，不会替换原始台词音频。
 
 新建 TTS 配置固定为 VoxCPM2；本机默认端口为 `8306`。旧端口映射仅用于识别历史配置并将其隔离出当前合成链路。
 
@@ -63,7 +67,7 @@ bash start.sh
 2. 导入参考音频、SFX、BGM，维护滤波器和情绪预设。
 3. 在“脚本制作”粘贴原文，运行“LLM 深度分析”，检查角色和脚本块；长旁白应优先在自然语义停顿处分段，不要按固定字数硬切。
 4. 分析角色音色，生成或编辑参考文案，再通过 Qwen / MiMo / VoxCPM2 生成并绑定参考音色。
-5. 预览并调整停顿、音量、滤波器、SFX 与裁剪范围。
+5. 预览并调整停顿、音量、滤波器、SFX 与裁剪范围；需要强化情绪时，先生成单行原音频，再点击“使用Step-Audio-EditX”试听编辑结果。
 6. 定期导出完整工程；最终导出 `SRT`、`WAV` 或 `MP4`。
 
 ## 本地数据与备份

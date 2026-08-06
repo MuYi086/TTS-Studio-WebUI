@@ -1132,10 +1132,13 @@
                                         <select v-model="line.emotion"
                                             class="w-full px-2 py-1.5 text-xs border rounded bg-white focus:ring-1 focus:ring-blue-500 outline-none text-slate-700 font-bold">
                                             <option value="" disabled>选择情绪</option>
+                                            <option v-if="line.emotion && !isSystemEmotion(line.emotion)" :value="line.emotion">
+                                                {{ line.emotion }}（旧预设）
+                                            </option>
                                             <option v-for="preset in emotionPresets" :key="preset.id"
-                                                :value="preset.name">{{ preset.name }}</option>
+                                                :value="preset.key || preset.name">{{ preset.key || preset.name }}</option>
                                         </select>
-                                        <select v-model="line.intensity" v-if="isSystemEmotion(line.emotion)"
+                                        <select v-model="line.intensity" v-if="line.emotion"
                                             class="w-full px-2 py-1 text-xs border rounded bg-slate-50 focus:ring-1 focus:ring-blue-500 outline-none text-slate-600">
                                             <option value="微弱">微弱 (0.2)</option>
                                             <option value="稍弱">稍弱 (0.35)</option>
@@ -1182,6 +1185,13 @@
                                             class="w-full px-1 py-1.5 text-xs border rounded bg-white focus:ring-1 focus:ring-blue-500 outline-none text-center font-mono text-slate-600"
                                             placeholder="0">
                                     </div>
+
+                                    <button @click.stop="generateStepAudioEditXAudio(line)"
+                                        :disabled="!line.audioUrl && !line.isStepAudioEditXEditing"
+                                        :title="line.isStepAudioEditXEditing ? '停止 Step-Audio-EditX 编辑' : '使用当前台词音频按所选情绪编辑'"
+                                        :class="['px-2 py-1.5 rounded text-[10px] font-bold transition-colors w-[120px] h-[50px]', line.isStepAudioEditXEditing ? 'bg-rose-100 text-rose-700 hover:bg-rose-200' : 'bg-violet-100 text-violet-700 hover:bg-violet-200 disabled:opacity-50 disabled:cursor-not-allowed']">
+                                        {{ line.isStepAudioEditXEditing ? '停止编辑' : '使用Step-Audio-EditX' }}
+                                    </button>
 
                                     <div class="flex-grow"></div>
 
@@ -1318,6 +1328,16 @@
                                                             d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
                                                             clip-rule="evenodd" />
                                                     </svg>
+                                                </button>
+                                                <button v-if="line.stepAudioEditXAudioUrl" @click.stop="playStepAudioEditXAudio(line)"
+                                                    :data-testid="'line-step-audio-editx-play-' + line.id"
+                                                    title="播放 Step-Audio-EditX 编辑音频" class="text-violet-500 hover:text-violet-700 p-2">
+                                                    ▶
+                                                </button>
+                                                <button v-if="line.stepAudioEditXAudioUrl" @click.stop="clearStepAudioEditXAudio(line)"
+                                                    :data-testid="'line-step-audio-editx-clear-' + line.id"
+                                                    title="删除 Step-Audio-EditX 编辑音频" class="text-violet-500 hover:text-red-600 p-2">
+                                                    ✕
                                                 </button>
                                                 <button @click="removeScriptLine(index)" title="删除"
                                                     class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2">
@@ -1488,6 +1508,9 @@
 
     <script src="./project-storage.js"></script>
     <script src="./voice-design.js"></script>
+    <script src="./editConfig/emotion.js"></script>
+    <script src="./editConfig/paralinguistic.js"></script>
+    <script src="./editConfig/speakingStyle.js"></script>
     <script>
         /**
          * @fileoverview TTS Studio WebUI 浏览器端入口
@@ -1507,33 +1530,25 @@
             setup() {
                 // ==================== 1. 固定配置与外部模块 ====================
 
-                // --- System Emotions Definition ---
-                // 八个系统情绪与后端 emo_vector 的八个维度一一对应；数组位置属于协议，不能随意重排。
-                const SYSTEM_EMOTIONS = [
-                    // 每个系统预设都是单位向量，实际强度会在生成台词时乘以 intensityMap 中的系数。
-                    // 第 1 维代表“高兴”。
-                    { id: 'sys_1', name: '高兴', vector: [1, 0, 0, 0, 0, 0, 0, 0] },
-                    // 第 2 维代表“生气”。
-                    { id: 'sys_2', name: '生气', vector: [0, 1, 0, 0, 0, 0, 0, 0] },
-                    // 第 3 维代表“伤心”。
-                    { id: 'sys_3', name: '伤心', vector: [0, 0, 1, 0, 0, 0, 0, 0] },
-                    // 第 4 维代表“害怕”。
-                    { id: 'sys_4', name: '害怕', vector: [0, 0, 0, 1, 0, 0, 0, 0] },
-                    // 第 5 维代表“厌恶”。
-                    { id: 'sys_5', name: '厌恶', vector: [0, 0, 0, 0, 1, 0, 0, 0] },
-                    // 第 6 维代表“低落”。
-                    { id: 'sys_6', name: '低落', vector: [0, 0, 0, 0, 0, 1, 0, 0] },
-                    // 第 7 维代表“惊喜”。
-                    { id: 'sys_7', name: '惊喜', vector: [0, 0, 0, 0, 0, 0, 1, 0] },
-                    // 第 8 维代表“平静”。
-                    { id: 'sys_8', name: '平静', vector: [0, 0, 0, 0, 0, 0, 0, 1] }
-                ];
+                // Step-Audio-EditX 情绪标签是剧本 emotion 的唯一默认词表；配置文件可独立维护。
+                const STEP_AUDIO_EDITX_EMOTION_TAGS = Array.isArray(window.StepAudioEditXEmotionTags)
+                    ? window.StepAudioEditXEmotionTags
+                    : [];
+                const SYSTEM_EMOTIONS = STEP_AUDIO_EDITX_EMOTION_TAGS.map(({ key, value }) => ({
+                    id: `step-audio-editx-emotion-${key}`,
+                    key,
+                    name: key,
+                    description: value,
+                    enabled: true
+                }));
                 /**
                  * 判断给定名称是否属于不可覆盖的系统情绪。
                  * @param {string} name - 情绪名称
                  * @returns {boolean} 是否为系统情绪
                 */
-                const isSystemEmotion = (name) => SYSTEM_EMOTIONS.some(e => e.name === name);
+                const isSystemEmotion = (name) => SYSTEM_EMOTIONS.some(e => e.key === name || e.name === name);
+                // Step-Audio-EditX 编辑 API 固定由主服务提供；当前行原音频会先上传至该服务。
+                const STEP_AUDIO_EDITX_API_BASE_URL = 'http://127.0.0.1:8300';
                 // project-storage.js 通过 window 暴露兼容层，本页只消费它的公开 API。
                 const projectStorage = window.UnitaleProjectStorage;
 
@@ -2560,7 +2575,7 @@
                 // Prompt Template
                 // 默认脚本分析 Prompt 本身属于可编辑业务配置；占位符会在 analyzeScript 中运行时替换。
                 const defaultPromptTemplate = `你的任务是将给定小说内容拆分为台词和旁白，并生成可直接交给 VoxCPM2 的逐句表演计划。
-**注意：emotion 与 intensity 仅用于 WebUI 的剧本元数据和人工查看，不会映射为 TTS 参数；不要把它们当作模型控制指令。**
+**注意：emotion 是 Step-Audio-EditX 的官方情绪编辑标签；WebUI 会把它作为 edit_info。不要把它改写成自然语言提示词或 VoxCPM2 控制指令。intensity 仅用于剧本元数据和人工查看。**
 
 \${sfxSection}
 
@@ -2572,12 +2587,12 @@
 请为每一句台词（包括旁白）选择一个最合适的情绪和强度。
 
 1. **可选情绪 (Emotion)**: \${emotionList}
-   - **注意**: 必须严格从上述列表中选择，**严禁**编造列表之外的情绪名称。
-   - 旁白通常选择 "平静"，也可根据氛围选择其他情绪。
+   - **注意**: 每一行 dialogue 的 \`emotion\` 必须且只能从 \`editConfig/emotion.js\` 注入的上述标签中选择一个，**严禁**输出中文情绪名称、自然语言描述或列表之外的值。
+   - 旁白可根据语气使用 \`coldness\`、\`sad\`、\`fear\` 等上述标签；不要输出不存在的 \`calm\` 或“平静”。
 
 2. **可选强度 (Intensity)**: 微弱, 稍弱, 中等, 较强, 强烈
    - 请根据上下文判断情绪的强烈程度。
-   - **旁白强度**: 如果旁白有情绪（如伤心、害怕），强度必须很弱（建议选择 "微弱" 或 "稍弱"）。如果旁白是 "平静" 情绪，强度应为 "中等"。
+   - **旁白强度**: 如果旁白有情绪（如 \`sad\`、\`fear\`），强度必须很弱（建议选择 "微弱" 或 "稍弱"）。如果旁白的 \`emotion\` 为 \`coldness\`，强度应为 "中等"。
 
 # VoxCPM2 克隆与表演计划
 仅为每个 type="dialogue" 对象额外输出以下字段；它们独立于 emotion 与 intensity，不能互相替代：
@@ -2588,7 +2603,7 @@
 - \`needs_review\`: 布尔值；极端表演或有非语言标签时必须为 \`true\`。
 
 决策规则：
-1. 默认使用 \`"ultimate"\` + \`"baseline"\`。不得仅因文本属于悬疑、惊悚，或 emotion 不是“平静”而切换可控模式。
+1. 默认使用 \`"ultimate"\` + \`"baseline"\`。不得仅因文本属于悬疑、惊悚，或 \`emotion\` 不是 \`coldness\` 而切换可控模式。
 2. 仅当该句或紧邻的说话人提示明确要求改变角色默认表演方式，例如低声、发抖、咬牙、急促、强忍、突然提高语气、停顿后说，才使用 \`"controllable"\`。
 3. 低声、恐惧与紧张不等于绝对音量变小；优先通过克制、节奏、停顿和清晰咬字表现。除非原文明示，不要规划为耳语、喊叫或持续极端音量。
 4. 出现明确可听见的笑声、叹气、犹豫音、嘘声、问号语气或惊讶语气时，使用 \`"controllable"\`，将 \`needs_review\` 设为 \`true\`，并只在 \`voxcpm_nonverbal_tags\` 填一个官方标签；不得根据一般情绪自行猜测标签。
@@ -2632,12 +2647,6 @@
 - 默认为 0。如果有动作描写或心理活动暗示停顿，请设置相应时长（如 0.5, 1.0, 2.0）。
 - 示例: 两人对话间的尴尬沉默，或动作描写（如“他喝了一口茶”）需要的时间。
 
-## 5. 音频滤波器 (Filter)
-- 如果剧情环境特殊（如“在水下说话”、“电话通话中”、“回忆/内心独白”），且【滤波器库】中有对应效果，请在台词对象中添加 \`filter\` 字段。
-- **格式**: \`"filter": "滤波器名称"\`
-- **严格限制**: 必须使用【滤波器库】中存在的名称。如果没有匹配项，**不要**生成此字段。
-- **特别提醒**: 如果角色是“旁白”，**千万不要**使用滤波器功能。
-
 ## 6. VoxCPM2 表演计划与非语言标签
 - \`clone_mode\` 只能为 \`ultimate\` 或 \`controllable\`：无明确表演需要时优先 \`ultimate\`；只有需要固定短控制指令或明确非语言反应时才使用 \`controllable\`。
 - \`delivery_profile\` 只能为 \`baseline\`、\`expressive\`、\`suspense\`、\`fear\`、\`urgent\`、\`restrained\`；\`baseline\` 必须配合 \`ultimate\`，其他档位配合 \`controllable\`。不要输出自由文本控制指令。
@@ -2652,26 +2661,6 @@
   - **严禁生成** \`{"type": "sfx", ...}\` 这种独立音效块。音效必须包含在台词对象的 \`sfx\` 字段中。
 
 
-## 8. 背景图片块 (bgImage)
-- **插入时机**: 当场景氛围、地点、时间（白天/夜晚）、或叙事视角发生变化时，请在相邻的台词对象之间插入一个背景图片对象。
-- **插入位置**: 背景图片对象必须出现在“某个台词对象之后”并且“紧接着下一个台词对象之前”（不要插到台词组的内部）。
-- **对象格式**: \`{"type":"bgImage","image_prompt":"..."}\`
-  - \`image_prompt\` 必须是用于生成图片的**中文提示词**，并且必须根据当前小说上下文生成（包含：场景/地点、人物外观与表情（如果画面中需要人物）、衣着风格、光线、画面构图、镜头感、氛围与情绪、画风偏好等）。
-  - **提示词质量**: \`image_prompt\` 只输出中文、不要输出任何 JSON/代码/多余解释，尽量是一段可直接用于“生成图片”的提示文本（越具体越好，避免“可能/也许/看起来”之类不确定词）。
-  - **人物一致性（严格统一）**: 如果 \`image_prompt\` 中出现人物（包括面部/身体/衣着等可识别外观），则必须对每个出现人物给出“统一人物外观设定”，并且同一人物在所有 \`bgImage\` 块中必须保持完全一致：性别、年龄（或年龄段）、服装款式/颜色/材质、发型（发色/发长）、标志性特征/配饰（如有）。为保证一致性，你必须把人物外观设定写成同一种中文短句模板，并且对同名人物要求“逐字不变”（不要同义改写）：
-    - 模板示例：\`人物外观设定：{角色名}（性别=...，年龄=...，服装=...，发型=...，标志=...，主要配色=...）\`
-  - 角色名判定规则：\`{角色名}\` 必须使用当前背景图片所处场景中最近一次出现的 \`dialogue\` 对象的 \`role_name\`（例如“老李”“我”“旁白”等），同一 \`role_name\` 即视为同一人物。
-  - 除非当场景完全不出现该人物，否则不要省略其外观设定；否则可能导致不同图片出现“同一个人物外观不一致”。
-  - 提示词只需要中文，不需要输出图片数据或链接。
-- **字段限制**: \`bgImage\` 对象只输出上述必要字段（至少必须有 \`type\` 与 \`image_prompt\`）。
-- **与第 6 点兼容**: 即使第 6 点列出了两种对象，本规则要求你额外输出 \`type":"bgImage"\` 的第三种对象；最终仍然是一个严格 JSON 数组。
-- **type 字段严格性**: \`type\` 字段必须严格等于 \`bgImage\`（大小写不要改）。
-- **数量约束（严格遵守）**: 请在整个 JSON 数组中严格插入且仅插入 \${bgImageCount} 个 \`type":"bgImage"\` 对象，并且它们必须全部与剧情相关（不能随便凑数）。
-- **开场强制**: 第一个 \`bgImage\` 对象必须出现在“第一个 dialogue 对象之前”，用于视频开场背景；允许开头存在 \`bgm\` 控制块，但 \`bgImage\` 仍必须早于第一个 \`dialogue\`。
-- **分布要求**: 除开场第一张外，其余 \`bgImage\` 必须按照剧情节奏插入在台词之间（至少间隔一个 \`dialogue\`），避免连续出现多个 \`bgImage\`。
-- **例外开场**: 允许第一个 \`bgImage\` 作为开场背景，放在第一个 \`dialogue\` 之前；其余 \`bgImage\` 仍按“某个台词对象之后并紧接着下一个台词对象之前”的相邻插入规则执行。
-
-
 ## 小说原文:
 <novel_content>
 “别接那个电话！”老李猛地按住了我的手，脸色惨白，“那是昨晚值班的小张打来的。”
@@ -2682,14 +2671,14 @@
 ## 输出:
 [
 \${bgmExampleLine}
-  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion": "害怕", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "urgent", "voxcpm_nonverbal_tags": [], "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion": "害怕", "intensity": "较强", "clone_mode": "controllable", "delivery_profile": "suspense", "needs_review": false, "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0\${sfxExample}},
-  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion": "害怕", "intensity": "微弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion": "害怕", "intensity": "稍弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "平静", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion": "害怕", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0}
+  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "urgent", "voxcpm_nonverbal_tags": [], "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion": "fear", "intensity": "较强", "clone_mode": "controllable", "delivery_profile": "suspense", "needs_review": false, "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0\${sfxExample}},
+  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion": "fear", "intensity": "微弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion": "fear", "intensity": "稍弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0}
 ]
 
 # 输入内容
@@ -2698,6 +2687,19 @@
 <novel_content>
 \${rawScript}
 </novel_content>`;
+
+                /**
+                 * 清理已保存模板中已经从内置默认 Prompt 移除的规则块。
+                 * 只删除目标标题及其所在块，保留用户在其他位置的自定义内容。
+                 * @param {string} template - 待迁移的脚本分析 Prompt
+                 * @returns {string} 清理后的脚本分析 Prompt
+                 */
+                const normalizePromptTemplate = (template) => {
+                    if (typeof template !== 'string') return template;
+                    return template
+                        .replace(/\n## 5\. 音频滤波器 \(Filter\)[\s\S]*?(?=\n## 6\. VoxCPM2 表演计划与非语言标签)/, '')
+                        .replace(/\n## 8\. 背景图片块 \(bgImage\)[\s\S]*?(?=\n## 小说原文:)/, '');
+                };
 
                 // 用户可编辑的脚本分析 Prompt，初始复制系统模板。
                 const customPromptTemplate = ref(defaultPromptTemplate);
@@ -3539,11 +3541,20 @@ ${voiceReferenceHardConstraints}`;
                             // dialogue 的二进制通过 audioAssetKey 定位，旧数据回退固定命名规则。
                             if (line.type === 'dialogue') {
                                 const blob = await loadStoredAssetBlob(line, line.audioAssetKey || `line_audio_${line.id}`);
-                                if (!blob) continue;
-                                // 恢复内存 File 映射，供播放、导出或重新上传使用。
-                                registerLocalAsset(line, blob, `${line.id}.wav`);
-                                // audioUrl 是本次会话临时地址，不写入工程 JSON。
-                                line.audioUrl = URL.createObjectURL(blob);
+                                if (blob) {
+                                    // 恢复内存 File 映射，供播放、导出或重新上传使用。
+                                    registerLocalAsset(line, blob, `${line.id}.wav`);
+                                    // audioUrl 是本次会话临时地址，不写入工程 JSON。
+                                    line.audioUrl = URL.createObjectURL(blob);
+                                }
+                                // EditX 结果拥有独立资产键；原台词缺失时也应允许它单独恢复试听。
+                                const editKey = line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`;
+                                const editBlob = await loadStoredAssetBlob(editKey);
+                                if (editBlob) {
+                                    line.stepAudioEditXAudioAssetKey = editKey;
+                                    registerLocalAsset(editKey, editBlob, `${line.id}_step-audio-editx.wav`);
+                                    line.stepAudioEditXAudioUrl = URL.createObjectURL(editBlob);
+                                }
                             // bgImage 使用独立素材键和 imageUrl 运行时字段。
                             } else if (line.type === 'bgImage') {
                                 // 兼容没有显式 bgImageAssetKey 的旧工程。
@@ -3647,7 +3658,14 @@ ${voiceReferenceHardConstraints}`;
  
                      // 第 4 阶段：逐项恢复 Prompt 内容和开关；缺键时保留代码默认值。
                      const savedPrompt = localStorage.getItem('storyforge_prompt_template');
-                     if (savedPrompt) customPromptTemplate.value = savedPrompt;
+                     if (savedPrompt) {
+                         // 首次升级时清理旧版内置规则，并回写同一个兼容键，避免刷新后再次显示。
+                         const normalizedPromptTemplate = normalizePromptTemplate(savedPrompt);
+                         customPromptTemplate.value = normalizedPromptTemplate;
+                         if (normalizedPromptTemplate !== savedPrompt) {
+                             localStorage.setItem('storyforge_prompt_template', normalizedPromptTemplate);
+                         }
+                     }
  
                      const savedUseCustom = localStorage.getItem('storyforge_use_custom_prompt');
                      if (savedUseCustom) useCustomPrompt.value = JSON.parse(savedUseCustom);
@@ -5758,7 +5776,7 @@ ${voiceReferenceHardConstraints}`;
                  * @param {boolean} [stopPreviousSfx] - 是否先停止上一组音效
                  * @returns {Promise<void>} 台词自然结束、停止或加载失败后兑现
                  */
-                const playLineAudio = (line, stopPreviousSfx = true) => {
+                const playLineAudio = (line, stopPreviousSfx = true, dialogueAsset = line, auditioningId = line.id) => {
                     // 用 Promise 包住整段播放生命周期，顺序播放时可以直接 await 当前台词结束。
                     return new Promise(async (resolve, reject) => {
                         try {
@@ -5792,7 +5810,7 @@ ${voiceReferenceHardConstraints}`;
                             }
 
                             // 再次点击正在试听的同一台词表示“停止”，无需重新创建音源。
-                            if (isAuditioningId.value === line.id) {
+                            if (isAuditioningId.value === auditioningId) {
                                 // 清空界面的试听标识，让播放按钮恢复未播放状态。
                                 isAuditioningId.value = null;
                                 // 正常结束 Promise，避免调用方把主动停止当成异常。
@@ -5800,14 +5818,14 @@ ${voiceReferenceHardConstraints}`;
                             }
 
                             // 没有运行时 URL 且没有持久化键，说明该行尚未生成音频，静默跳过。
-                            if (!line.audioUrl && !line.audioAssetKey) return resolve();
+                            if (!getAssetPath(dialogueAsset) && !getAssetStorageKey(dialogueAsset)) return resolve();
 
                             // 先标记正在试听的台词，驱动按钮状态和进度条显示。
-                            isAuditioningId.value = line.id;
+                            isAuditioningId.value = auditioningId;
 
                             // loadAudioBuffer 内部会按内存缓存、对象 URL、IndexedDB 的顺序取素材。
                             /** 加载当前台词的音频缓冲。 */
-                            const loadDialogue = async () => await loadAudioBuffer(line);
+                            const loadDialogue = async () => await loadAudioBuffer(dialogueAsset);
 
                             /**
                              * 并行加载当前台词引用的全部有效音效。
@@ -5983,7 +6001,7 @@ ${voiceReferenceHardConstraints}`;
                                     playbackAnimationFrame = null;
                                 }
                                 // 只清除仍属于本行的标识，避免覆盖刚启动的新台词状态。
-                                if (isAuditioningId.value === line.id) {
+                                if (isAuditioningId.value === auditioningId) {
                                     isAuditioningId.value = null;
                                 }
                                 // 通知顺序播放器可以继续处理下一条台词。
@@ -5996,7 +6014,7 @@ ${voiceReferenceHardConstraints}`;
                             /** 按播放速率更新台词在原始音频中的进度比例。 */
                             const updateProgress = () => {
                                 // 本行若已经停止或被另一行替换，就终止递归动画。
-                                if (isAuditioningId.value !== line.id) return;
+                                if (isAuditioningId.value !== auditioningId) return;
                                 // 计算相对预定启动时刻实际流逝的墙钟秒数。
                                 const elapsed = audioContext.currentTime - now;
                                 // 预调度的 50ms 内 elapsed 为负，进度应停在裁剪起点。
@@ -6033,6 +6051,135 @@ ${voiceReferenceHardConstraints}`;
                     });
                 };
 
+                /** 播放当前台词对应的 Step-Audio-EditX 独立编辑结果。 */
+                const playStepAudioEditXAudio = (line) => {
+                    const asset = {
+                        audioAssetKey: line.stepAudioEditXAudioAssetKey,
+                        audioUrl: line.stepAudioEditXAudioUrl
+                    };
+                    return playLineAudio(line, true, asset, `step-audio-editx-${line.id}`);
+                };
+
+                /**
+                 * 删除指定的 IndexedDB 音频资产；调用方负责先更新页面状态与回收对象 URL。
+                 * @param {string} assetKey - 素材稳定键
+                 * @returns {Promise<void>} 删除请求完成后兑现
+                 */
+                const deleteAudioAssetFromDB = async (assetKey) => {
+                    if (!assetKey) return;
+                    if (!dbInstance) await initDB();
+                    await new Promise((resolve, reject) => {
+                        const tx = dbInstance.transaction('assets', 'readwrite');
+                        const store = tx.objectStore('assets');
+                        const req = store.delete(assetKey);
+                        req.onsuccess = () => resolve();
+                        req.onerror = (event) => reject(event.target.error);
+                    });
+                };
+
+                /**
+                 * 使用当前已生成台词作为 prompt 音频，按本行 Step-Audio-EditX emotion 标签生成独立编辑结果。
+                 * @param {Object} line - dialogue 类型的台词块
+                 * @returns {Promise<void>} 编辑结果保存到独立资产键后兑现
+                 */
+                const generateStepAudioEditXAudio = async (line) => {
+                    if (line.isStepAudioEditXEditing) {
+                        line.stepAudioEditXAbortController?.abort();
+                        return;
+                    }
+                    if (!line.audioUrl) {
+                        alert('请先生成当前台词音频，再使用 Step-Audio-EditX 编辑。');
+                        return;
+                    }
+                    if (!isSystemEmotion(line.emotion)) {
+                        alert('Step-Audio-EditX 仅接受 editConfig/emotion.js 中的 emotion 标签，请先选择一个官方情绪。');
+                        return;
+                    }
+
+                    const controller = new AbortController();
+                    line.isStepAudioEditXEditing = true;
+                    line.stepAudioEditXAbortController = controller;
+                    try {
+                        const sourceAudio = await loadStoredAssetBlob(line, line.audioAssetKey || `line_audio_${line.id}`);
+                        if (!sourceAudio) throw new Error('找不到当前台词的原始音频，无法作为 Step-Audio-EditX 的 prompt-audio。');
+
+                        const promptAudioPath = `step-audio-editx/${line.id}.wav`;
+                        const uploadForm = new FormData();
+                        uploadForm.append('audio', sourceAudio, `${line.id}.wav`);
+                        uploadForm.append('full_path', promptAudioPath);
+                        uploadForm.append('prompt_text', line.text);
+                        const uploadResponse = await fetch(`${STEP_AUDIO_EDITX_API_BASE_URL}/v1/upload_audio`, {
+                            method: 'POST',
+                            body: uploadForm,
+                            signal: controller.signal
+                        });
+                        if (!uploadResponse.ok) {
+                            throw new Error(`Step-Audio-EditX prompt-audio 上传失败: ${await uploadResponse.text()}`);
+                        }
+
+                        const editResponse = await fetch(`${STEP_AUDIO_EDITX_API_BASE_URL}/v1/step-audio-editx/edit`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                prompt_text: line.text,
+                                prompt_audio: promptAudioPath,
+                                generated_text: line.text,
+                                edit_type: 'emotion',
+                                edit_info: line.emotion
+                            }),
+                            signal: controller.signal
+                        });
+                        if (!editResponse.ok) {
+                            throw new Error(`Step-Audio-EditX 编辑失败: ${await editResponse.text()}`);
+                        }
+
+                        const blob = await editResponse.blob();
+                        const contentType = editResponse.headers.get('content-type') || blob.type;
+                        if (!blob.size || /json|text/i.test(contentType)) {
+                            const detail = /json|text/i.test(contentType) ? await blob.text() : '服务返回空音频。';
+                            throw new Error(`Step-Audio-EditX 未返回音频: ${detail}`);
+                        }
+
+                        const assetKey = line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`;
+                        const previousUrl = line.stepAudioEditXAudioUrl;
+                        line.stepAudioEditXAudioAssetKey = assetKey;
+                        await saveAssetToDB(assetKey, blob);
+                        registerLocalAsset(assetKey, blob, `${line.id}_step-audio-editx.wav`);
+                        line.stepAudioEditXAudioUrl = URL.createObjectURL(blob);
+                        if (previousUrl) {
+                            audioBufferCache.delete(previousUrl);
+                            URL.revokeObjectURL(previousUrl);
+                        }
+                        triggerAutoSave();
+                    } catch (error) {
+                        if (error.name !== 'AbortError') {
+                            console.error('Step-Audio-EditX 编辑失败:', error);
+                            alert(error.message);
+                        }
+                    } finally {
+                        line.isStepAudioEditXEditing = false;
+                        delete line.stepAudioEditXAbortController;
+                    }
+                };
+
+                /** 删除当前台词的 Step-Audio-EditX 独立编辑结果，不影响原始台词音频。 */
+                const clearStepAudioEditXAudio = async (line) => {
+                    if (!line.stepAudioEditXAudioUrl) return;
+                    const assetKey = line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`;
+                    const audioUrl = line.stepAudioEditXAudioUrl;
+                    line.stepAudioEditXAudioUrl = '';
+                    audioBufferCache.delete(assetKey);
+                    audioBufferCache.delete(audioUrl);
+                    removeLocalAsset(assetKey);
+                    URL.revokeObjectURL(audioUrl);
+                    try {
+                        await deleteAudioAssetFromDB(assetKey);
+                    } catch (error) {
+                        console.error(`Failed to delete Step-Audio-EditX asset ${assetKey} from DB`, error);
+                    }
+                    triggerAutoSave();
+                };
+
                 /**
                  * 清除单条台词的运行时音频、缓存和 IndexedDB 素材。
                  * @param {Object} line - 待清理的台词块
@@ -6060,20 +6207,8 @@ ${voiceReferenceHardConstraints}`;
                     removeLocalAsset(line);
 
                     try {
-                        // 确保 IndexedDB 已连接后再删除持久化音频。
-                        if (!dbInstance) await initDB();
-                        // IndexedDB 请求使用事件回调，这里包装成 Promise 便于 await。
-                        await new Promise((resolve, reject) => {
-                            // 删除操作必须在 assets 对象仓库的读写事务中执行。
-                            const tx = dbInstance.transaction('assets', 'readwrite');
-                            const store = tx.objectStore('assets');
-                            // 按上面解析出的稳定资产键删除 Blob 记录。
-                            const req = store.delete(audioKey);
-                            // 请求成功即兑现本地 Promise。
-                            req.onsuccess = () => resolve();
-                            // 请求失败时把 IndexedDB 原始错误交给外层捕获。
-                            req.onerror = (e) => reject(e.target.error);
-                        });
+                        // 与 Step-Audio-EditX 结果共用同一删除路径，保证 IndexedDB 语义一致。
+                        await deleteAudioAssetFromDB(audioKey);
                     } catch (e) {
                         // 数据库清理失败不回滚界面清理，但记录问题以便排查残留素材。
                         console.error(`Failed to delete asset ${audioKey} from DB`, e);
@@ -6227,17 +6362,27 @@ ${voiceReferenceHardConstraints}`;
                                     await new Promise(r => requestAnimationFrame(r));
                                 }
 
-                                // 对白行的二进制素材存入 audioBase64。
+                                // 对白行的原始与 Step-Audio-EditX 编辑音频分别内嵌，二者可独立恢复。
                                 if (line.type === 'dialogue') {
                                     // 新工程用显式键，旧工程按 line.id 推导兼容键。
                                     const blob = await loadStoredAssetBlob(line, line.audioAssetKey || `line_audio_${line.id}`);
-                                    // 未生成音频或资产丢失时保留台词结构并跳过二进制。
-                                    if (!blob) continue;
-                                    try {
-                                        // Data URL 自带音频 MIME，因此无需额外 audioMimeType 字段。
-                                        line.audioBase64 = await blobToBase64(blob);
-                                    } catch (e) {
-                                        console.warn('导出台词音频失败:', line.id, e);
+                                    if (blob) {
+                                        try {
+                                            // Data URL 自带音频 MIME，因此无需额外 audioMimeType 字段。
+                                            line.audioBase64 = await blobToBase64(blob);
+                                        } catch (e) {
+                                            console.warn('导出台词音频失败:', line.id, e);
+                                        }
+                                    }
+                                    const editBlob = await loadStoredAssetBlob(
+                                        line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`
+                                    );
+                                    if (editBlob) {
+                                        try {
+                                            line.stepAudioEditXAudioBase64 = await blobToBase64(editBlob);
+                                        } catch (e) {
+                                            console.warn('导出 Step-Audio-EditX 音频失败:', line.id, e);
+                                        }
                                     }
                                 // 背景图片行使用独立的 imageBase64 和 imageMimeType 字段。
                                 } else if (line.type === 'bgImage') {
@@ -6512,6 +6657,31 @@ ${voiceReferenceHardConstraints}`;
                                     }
                                     // 传输字段恢复完成后删除，避免自动保存重复写入巨型 Base64。
                                     delete line.audioBase64;
+                                }
+
+                                // Step-Audio-EditX 音频与原始台词的传输字段分离，导入后不覆盖原音频。
+                                if (line.type === 'dialogue' && line.stepAudioEditXAudioBase64) {
+                                    try {
+                                        const realEditAudioBase64 = resolveEmbeddedBase64(line.stepAudioEditXAudioBase64);
+                                        if (realEditAudioBase64) {
+                                            let blob;
+                                            if (realEditAudioBase64.startsWith('data:')) {
+                                                const mimeMatch = realEditAudioBase64.match(/^data:(.*?);/);
+                                                blob = base64ToBlob(realEditAudioBase64, mimeMatch ? mimeMatch[1] : 'audio/wav');
+                                            } else {
+                                                const response = await fetch(realEditAudioBase64);
+                                                blob = await response.blob();
+                                            }
+                                            const assetKey = line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`;
+                                            line.stepAudioEditXAudioAssetKey = assetKey;
+                                            registerLocalAsset(assetKey, blob, `${line.id}_step-audio-editx.wav`);
+                                            line.stepAudioEditXAudioUrl = URL.createObjectURL(blob);
+                                            assetsToSave.push({ key: assetKey, blob });
+                                        }
+                                    } catch (error) {
+                                        console.warn('Step-Audio-EditX audio restore failed', error);
+                                    }
+                                    delete line.stepAudioEditXAudioBase64;
                                 }
 
                                 // 背景图采用与台词音频平行的恢复流程。
@@ -7264,7 +7434,7 @@ ${voiceReferenceHardConstraints}`;
                         // 未经 LLM 分析时统一归入旁白角色。
                         role: '旁白',
                         // 默认情绪与强度可直接映射到当前情绪预设。
-                        emotion: '平静',
+                        emotion: 'coldness',
                         intensity: '中等',
                         // 手动拆分不推断表演，默认使用参考文本驱动的极致克隆基线。
                         clone_mode: 'ultimate',
@@ -7357,7 +7527,7 @@ ${voiceReferenceHardConstraints}`;
                         // 新台词默认属于旁白，用户可从角色列表切换。
                         role: '旁白',
                         // 默认使用平静、中等的情绪组合。
-                        emotion: '平静',
+                        emotion: 'coldness',
                         intensity: '中等',
                         // 手动新增台词沿用最安全的 VoxCPM2 极致克隆基线。
                         clone_mode: 'ultimate',
@@ -8302,7 +8472,10 @@ ${voiceReferenceHardConstraints}`;
                     }
 
                     // 情绪只需名称列表；具体情绪向量留给后续 TTS 阶段解析。
-                    const emotionList = emotionPresets.value.filter(e => e.enabled !== false).map(e => e.name).join(', ');
+                    const emotionList = emotionPresets.value
+                        .filter(e => e.enabled !== false)
+                        .map(e => e.key || e.name)
+                        .join(', ');
 
                     // JSON 示例中的 BGM 名称取真实资源第一项，空库时完全省略示例行。
                     const bgmExampleLine = enabledBgm.length > 0
@@ -8972,7 +9145,8 @@ ${voiceReferenceHardConstraints}`;
 
                 /** 保存脚本分析与音色分析 Prompt 及其启用状态。 */
                 const savePrompt = () => {
-                    // 保存用户编辑的脚本分析模板。
+                    // 保存前同步清理已移除的旧规则块，避免旧内容再次出现在刷新后的页面。
+                    customPromptTemplate.value = normalizePromptTemplate(customPromptTemplate.value);
                     localStorage.setItem('storyforge_prompt_template', customPromptTemplate.value);
                     // 布尔开关序列化为 JSON 字符串，加载时可准确恢复类型。
                     localStorage.setItem('storyforge_use_custom_prompt', JSON.stringify(useCustomPrompt.value));
@@ -9000,6 +9174,8 @@ ${voiceReferenceHardConstraints}`;
                         // 仅恢复响应式模板内容，是否启用的开关保持用户选择。
                         customPromptTemplate.value = defaultPromptTemplate;
                         customVoicePromptTemplate.value = defaultVoicePromptTemplate;
+                        // 默认脚本模板也要同步写回，避免刷新后被旧的 localStorage 内容覆盖。
+                        localStorage.setItem('storyforge_prompt_template', defaultPromptTemplate);
                     }
                 };
 
@@ -9128,8 +9304,9 @@ ${voiceReferenceHardConstraints}`;
                     bgmLibrary, bgmForm, isEditingBgm,
                     saveBgm, editBgm, deleteBgm, resetBgmForm, handleBgmFileUpload,
 
-                    // 可分配角色、当前试听 ID，以及单条音频生成/试听/清理入口。
+                    // 可分配角色、当前试听 ID，以及原始/Step-Audio-EditX 台词音频的生成、试听和清理入口。
                     availableRoles, isAuditioningId, generateLineAudio, playLineAudio, clearLineAudio,
+                    generateStepAudioEditXAudio, playStepAudioEditXAudio, clearStepAudioEditXAudio,
                     // 台词级 VoxCPM2 极致/可控克隆计划与用户覆盖操作。
                     voxcpmDeliveryProfiles: VOXCPM_DELIVERY_PROFILES,
                     voxcpmNonverbalTags: VOXCPM_NONVERBAL_TAGS,
