@@ -1187,8 +1187,8 @@
                                     </div>
 
                                     <button @click.stop="generateStepAudioEditXAudio(line)"
-                                        :disabled="!line.audioUrl && !line.isStepAudioEditXEditing"
-                                        :title="line.isStepAudioEditXEditing ? '停止 Step-Audio-EditX 编辑' : '使用当前台词音频按所选情绪编辑'"
+                                        :disabled="!line.audioUrl && !line.stepAudioEditXAudioUrl && !line.isStepAudioEditXEditing"
+                                        :title="line.isStepAudioEditXEditing ? '停止 Step-Audio-EditX 编辑' : (line.stepAudioEditXAudioUrl ? '继续使用上一次 Step-Audio-EditX 音频叠加编辑' : '使用当前台词音频按所选情绪编辑')"
                                         :class="['px-2 py-1.5 rounded text-[10px] font-bold transition-colors w-[120px] h-[50px]', line.isStepAudioEditXEditing ? 'bg-rose-100 text-rose-700 hover:bg-rose-200' : 'bg-violet-100 text-violet-700 hover:bg-violet-200 disabled:opacity-50 disabled:cursor-not-allowed']">
                                         {{ line.isStepAudioEditXEditing ? '停止编辑' : '使用Step-Audio-EditX' }}
                                     </button>
@@ -1556,7 +1556,7 @@
                  * @returns {boolean} 是否为系统情绪
                 */
                 const isSystemEmotion = (name) => SYSTEM_EMOTIONS.some(e => e.key === name || e.name === name);
-                // Step-Audio-EditX 编辑 API 固定由主服务提供；当前行原音频会先上传至该服务。
+                // Step-Audio-EditX 编辑 API 固定由主服务提供；当前行的 prompt 音频会先上传至该服务。
                 const STEP_AUDIO_EDITX_API_BASE_URL = 'http://127.0.0.1:8300';
                 // project-storage.js 通过 window 暴露兼容层，本页只消费它的公开 API。
                 const projectStorage = window.UnitaleProjectStorage;
@@ -6197,6 +6197,21 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 /**
+                 * 为一次 Step-Audio-EditX 请求生成唯一的服务端 prompt 路径。
+                 * @param {Object} line - dialogue 类型的台词块
+                 * @returns {string} 本次上传使用的 prompt 音频路径
+                 */
+                const createStepAudioEditXPromptAudioPath = (line) => {
+                    // 台词 ID 可能来自外部工程，路径片段只保留安全字符，避免影响后端文件名哈希输入。
+                    const safeLineId = String(line?.id || 'line').replace(/[^a-zA-Z0-9_-]/g, '_');
+                    // randomUUID 在 localhost 可用；旧浏览器或非安全上下文使用时间戳与随机串回退。
+                    const randomPart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                        ? crypto.randomUUID().replace(/-/g, '')
+                        : `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+                    return `step-audio-editx/${safeLineId}_${Date.now()}_${randomPart}.wav`;
+                };
+
+                /**
                  * 删除指定的 IndexedDB 音频资产；调用方负责先更新页面状态与回收对象 URL。
                  * @param {string} assetKey - 素材稳定键
                  * @returns {Promise<void>} 删除请求完成后兑现
@@ -6214,7 +6229,8 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 /**
-                 * 使用当前已生成台词作为 prompt 音频，按本行 Step-Audio-EditX emotion 标签生成独立编辑结果。
+                 * 使用当前可用的台词音频作为 prompt 音频，按本行 Step-Audio-EditX emotion 标签生成独立编辑结果。
+                 * 已有 EditX 结果时优先使用该结果，从而支持连续叠加编辑；否则使用原始台词音频。
                  * @param {Object} line - dialogue 类型的台词块
                  * @returns {Promise<void>} 编辑结果保存到独立资产键后兑现
                  */
@@ -6223,7 +6239,9 @@ ${voiceReferenceHardConstraints}`;
                         line.stepAudioEditXAbortController?.abort();
                         return;
                     }
-                    if (!line.audioUrl) {
+                    const hasEditedAudio = Boolean(line.stepAudioEditXAudioUrl);
+                    const sourceAudioUrl = hasEditedAudio ? line.stepAudioEditXAudioUrl : line.audioUrl;
+                    if (!sourceAudioUrl) {
                         alert('请先生成当前台词音频，再使用 Step-Audio-EditX 编辑。');
                         return;
                     }
@@ -6236,10 +6254,19 @@ ${voiceReferenceHardConstraints}`;
                     line.isStepAudioEditXEditing = true;
                     line.stepAudioEditXAbortController = controller;
                     try {
-                        const sourceAudio = await loadStoredAssetBlob(line, line.audioAssetKey || `line_audio_${line.id}`);
-                        if (!sourceAudio) throw new Error('找不到当前台词的原始音频，无法作为 Step-Audio-EditX 的 prompt-audio。');
+                        // 每次编辑都从当前页面实际展示的音频 URL 对应的资产读取：
+                        // 第一次使用原始台词，后续使用上一次 EditX 结果，避免链式编辑回退到原音频。
+                        const sourceAssetKey = hasEditedAudio
+                            ? (line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`)
+                            : (line.audioAssetKey || `line_audio_${line.id}`);
+                        const sourceAudio = await loadStoredAssetBlob(sourceAssetKey, sourceAudioUrl);
+                        if (!sourceAudio) {
+                            const sourceLabel = hasEditedAudio ? '上一次 Step-Audio-EditX 编辑音频' : '当前台词音频';
+                            throw new Error(`找不到${sourceLabel}，无法作为 Step-Audio-EditX 的 prompt-audio。`);
+                        }
 
-                        const promptAudioPath = `step-audio-editx/${line.id}.wav`;
+                        // 每次请求使用不同路径，避免后端按 prompt_audio 哈希复用/覆盖旧 prompt 文件。
+                        const promptAudioPath = createStepAudioEditXPromptAudioPath(line);
                         const uploadForm = new FormData();
                         uploadForm.append('audio', sourceAudio, `${line.id}.wav`);
                         uploadForm.append('full_path', promptAudioPath);

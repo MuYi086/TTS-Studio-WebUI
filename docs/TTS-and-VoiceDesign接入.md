@@ -39,11 +39,11 @@ VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_
 
 ## Step-Audio-EditX 单行编辑
 
-WebUI 将 Step-Audio-EditX 作为原始台词生成后的独立编辑步骤，不替换 `audioAssetKey` 对应的原始音频。点击“使用Step-Audio-EditX”时，浏览器会把当前行播放按钮绑定的原始音频上传到主服务 `8300`，并使用当前行文本作为 `prompt_text` 和 `generated_text`。当前页面的按钮固定发送：
+WebUI 将 Step-Audio-EditX 作为原始台词生成后的独立编辑步骤，不替换 `audioAssetKey` 对应的原始音频。第一次点击“使用Step-Audio-EditX”时，浏览器会把当前行播放按钮绑定的原始音频上传到主服务 `8300`；该行已有编辑结果时，后续点击改为上传最近一次编辑结果，因此支持二次、三次及连续叠加编辑。每次点击都会生成唯一的 `step-audio-editx/<line-id>_<timestamp>_<nonce>.wav` 作为上传路径，避免后端按相同 `prompt_audio` 路径复用旧文件。每次请求都使用当前行文本作为 `prompt_text` 和 `generated_text`。清除编辑结果后，下一次点击回退到原始台词音频。当前页面的按钮固定发送：
 
 ```json
 {
-  "prompt_audio": "step-audio-editx/<line-id>.wav",
+  "prompt_audio": "step-audio-editx/<line-id>_<timestamp>_<nonce>.wav",
   "prompt_text": "当前行文本",
   "generated_text": "当前行文本",
   "edit_type": "emotion",
@@ -51,7 +51,7 @@ WebUI 将 Step-Audio-EditX 作为原始台词生成后的独立编辑步骤，�
 }
 ```
 
-接口是 `POST http://127.0.0.1:8300/v1/step-audio-editx/edit`。其中 `prompt_audio` 必须先经 `POST /v1/upload_audio` 上传，`edit_type` 和 `edit_info` 是 JSON 字段名，分别对应官方 CLI 的 `--edit-type`、`--edit-info`。当前前端仅自动发起 `emotion` 编辑，`edit_info` 必须来自 [`editConfig/emotion.js`](../editConfig/emotion.js)；后端同时接受官方的 `style`、`paralinguistic`、`denoise`、`vad` 和 `speed` 类型。编辑结果保存到 `stepAudioEditXAudioAssetKey`，可独立试听、删除、导出和导入。
+接口是 `POST http://127.0.0.1:8300/v1/step-audio-editx/edit`。其中 `prompt_audio` 必须先经 `POST /v1/upload_audio` 上传，`edit_type` 和 `edit_info` 是 JSON 字段名，分别对应官方 CLI 的 `--edit-type`、`--edit-info`。当前前端仅自动发起 `emotion` 编辑，`edit_info` 必须来自 [`editConfig/emotion.js`](../editConfig/emotion.js)；后端同时接受官方的 `style`、`paralinguistic`、`denoise`、`vad` 和 `speed` 类型。编辑结果保存到 `stepAudioEditXAudioAssetKey`，可独立试听、删除、导出和导入；原始音频与最近一次编辑结果始终分别保存。
 
 后端需配置 `STEP_AUDIO_EDITX_CONDA_ENV`、`STEP_AUDIO_EDITX_MODEL_DIR`、`STEP_AUDIO_TOKENIZER_PATH` 与 `STEP_AUDIO_EDITX_CODE_PATH`。`GET /v1/health` 的 `available.step_audio_editx` 可检查模型、tokenizer、源码与 worker 文件是否齐备；它不替代实际 CUDA/vLLM 推理验证。
 
