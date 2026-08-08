@@ -185,8 +185,11 @@
         const deliveryProfile = VOXCPM_DELIVERY_PROFILES.has(source.delivery_profile)
             ? source.delivery_profile
             : 'baseline';
+        const hasControlInstruction = typeof source.control_instruction === 'string'
+            && source.control_instruction.trim().length > 0;
         // 旧工程无计划字段时始终落到高保真的极致克隆基线，避免导入后意外改变朗读方式。
         const cloneMode = nonverbalTags.length > 0
+            || hasControlInstruction
             || (VOXCPM_CLONE_MODES.has(source.clone_mode)
             && source.clone_mode === 'controllable'
             && deliveryProfile !== 'baseline')
@@ -208,6 +211,8 @@
             // VoxCPM2 表演计划独立于 IndexTTS2 的 emotion / intensity，不能混用两者的语义。
             clone_mode: cloneMode,
             delivery_profile: resolvedDeliveryProfile,
+            // 括号内的自然语言表演指令与 text 分开保存，兼容可控克隆的逐句控制。
+            control_instruction: typeof source.control_instruction === 'string' ? source.control_instruction.trim() : '',
             voxcpm_nonverbal_tags: nonverbalTags,
             // 极端表演只做人工试听标记，不会改变模型请求参数。
             needs_review: cloneMode === 'controllable' && (source.needs_review === true || nonverbalTags.length > 0),

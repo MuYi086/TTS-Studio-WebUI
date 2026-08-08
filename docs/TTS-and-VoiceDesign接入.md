@@ -21,14 +21,14 @@ curl http://127.0.0.1:8306/v1/health
 
 | 当前 WebUI 合成服务 | 端口 | WebUI 协议 | 前端发送的合成关键字段 |
 | --- | ---: | --- | --- |
-| VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`clone_mode`，再二选一传 `prompt_text` 或 `control_instruction`，以及 `nonverbal_tags` |
+| VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`backend="voxcpm2"`、`clone_mode`，再按模式二选一传 `prompt_text` 或 `control_instruction`，以及 `nonverbal_tags` |
 
 WebUI 新建 TTS 配置固定为 `voxcpm2`。`8300` 与 `8305` 的历史配置会保留在浏览器中，但不出现在当前合成选择器、不可编辑且绝不会被调用；页面不会把它们静默改为 `8306`。后端仍保留这些服务，供其自身兼容场景使用。
 
 ## 台词合成中的参考文案与 VoxCPM2 表演计划
 
-1. VoxCPM2 的每条台词保存 `clone_mode`（`ultimate` 或 `controllable`）、`delivery_profile`（`baseline`、`expressive`、`suspense`、`fear`、`urgent`、`restrained`）、`voxcpm_nonverbal_tags`（最多一个官方标签）与 `needs_review`。
-2. `ultimate` + `baseline` 要求角色绑定的准确参考文案，并发送 `prompt_text`；`controllable` 发送固定档位产生的短 `control_instruction`，不发送 `prompt_text` 或 sidecar。
+1. VoxCPM2 的每条台词保存 `clone_mode`（`ultimate` 或 `controllable`）、`delivery_profile`（`baseline`、`expressive`、`suspense`、`fear`、`urgent`、`restrained`）、`control_instruction`、`voxcpm_nonverbal_tags`（最多一个官方标签）与 `needs_review`。
+2. `ultimate` + `baseline` 要求角色绑定的准确参考文案，并向固定的 `/v2/synthesize` 发送 `clone_mode="ultimate"` 与 `prompt_text`；`controllable` 发送 `backend="voxcpm2"`、`clone_mode="controllable"`、脚本括号内自然语言生成的 `control_instruction` 与 `nonverbal_tags`，明确省略 `prompt_text` 和 sidecar。`text_content`（页面字段 `text`）只保存括号外正文，`control_instruction` 不带外层括号。
 3. `nonverbal_tags` 是后端请求字段，来自工程字段 `voxcpm_nonverbal_tags`。允许 `laughing`、`sigh`、`Uhm`、`Shh`、`Question-ah`、`Question-ei`、`Question-en`、`Question-oh`、`Surprise-wa`、`Surprise-yo`、`Dissatisfaction-hnn`；标签只能在原文明确有可听见反应时使用，不得写入正文或参考文案。标签强制 `controllable`、默认 `expressive` 并将 `needs_review` 设为 `true`。
 4. 后端对每个文本分片将最终模型文本拼成 `(control_instruction)[tag]正文`，并在调用模型前向终端输出该文本、分片序号和克隆模式；不输出参考音频转写。
 5. `needs_review` 只是人工试听标记，不参与模型参数。`delivery_profile` 只控制表演方式，不保证或直接设定最终响度；成片响度仍应在合成后统一检测和归一化。

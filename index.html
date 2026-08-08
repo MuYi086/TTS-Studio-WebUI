@@ -1377,6 +1377,13 @@
 
                                 <!-- 文本与音效区域 -->
                                 <div class="w-full flex flex-col gap-2 min-w-0">
+                                    <div v-if="line.clone_mode === 'controllable'"
+                                        class="rounded border border-indigo-100 bg-indigo-50/60 px-2 py-1.5">
+                                        <div class="mb-1 text-[10px] font-bold text-indigo-600">VoxCPM2 表演指令（括号内，不朗读）</div>
+                                        <textarea v-model="line.control_instruction" rows="2"
+                                            class="w-full bg-transparent border-none focus:ring-0 text-xs text-indigo-900 resize-none leading-relaxed"
+                                            placeholder="例如：声音极度颤抖，带着哭腔，语速极快，气息不稳"></textarea>
+                                    </div>
                                     <textarea v-model="line.text" rows="2"
                                         class="w-full h-full bg-transparent border-none focus:ring-0 text-sm text-slate-700 resize-none leading-relaxed py-1.5"
                                         @input="autoResizeTextarea($event)"></textarea>
@@ -1425,8 +1432,10 @@
                     :class="['w-full h-[60vh] p-3 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-3', !useCustomPrompt ? 'bg-slate-100 text-slate-400' : 'bg-white text-slate-700']"
                     spellcheck="false"></textarea>
                 <div class="mt-2 text-xs text-slate-500">
-                    <span class="font-bold">可用变量:</span> ${sfxSection}, ${bgmSection}, ${bgmExampleLine}, ${sfxExample},
-                    ${rawScript}
+                    <span class="font-bold">可用变量:</span> ${emotionList}, ${sfxSection}, ${bgmSection}, ${filterSection},
+                    ${bgmExampleLine}, ${sfxExample}, ${rawScript}, ${bgImageCount}。当前 VoxCPM2 表演通过
+                    <code>clone_mode</code>、<code>delivery_profile</code> 与 <code>control_instruction</code> 路由；括号内自然语言写入
+                    <code>control_instruction</code>，括号外正文写入 <code>text_content</code>，不要混在一起。
                 </div>
 
                 <hr class="my-6 border-slate-200">
@@ -2059,7 +2068,7 @@
                 // 兼容旧模板/工程脚本中的名称，后续新逻辑统一使用 activeTtsConfigs。
                 const activeVoxCpmTtsConfigs = activeTtsConfigs;
 
-                // VoxCPM2 的表演档位是固定词表；避免把 LLM 任意生成的长提示直接传给模型。
+                // VoxCPM2 的表演档位是固定词表；自然语言控制指令由脚本 Prompt 逐句生成，档位作为路由与兜底。
                 const VOXCPM_DELIVERY_PROFILES = Object.freeze([
                     { value: 'baseline', label: '默认基线（极致）' },
                     { value: 'expressive', label: '自然表演（非语言）' },
@@ -2075,12 +2084,43 @@
                     urgent: '短促有力，节奏略快，重音明确但不喊叫',
                     restrained: '情绪内收，略慢，句尾收束，吐字清晰'
                 });
+                /**
+                 * 规范化脚本中的自然语言 VoxCPM2 控制指令。
+                 * Prompt 保存括号内正文；请求组装括号由后端负责，因此这里去掉用户偶尔带上的外层括号。
+                 * @param {unknown} value - LLM 或工程中的原始控制指令
+                 * @returns {string} 不含外层括号的短控制指令
+                 */
+                const normalizeVoxCpmControlInstruction = (value) => {
+                    if (typeof value !== 'string') return '';
+                    return value.trim()
+                        .replace(/^\(([^\r\n]*)\)$/, '$1')
+                        .replace(/^（([^\r\n]*)）$/, '$1')
+                        .replace(/\s+/g, ' ')
+                        .slice(0, 240);
+                };
+                /**
+                 * 兼容 LLM 直接把人类剧本格式写进 text_content 的情况。
+                 * 仅识别开头的一组括号，避免吞掉正文中的普通括号。
+                 * @param {unknown} value - 原始台词正文
+                 * @returns {{text: string, controlInstruction: string}} 分离后的正文和指令
+                 */
+                const splitVoxCpmInlineControl = (value) => {
+                    const text = typeof value === 'string' ? value.trim() : '';
+                    const match = text.match(/^\s*(?:\(([^()\r\n]+)\)|（([^（）\r\n]+)）)\s*([\s\S]+)$/);
+                    if (!match) return { text, controlInstruction: '' };
+                    return {
+                        text: match[3].trim(),
+                        controlInstruction: normalizeVoxCpmControlInstruction(match[1] || match[2])
+                    };
+                };
                 const getNormalizedVoxCpmPlan = (line) => {
                     const nonverbalTags = normalizeVoxCpmNonverbalTags(line?.voxcpm_nonverbal_tags);
+                    const hasControlInstruction = Boolean(normalizeVoxCpmControlInstruction(line?.control_instruction));
                     const requestedProfile = VOXCPM_DELIVERY_PROFILES.some(item => item.value === line?.delivery_profile)
                         ? line.delivery_profile
                         : 'baseline';
                     const controllable = nonverbalTags.length > 0
+                        || hasControlInstruction
                         || (line?.clone_mode === 'controllable' && requestedProfile !== 'baseline');
                     return {
                         clone_mode: controllable ? 'controllable' : 'ultimate',
@@ -2114,9 +2154,12 @@
                     line.voxcpm_nonverbal_tags = normalizeVoxCpmNonverbalTags(tag);
                     normalizeVoxCpmLinePlan(line);
                 };
-                /** 为可控克隆构造官方约定的短自然语言 Control Instruction。 */
-                const buildVoxCpmControlInstruction = (line) =>
-                    VOXCPM_CONTROL_INSTRUCTIONS[getNormalizedVoxCpmPlan(line).delivery_profile] || '';
+                /** 为可控克隆优先使用逐句自然语言指令，没有时回退到档位短指令。 */
+                const buildVoxCpmControlInstruction = (line) => {
+                    const customInstruction = normalizeVoxCpmControlInstruction(line?.control_instruction);
+                    if (customInstruction) return customInstruction;
+                    return VOXCPM_CONTROL_INSTRUCTIONS[getNormalizedVoxCpmPlan(line).delivery_profile] || '';
+                };
                 /**
                  * 获取 TTS 协议的界面说明文字。
                  * @param {string} protocol - 协议标识
@@ -2574,8 +2617,8 @@
 
                 // Prompt Template
                 // 默认脚本分析 Prompt 本身属于可编辑业务配置；占位符会在 analyzeScript 中运行时替换。
-                const defaultPromptTemplate = `你的任务是将给定小说内容拆分为台词和旁白，并生成可直接交给 VoxCPM2 的逐句表演计划。
-**注意：emotion 是 Step-Audio-EditX 的官方情绪编辑标签；WebUI 会把它作为 edit_info。不要把它改写成自然语言提示词或 VoxCPM2 控制指令。intensity 仅用于剧本元数据和人工查看。**
+                const defaultPromptTemplate = `你的任务是将给定小说内容拆分为台词和旁白，并生成当前 WebUI 能直接消费的 VoxCPM2 逐句表演计划。
+**重要：emotion 是 Step-Audio-EditX 的官方情绪编辑标签；WebUI 会把它作为 edit_info。emotion/intensity 不能替代 VoxCPM2 的 clone_mode/delivery_profile。VoxCPM2 的自然语言表演指令必须放在独立的 control_instruction 字段，text_content 只保留括号外的真实合成文本。**
 
 \${sfxSection}
 
@@ -2594,31 +2637,55 @@
    - 请根据上下文判断情绪的强烈程度。
    - **旁白强度**: 如果旁白有情绪（如 \`sad\`、\`fear\`），强度必须很弱（建议选择 "微弱" 或 "稍弱"）。如果旁白的 \`emotion\` 为 \`coldness\`，强度应为 "中等"。
 
+# 人类剧本与 JSON 的对应关系
+人类可读剧本可以写成：\`(声音极度颤抖，带着哭腔，语速极快，气息不稳) 不要杀我。\`。但严格 JSON 中必须拆成 \`control_instruction\`: \`"声音极度颤抖，带着哭腔，语速极快，气息不稳"\` 与 \`text_content\`: \`"不要杀我。"\`；括号、角色头标和参考音频路径都不能进入 \`text_content\`。
+
+# 固定 VoxCPM2 后端接口
+当前页面必须兼容 \'http://127.0.0.1:8306/v2/synthesize\'，不要虚构新的请求字段或新的合成端点。页面将 JSON 字段映射为以下固定请求：
+- 可控克隆：\`{"text":"括号外正文","audio_path":"角色参考音频路径","backend":"voxcpm2","clone_mode":"controllable","control_instruction":"括号内自然语言","nonverbal_tags":[] }\`；不得发送 \`prompt_text\`。
+- 极致克隆：\`{"text":"稳定正文","audio_path":"角色参考音频路径","backend":"voxcpm2","clone_mode":"ultimate","prompt_text":"参考音频逐字转写","nonverbal_tags":[] }\`；不得发送 \`control_instruction\`。
+- \`control_instruction\` 不要包含外层括号；后端会负责组装为 \`(control_instruction)[tag]正文\`。\`delivery_profile\`、\`emotion\`、\`intensity\` 和 \`needs_review\` 只是 WebUI 的规划/复核字段，不直接作为 VoxCPM2 合成请求字段。
+
 # VoxCPM2 克隆与表演计划
 仅为每个 type="dialogue" 对象额外输出以下字段；它们独立于 emotion 与 intensity，不能互相替代：
 
 - \`clone_mode\`: 只能为 \`"ultimate"\` 或 \`"controllable"\`。
 - \`delivery_profile\`: 只能为 \`"baseline"\`、\`"expressive"\`、\`"suspense"\`、\`"fear"\`、\`"urgent"\`、\`"restrained"\`。
+- \`control_instruction\`: 字符串；可控克隆必填，内容是人类可读格式中括号内的自然语言，不要再包外层括号；极致克隆时为空字符串或省略。
 - \`voxcpm_nonverbal_tags\`: 数组，默认 \`[]\`，最多一个官方标签。标签只记录明确可听见的笑声、叹气、犹豫音等，绝不能写入 \`text_content\`。
 - \`needs_review\`: 布尔值；极端表演或有非语言标签时必须为 \`true\`。
 
-决策规则：
-1. 默认使用 \`"ultimate"\` + \`"baseline"\`。不得仅因文本属于悬疑、惊悚，或 \`emotion\` 不是 \`coldness\` 而切换可控模式。
-2. 仅当该句或紧邻的说话人提示明确要求改变角色默认表演方式，例如低声、发抖、咬牙、急促、强忍、突然提高语气、停顿后说，才使用 \`"controllable"\`。
-3. 低声、恐惧与紧张不等于绝对音量变小；优先通过克制、节奏、停顿和清晰咬字表现。除非原文明示，不要规划为耳语、喊叫或持续极端音量。
-4. 出现明确可听见的笑声、叹气、犹豫音、嘘声、问号语气或惊讶语气时，使用 \`"controllable"\`，将 \`needs_review\` 设为 \`true\`，并只在 \`voxcpm_nonverbal_tags\` 填一个官方标签；不得根据一般情绪自行猜测标签。
-5. 同一角色在连续同一表演节拍中的相邻台词，应保持相同的 \`clone_mode\` 和 \`delivery_profile\`；当表演目标变化时，应在自然语义边界拆分台词。
-6. 说话人提示语必须仍作为旁白保留，但其中的表演线索应同步用于规划相邻角色台词，不得写入 \`text_content\`。
+决策规则（以“能否控制表演”为第一判断）：
+1. 如果该句需要声音发抖、呼吸变紧、压低声音、克制悬疑、强忍、急促、停顿后说或突然爆发，使用 \`"controllable"\`，并选择最接近的非基线档位。
+2. 如果不需要改变角色默认说法，且角色绑定的参考音频有准确逐字参考文案，使用 \`"ultimate"\` + \`"baseline"\`。
+3. 恐惧、紧张和悬疑本身不是非语言标签，也不自动意味着耳语或喊叫；只有原文明示或确实需要该表演时才选择对应档位。
+4. 当前 WebUI 只有角色级参考音频，不支持逐句情绪参考音频。不要输出虚构的 \`ref_audio\` 或 \`ref_transcript\`；角色参考音频由角色绑定管理。自然语言表演描述必须输出到 \`control_instruction\`，页面会把它映射到固定的 \`/v2/synthesize\` 可控克隆请求。
+5. 出现明确可听见的笑声、叹气、犹豫音、嘘声、问号语气或惊讶语气时，使用 \`"controllable"\` + \`"expressive"\`，将 \`needs_review\` 设为 \`true\`，并只在 \`voxcpm_nonverbal_tags\` 填一个官方标签；不得根据一般情绪自行猜测标签。
+6. 同一角色在连续同一表演节拍中的相邻台词，应保持相同的 \`clone_mode\` 和 \`delivery_profile\`；当表演目标变化时，应在自然语义边界拆分台词。
+7. \`baseline\` 必须配合 \`ultimate\`；其他档位必须配合 \`controllable\`。恐惧高潮、急促/爆发或模式切换时 \`needs_review\` 必须为 \`true\`。
+8. 说话人提示语按信息类型分流：动作、场景和剧情信息保留为旁白；纯粹的发声方式改写为角色台词的 \`control_instruction\`；“说道”“问道”等无额外信息的连接词只在有助于听辨时保留，避免同一信息重复播报。
 
 # 规则
 
+## 0. 内容忠实与有声书改写原则
+- **信息忠实**: 必须保留原文的剧情事实、人物关系、动作、因果、时间顺序和对话语义，不得擅自增加情节、改变人物立场或制造原文没有的内容。这里要求的是信息完整，不是机械逐字复制每一个连接词。
+- **对话正文优先保真**: 角色真正说出的内容原则上逐字保留；只允许为自然播音做必要的标点、断句和明显口误整理，不得改写成意思相近但措辞不同的新台词。
+- **说话人提示语分类处理**:
+  1. 包含实际动作、场景变化、表情或剧情信息的提示语，作为“旁白”保留，例如“老李猛地按住了我的手，脸色惨白”。
+  2. 只描述发声方式、情绪或声音状态的提示语，改写为角色台词的 \`control_instruction\`，不要再单独生成同义旁白。例如“老李的声音在发抖”应转为“声音发抖，带着恐惧”，避免播报两次。
+  3. 只有“说道”“问道”“回答”等连接作用、且不承担身份或剧情信息的词，可在角色已经明确、听众不会混淆时合并或省略；如果省略会造成说话人或语义不清，则保留为简短旁白。
+- **一次表达一个信息**: 已经写入 \`control_instruction\` 的声音表现，不得再作为旁白重复；已经由角色音色和上下文明确的身份，也不要反复添加冗余的“某某说道”。
+- **有声书优先听感**: 每个信息只表达一次，旁白、角色台词和控制指令之间要自然衔接。遇到无法判断的情况，优先保留会影响剧情理解或说话人识别的信息。
+
 ## 1. 拆分与识别
-- **完整保留**: 必须完整保留原文内容，不得遗漏、删改或省略任何字句。
-- **严禁删改**: **绝对禁止**删除原文中的说话人提示语（如“他低声说”、“笑着问道”）。这些内容必须作为“旁白”单独提取出来。
+- **禁止无依据删改**: 不得遗漏、改变或省略原文中的剧情信息和有效对白；但可以按上一节规则，将纯发声提示语转为 \`control_instruction\`，将无信息连接词合并或省略。
 - **内容提取**: 提取对话内容和所有非对话的旁白。
 - **角色识别**: 根据小说内容分析说话人。旁白的角色名统一标记为“旁白”。
-- **长度控制**: 文本拆分长度要适中。**避免过碎**（不要把每一句短句都拆成独立一行），也**避免过长**（单行文本建议不超过 50-80 字，过长的旁白请在句号处适当拆分）。
+- **长度控制**: 按自然语义停顿、动作变化和情绪转折拆分，不要按固定字数机械切割。旁白以 25-45 个汉字为软目标，单行通常不超过 50-80 字；**避免过碎**（不要把每一句短句都拆成独立一行），也**避免过长**。
 - **旁白处理**: 连续的旁白内容应优先合并，除非中间需要插入音效、有明显的时间跳跃，或合并后长度过长。
+- **表演节拍**: 同一角色从克制转为恐惧、从压低声音转为急促求救时，在自然边界拆成多个表演节拍，分别使用对应的可控档位。
+- **提示语去重**: “他低声说”“她哭着问”等提示语中的“低声、哭着、颤抖、愤怒”等表现线索，转入对应角色的 \`control_instruction\`；不要同时生成“他低声说”的旁白和一条同样要求低声的台词。
+- **正文边界**: \`text_content\` 必须是括号外的实际朗读正文，不得包含 \`(声音颤抖)\`、角色头标、参考音频路径、\`[fear]\`、\`[BREATH]\`、舞台说明、SSML 或自定义标签；括号内的自然语言表演描述必须移入 \`control_instruction\`。
 
 ## 3. 音效插入 (sfx)
 - 如果情节需要（如“摔门而去”、“雷声大作”），且音效库中有对应素材，请在 JSON 对象中添加 \`sfx\` 字段。
@@ -2648,15 +2715,18 @@
 - 示例: 两人对话间的尴尬沉默，或动作描写（如“他喝了一口茶”）需要的时间。
 
 ## 6. VoxCPM2 表演计划与非语言标签
-- \`clone_mode\` 只能为 \`ultimate\` 或 \`controllable\`：无明确表演需要时优先 \`ultimate\`；只有需要固定短控制指令或明确非语言反应时才使用 \`controllable\`。
-- \`delivery_profile\` 只能为 \`baseline\`、\`expressive\`、\`suspense\`、\`fear\`、\`urgent\`、\`restrained\`；\`baseline\` 必须配合 \`ultimate\`，其他档位配合 \`controllable\`。不要输出自由文本控制指令。
+- \`clone_mode\` 只能为 \`ultimate\` 或 \`controllable\`：需要自然语言控制表演时使用 \`controllable\`；只有稳定基线且有准确参考文案时使用 \`ultimate\`。
+- \`delivery_profile\` 只能为 \`baseline\`、\`expressive\`、\`suspense\`、\`fear\`、\`urgent\`、\`restrained\`；\`baseline\` 必须配合 \`ultimate\`，其他档位配合 \`controllable\`。精细的自然语言表演描述写入 \`control_instruction\`，不要把它压缩成只有档位名。
+- \`control_instruction\` 应描述情绪、声音质感、语速、气息、音量或发声动作中的 2–5 项；每句聚焦一个表演节拍，避免互相冲突的要求。字段值不要包含外层括号，页面/后端负责组装 VoxCPM2 的括号格式。
 - \`voxcpm_nonverbal_tags\` 必须始终是数组，最多一个元素。仅当原文明确存在可听见的非语言反应时才可填写；不可根据“害怕、激动”等情绪猜测添加。允许值仅为：\`laughing\`、\`sigh\`、\`Uhm\`、\`Shh\`、\`Question-ah\`、\`Question-ei\`、\`Question-en\`、\`Question-oh\`、\`Surprise-wa\`、\`Surprise-yo\`、\`Dissatisfaction-hnn\`。
-- 有标签时：\`clone_mode\` 必须为 \`controllable\`，\`delivery_profile\` 至少为 \`expressive\`，\`needs_review\` 必须为 \`true\`。标签只能写在 \`voxcpm_nonverbal_tags\`，绝不能写进 \`text_content\` 或参考文本。
+- 有标签时：\`clone_mode\` 必须为 \`controllable\`，\`delivery_profile\` 必须为 \`expressive\`，\`needs_review\` 必须为 \`true\`。标签只能写在 \`voxcpm_nonverbal_tags\`，绝不能写进 \`text_content\` 或参考文本。
+- 恐惧高潮、急促/爆发、明显模式切换等极端表演也必须将 \`needs_review\` 设为 \`true\`；该字段只提醒人工试听，不保证最终情绪效果。
 
 ## 7. 输出格式
 - **严格 JSON**: 输出格式必须是严格的 JSON 数组，不包含任何额外说明或代码块标记。
 - **数组元素**: 必须是以下两种对象之一：
-  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "...", "emotion": "...", "intensity": "...", "clone_mode": "ultimate", "delivery_profile": "baseline", "voxcpm_nonverbal_tags": [], "needs_review": false, "break_duration": 0, "filter": "...", "sfx": [...]}\`
+  - 每个 dialogue 还应包含 \`control_instruction\`：保存括号内的自然语言表演指令；\`text_content\` 只保存括号外的真实合成文本。
+  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "括号外正文", "control_instruction": "括号内自然语言指令", "emotion": "...", "intensity": "...", "clone_mode": "controllable", "delivery_profile": "fear", "voxcpm_nonverbal_tags": [], "needs_review": true, "break_duration": 0, "filter": "...", "sfx": [...]}\`
   2. **BGM对象**: \`{"type": "bgm", "action": "play", "name": "..."}\` 或 \`{"type": "bgm", "action": "stop"}\`
   - **严禁生成** \`{"type": "sfx", ...}\` 这种独立音效块。音效必须包含在台词对象的 \`sfx\` 字段中。
 
@@ -2671,14 +2741,14 @@
 ## 输出:
 [
 \${bgmExampleLine}
-  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "urgent", "voxcpm_nonverbal_tags": [], "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "control_instruction": "声音发紧，语速极快，带着恐惧和急迫感，短促有力地警告", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "urgent", "voxcpm_nonverbal_tags": [], "needs_review": true, "break_duration": 0},
   {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion": "fear", "intensity": "较强", "clone_mode": "controllable", "delivery_profile": "suspense", "needs_review": false, "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "control_instruction": "压低声音，语速放慢，带着克制的恐惧和悬疑感", "emotion": "fear", "intensity": "较强", "clone_mode": "controllable", "delivery_profile": "suspense", "needs_review": true, "break_duration": 0.5},
   {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0\${sfxExample}},
-  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion": "fear", "intensity": "微弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion": "fear", "intensity": "稍弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0},
+  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "control_instruction": "声音发颤，带着难以置信的恐惧，语速稍快，句尾上扬", "emotion": "fear", "intensity": "微弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": true, "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "control_instruction": "短促地承认，声音压低，带着强忍的恐惧", "emotion": "fear", "intensity": "稍弱", "clone_mode": "controllable", "delivery_profile": "restrained", "needs_review": true, "break_duration": 0},
   {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": false, "break_duration": 0}
+  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "control_instruction": "声音极度颤抖，压低声音，语速越来越快，带着绝望的警告", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": true, "break_duration": 0}
 ]
 
 # 输入内容
@@ -5425,6 +5495,10 @@ ${voiceReferenceHardConstraints}`;
                         // 固定本次任务的唯一 TTS 配置；情绪字段仅保留为剧本元数据。
                         const cfg = currentTtsConfig.value;
                         const backend = getTtsBackend(cfg);
+                        // 先归一化逐句计划，使 control_instruction 存在时必定进入可控克隆路径。
+                        if (backend === 'voxcpm2') {
+                            normalizeVoxCpmLinePlan(line);
+                        }
                         const isVoxCpm2Controllable = backend === 'voxcpm2' && line.clone_mode === 'controllable';
                         // 三个本地克隆模型都优先使用音色绑定中的真实参考文本。
                         const promptText = isVoxCpm2Controllable ? '' : synthesisReference.promptText;
@@ -5434,21 +5508,27 @@ ${voiceReferenceHardConstraints}`;
                         const payload = {
                             text: line.text,
                             audio_path: synthesisReference.audioPath,
-                            backend,
-                            prompt_text: promptText
+                            // 8306 通过 backend 字段在 VoxCPM2 与 Ming worker 之间路由。
+                            backend
                         };
                         if (backend === 'voxcpm2') {
                             // VoxCPM2 的极致/可控克隆计划只对该后端生效。
-                            normalizeVoxCpmLinePlan(line);
                             payload.clone_mode = isVoxCpm2Controllable ? 'controllable' : 'ultimate';
                             payload.nonverbal_tags = line.voxcpm_nonverbal_tags || [];
-                        }
-                        if (isVoxCpm2Controllable) {
-                            const controlInstruction = buildVoxCpmControlInstruction(line);
-                            if (!controlInstruction) {
-                                throw new Error('VoxCPM2 可控克隆需要选择有效的固定表演档位。');
+                            if (isVoxCpm2Controllable) {
+                                const controlInstruction = buildVoxCpmControlInstruction(line);
+                                if (!controlInstruction) {
+                                    throw new Error('VoxCPM2 可控克隆需要填写自然语言控制指令或选择有效的表演档位。');
+                                }
+                                // 固定后端契约：可控克隆只传 control_instruction，不传 prompt_text。
+                                payload.control_instruction = controlInstruction;
+                            } else {
+                                // 固定后端契约：极致克隆只传参考音频的准确 prompt_text。
+                                payload.prompt_text = promptText;
                             }
-                            payload.control_instruction = controlInstruction;
+                        } else {
+                            // Qwen/Ming 等其他克隆协议继续沿用各自的 prompt_text 字段。
+                            payload.prompt_text = promptText;
                         }
 
                         // 归一化服务根地址，用于 check、upload 和 synthesize 三个端点。
@@ -7439,6 +7519,7 @@ ${voiceReferenceHardConstraints}`;
                         // 手动拆分不推断表演，默认使用参考文本驱动的极致克隆基线。
                         clone_mode: 'ultimate',
                         delivery_profile: 'baseline',
+                        control_instruction: '',
                         voxcpm_nonverbal_tags: [],
                         needs_review: false,
                         // 空名称表示不应用音频滤镜。
@@ -7532,6 +7613,7 @@ ${voiceReferenceHardConstraints}`;
                         // 手动新增台词沿用最安全的 VoxCPM2 极致克隆基线。
                         clone_mode: 'ultimate',
                         delivery_profile: 'baseline',
+                        control_instruction: '',
                         voxcpm_nonverbal_tags: [],
                         needs_review: false,
                         // 空滤镜名称表示保持原始合成声音。
@@ -8520,6 +8602,16 @@ ${voiceReferenceHardConstraints}`;
 - 标签不能写进 text_content 或参考文本；有标签时 clone_mode=controllable、delivery_profile=expressive、needs_review=true。
 `;
                         }
+                        // 旧版自定义模板可能只有 clone_mode/profile；补充括号指令与真实正文的分离规则。
+                        if (!finalPrompt.includes('control_instruction')) {
+                            finalPrompt += `
+
+## VoxCPM2 自然语言表演指令（严格遵守）
+- 每个 dialogue 额外输出 \`control_instruction\` 字符串；可控克隆时填写括号内的自然语言表演描述，不要包含外层括号。
+- \`text_content\` 只填写括号外的真实朗读正文，不得把角色头标、参考音频路径或控制指令混入正文。
+- 有 \`control_instruction\` 时使用 clone_mode=controllable；稳定基线且有准确参考文案时使用 clone_mode=ultimate、delivery_profile=baseline，并省略或置空该字段。
+`;
+                        }
                         // 模板完全未提及 bgImage 时先补充块结构说明。
                         if (!finalPrompt.includes('bgImage')) {
                             // 追加而不改写用户原有模板内容。
@@ -8741,9 +8833,20 @@ ${voiceReferenceHardConstraints}`;
 
                                 // 缺失 type 时会按 dialogue 处理，因此克隆计划也必须沿用同一默认值。
                                 const lineType = item.type || 'dialogue';
+                                // 兼容结构化 control_instruction，以及模型偶尔直接输出的“(指令)正文”人类剧本格式。
+                                const rawLineText = item.text_content || item.text || item.content || '';
+                                const inlineControl = lineType === 'dialogue'
+                                    ? splitVoxCpmInlineControl(rawLineText)
+                                    : { text: rawLineText, controlInstruction: '' };
+                                const controlInstruction = normalizeVoxCpmControlInstruction(
+                                    item.control_instruction || inlineControl.controlInstruction
+                                );
+                                const planSource = controlInstruction
+                                    ? { ...item, control_instruction: controlInstruction }
+                                    : item;
                                 // 仅 dialogue 使用的 VoxCPM2 计划在此统一校验；BGM/bgImage 仍保留安全基线字段但不会进入合成。
                                 const voxcpmPlan = lineType === 'dialogue'
-                                    ? getNormalizedVoxCpmPlan(item)
+                                    ? getNormalizedVoxCpmPlan(planSource)
                                     : { clone_mode: 'ultimate', delivery_profile: 'baseline', voxcpm_nonverbal_tags: [], needs_review: false };
 
                                 // 返回页面时间轴要求的完整块对象，覆盖三类块的字段超集。
@@ -8754,8 +8857,10 @@ ${voiceReferenceHardConstraints}`;
                                     type: lineType,
                                     // 兼容模型输出的两种角色字段，并为缺失值使用旁白。
                                     role: item.role_name || item.role || '旁白',
-                                    // 兼容 text_content、text 和 content 三种正文命名。
-                                    text: item.text_content || item.text || item.content || '',
+                                    // 兼容 text_content、text 和 content 三种正文命名；控制括号不会进入实际朗读正文。
+                                    text: inlineControl.text,
+                                    // 保存括号内的自然语言 VoxCPM2 表演指令，后续请求时与 text 分开发送。
+                                    control_instruction: controlInstruction,
                                     // 情绪和强度缺失时使用当前产品默认值。
                                     emotion: item.emotion || '平静',
                                     intensity: item.intensity || '中等',
