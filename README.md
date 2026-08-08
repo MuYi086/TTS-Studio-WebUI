@@ -52,9 +52,9 @@ bash start.sh
 - `POST /v1/voxcpm2/design`
 - `POST /v1/step-audio-editx/edit`
 
-`/v1/voxcpm2/design` 是独立的 VoxCPM2 音色设计接口，不与 Qwen 的 `/v1/qwen/design` 混用。它按 VoxCPM2 官方格式生成无参考音频音色，默认使用 `cfg_value=2.0`、`inference_timesteps=10` 和项目默认 `seed=20260614`。官方示例中的 `seed=42` 用于固定随机结果、方便复现，不代表固定音质提升。
+`/v1/voxcpm2/design` 是独立的 VoxCPM2 音色设计接口，不与 Qwen 的 `/v1/qwen/design` 混用。它按 VoxCPM2 官方格式生成无参考音频音色，`cfg_value` 与克隆请求统一由后端顶部的 `VOXCPM2_CFG_VALUE` 控制（官方 Demo 默认 `2.0`），`inference_timesteps=10`。项目默认不固定随机种子，只有复现实验时才显式传非负 `seed`；官方示例中的 `seed=42` 也只用于固定随机结果，不代表固定音质提升。
 
-当前 WebUI 的台词合成只会调用 VoxCPM2 的固定 `POST http://127.0.0.1:8306/v2/synthesize` 接口。每条 `dialogue` 保存 `clone_mode`、`delivery_profile`、`control_instruction`、`voxcpm_nonverbal_tags` 与 `needs_review`：`ultimate` + `baseline` 会提交准确的 `prompt_text`；需要情绪表演的台词使用 `controllable`，将括号内自然语言保存到 `control_instruction`，将括号外正文保存到 `text`，并明确省略 `prompt_text`。脚本分析 Prompt 会根据是否需要表演控制进行路由；手动新增台词仍以 `ultimate` + `baseline` 作为安全基线。非语言标签只允许官方白名单中的一个，出现标签必定标记为需试听；后端会在模型调用前输出 `(control_instruction)[tag]正文`。这两个 VoxCPM2 路径互斥，表演档位不直接控制最终响度。历史 IndexTTS2/Qwen3-TTS 配置会保留在浏览器中供删除，但不会显示在合成选择器、不可编辑，也不会被调用；不会把 `8300` 或 `8305` 自动改写为 `8306`。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
+当前 WebUI 的台词合成只会调用 VoxCPM2 的固定 `POST http://127.0.0.1:8306/v2/synthesize` 接口。每条 `dialogue` 保存 `clone_mode`、`delivery_profile`、`control_instruction`、`voxcpm_nonverbal_tags` 与 `needs_review`：`ultimate` + `baseline` 会提交准确的 `prompt_text`；需要情绪表演的台词使用 `controllable`，将括号内自然语言保存到 `control_instruction`，将括号外正文保存到 `text`，并明确省略 `prompt_text`。WebUI 不写死 `cfg_value`，由 8306 后端顶部的 `VOXCPM2_CFG_VALUE` 统一控制。脚本分析 Prompt 会根据是否需要表演控制进行路由；手动新增台词仍以 `ultimate` + `baseline` 作为安全基线。非语言标签只允许官方白名单中的一个，出现标签必定标记为需试听；后端会在模型调用前输出 `(control_instruction)[tag]正文`。参考音频同步按 Blob 内容 `sha256` 校验，同名文件内容更新后会重新上传，不会继续复用服务端旧缓存。这两个 VoxCPM2 路径互斥，表演档位不直接控制最终响度。历史 IndexTTS2/Qwen3-TTS 配置会保留在浏览器中供删除，但不会显示在合成选择器、不可编辑，也不会被调用；不会把 `8300` 或 `8305` 自动改写为 `8306`。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
 
 Step-Audio-EditX 编辑按钮固定使用当前行已生成的原始音频作为 `prompt_audio`、当前行文本作为 `prompt_text` 和 `generated_text`，并发送 `edit_type="emotion"`、`edit_info=line.emotion`。因此点击前必须先生成原始台词，且 `emotion` 必须是 [`editConfig/emotion.js`](editConfig/emotion.js) 中的官方标签。编辑结果以独立资产键保存，不会替换原始台词音频。
 

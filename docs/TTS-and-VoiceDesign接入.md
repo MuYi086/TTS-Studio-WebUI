@@ -21,7 +21,7 @@ curl http://127.0.0.1:8306/v1/health
 
 | 当前 WebUI 合成服务 | 端口 | WebUI 协议 | 前端发送的合成关键字段 |
 | --- | ---: | --- | --- |
-| VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`backend="voxcpm2"`、`clone_mode`，再按模式二选一传 `prompt_text` 或 `control_instruction`，以及 `nonverbal_tags` |
+| VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`backend="voxcpm2"`、`clone_mode`，再按模式二选一传 `prompt_text` 或 `control_instruction`，以及 `nonverbal_tags`；`cfg_value` 由后端 `VOXCPM2_CFG_VALUE` 统一控制 |
 
 WebUI 新建 TTS 配置固定为 `voxcpm2`。`8300` 与 `8305` 的历史配置会保留在浏览器中，但不出现在当前合成选择器、不可编辑且绝不会被调用；页面不会把它们静默改为 `8306`。后端仍保留这些服务，供其自身兼容场景使用。
 
@@ -34,6 +34,8 @@ WebUI 新建 TTS 配置固定为 `voxcpm2`。`8300` 与 `8305` 的历史配置�
 5. `needs_review` 只是人工试听标记，不参与模型参数。`delivery_profile` 只控制表演方式，不保证或直接设定最终响度；成片响度仍应在合成后统一检测和归一化。
 
 VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar；可控克隆不会读取或传递 sidecar。
+
+参考音频同步不能只依赖 `file_name` 是否存在：WebUI 会计算本地 Blob 的 `sha256`，并与 `GET /v1/check/audio` 返回的服务端哈希比较；同名但内容已变化时会重新上传，避免使用旧参考音频。
 
 ## Step-Audio-EditX 单行编辑
 
@@ -63,7 +65,7 @@ WebUI 将 Step-Audio-EditX 作为原始台词生成后的独立编辑步骤，�
 | MiMo | `POST http://127.0.0.1:8300/v1/mimo/design` | `text`、`voice_description` |
 | VoxCPM2 | `POST http://127.0.0.1:8300/v1/voxcpm2/design` | `text`、`voice_description` |
 
-VoxCPM2 使用独立的 `/v1/voxcpm2/design` 路由，不与 Qwen 音色设计接口混用。后端由专用模块和 worker 将请求转换为官方格式 `(音色描述)正文`，不需要参考音频，默认使用 `cfg_value=2.0`、`inference_timesteps=10`。官方文档示例写死 `seed=42` 是为了复现实验结果，并不表示该值具有特殊音质增益；项目统一继续使用 VoxCPM2 默认种子 `20260614`，需要对比或复现单次样本时才显式传入 `seed`。
+VoxCPM2 使用独立的 `/v1/voxcpm2/design` 路由，不与 Qwen 音色设计接口混用。后端由专用模块和 worker 将请求转换为官方格式 `(音色描述)正文`，不需要参考音频；`cfg_value` 与克隆请求一样统一读取后端顶部的 `VOXCPM2_CFG_VALUE`，官方 Demo 默认是 `2.0`，`inference_timesteps` 默认是 `10`。项目默认不固定随机种子；官方文档示例写死 `seed=42` 只是为了复现实验结果，并不表示该值具有特殊音质增益，需要对比或复现单次样本时才显式传入非负 `seed`。
 
 角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：用户可以检查或编辑参考文案，再点击“生成音色”。生成音色不会再次调用 LLM，只把确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen、MiMo 或 VoxCPM2。
 

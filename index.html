@@ -2134,9 +2134,24 @@
                     if (!line) return;
                     Object.assign(line, getNormalizedVoxCpmPlan(line));
                 };
+                /** 用户明确切换到极致克隆时，清理只适用于可控克隆的逐句控制字段。 */
+                const switchVoxCpmLineToUltimate = (line) => {
+                    if (!line) return;
+                    line.clone_mode = 'ultimate';
+                    line.delivery_profile = 'baseline';
+                    line.control_instruction = '';
+                    line.voxcpm_nonverbal_tags = [];
+                    line.needs_review = false;
+                };
                 /** 用户切换克隆模式时同步保持有效的档位组合。 */
                 const updateCloneMode = (line) => {
                     if (!line) return;
+                    if (line.clone_mode === 'ultimate') {
+                        // VoxCPM2 ultimate 不能携带 control_instruction 或 nonverbal_tags；否则归一化会再次强制回到 controllable。
+                        switchVoxCpmLineToUltimate(line);
+                        normalizeVoxCpmLinePlan(line);
+                        return;
+                    }
                     if (line.clone_mode === 'controllable' && line.delivery_profile === 'baseline') {
                         line.delivery_profile = 'expressive';
                     }
@@ -2145,7 +2160,11 @@
                 /** 选择非基线表演档位即进入可控克隆；回到基线则恢复极致克隆。 */
                 const updateDeliveryProfile = (line) => {
                     if (!line) return;
-                    line.clone_mode = line.delivery_profile === 'baseline' ? 'ultimate' : 'controllable';
+                    if (line.delivery_profile === 'baseline') {
+                        switchVoxCpmLineToUltimate(line);
+                    } else {
+                        line.clone_mode = 'controllable';
+                    }
                     normalizeVoxCpmLinePlan(line);
                 };
                 /** 手动选择或清空官方非语言标签；有标签时强制可控克隆并标记试听。 */
@@ -2923,6 +2942,22 @@ ${voiceReferenceHardConstraints}`;
                 const audioBufferCache = new Map();
                 // assetKey 到 File 的运行时索引；Map 放在 ref 中供整个 setup 共享。
                 const localFileMap = ref(new Map());
+                // 参考音频按内容而不是文件名判断是否需要重新上传，避免同名旧文件污染克隆结果。
+                const audioSha256Cache = new WeakMap();
+                const getAudioSha256 = async (blob) => {
+                    if (!blob || typeof blob.arrayBuffer !== 'function') return '';
+                    if (audioSha256Cache.has(blob)) return audioSha256Cache.get(blob);
+                    if (!window.crypto?.subtle) return '';
+
+                    const pending = window.crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+                        .then((digest) => Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join(''))
+                        .catch((error) => {
+                            console.warn('计算参考音频内容哈希失败，将强制重新上传:', error);
+                            return '';
+                        });
+                    audioSha256Cache.set(blob, pending);
+                    return pending;
+                };
                 /**
                  * 从不同类型的工程对象中解析统一素材键。
                  * @param {Object | string | null} item - 素材对象或原始键
@@ -4865,6 +4900,8 @@ ${voiceReferenceHardConstraints}`;
                             // 跳过当前项而非中断整个同步任务。
                             continue;
                         }
+                        // 计算本地内容指纹；服务端同名文件内容变化时必须重新上传。
+                        const localAudioSha256 = await getAudioSha256(file);
 
                         try {
                             // 1. 检查服务器是否存在
@@ -4877,6 +4914,9 @@ ${voiceReferenceHardConstraints}`;
                             let hasPromptText = false;
                             // 默认按旧后端处理，不强依赖参考文本状态字段。
                             let supportsPromptTextStatus = false;
+                            // 新版后端返回 sha256；没有该字段时也强制补传，保证不会沿用旧同名音频。
+                            let serverAudioSha256 = '';
+                            let supportsAudioHash = false;
                             // 只有检查接口成功时才读取服务端状态。
                             if (checkRes.ok) {
                                 // 解析后端的文件和参考文本状态对象。
@@ -4887,13 +4927,18 @@ ${voiceReferenceHardConstraints}`;
                                 hasPromptText = checkData.has_prompt_text === true;
                                 // 旧后端没有该字段，不能据此强制重复上传。
                                 supportsPromptTextStatus = Object.prototype.hasOwnProperty.call(checkData, 'has_prompt_text');
+                                supportsAudioHash = Object.prototype.hasOwnProperty.call(checkData, 'sha256');
+                                serverAudioSha256 = String(checkData.sha256 || '').trim().toLowerCase();
                             }
 
                             const promptText = (t.promptText || '').trim();
 
                             // 2. 仅参考文本协议在服务端声明缺少参考文本时重新上传
                             // 文件缺失，或新版后端明确表示文本缺失时执行补传。
-                            if (!exists || (promptText && supportsPromptTextStatus && !hasPromptText)) {
+                            const audioChanged = !supportsAudioHash
+                                || !localAudioSha256
+                                || serverAudioSha256 !== localAudioSha256;
+                            if (!exists || audioChanged || (promptText && supportsPromptTextStatus && !hasPromptText)) {
                                 console.log(`正在上传缺失的音色文件: ${t.name} (${t.refPath})`);
                                 // upload_audio 使用 multipart/form-data。
                                 const formData = new FormData();
@@ -5522,6 +5567,7 @@ ${voiceReferenceHardConstraints}`;
                                 }
                                 // 固定后端契约：可控克隆只传 control_instruction，不传 prompt_text。
                                 payload.control_instruction = controlInstruction;
+                                // 不在 WebUI 写死 cfg_value；由 8306 后端顶部 VOXCPM2_CFG_VALUE 统一控制。
                             } else {
                                 // 固定后端契约：极致克隆只传参考音频的准确 prompt_text。
                                 payload.prompt_text = promptText;
@@ -5538,6 +5584,8 @@ ${voiceReferenceHardConstraints}`;
                         // 尝试从浏览器素材存储恢复角色参考音频。
                         const voiceFile = await loadStoredAssetBlob(char, synthesisReference.audioPath);
                         if (voiceFile) {
+                            // 参考音频内容可能在同名文件更新后发生变化，不能只依赖服务端 exists。
+                            const localAudioSha256 = await getAudioSha256(voiceFile);
                             try {
                                 // 先检查后端是否已有同路径音频，避免每条台词都重复上传。
                                 const checkUrl = `${baseUrl}/v1/check/audio?file_name=${encodeURIComponent(synthesisReference.audioPath)}`;
@@ -5548,6 +5596,9 @@ ${voiceReferenceHardConstraints}`;
                                 let hasPromptText = false;
                                 // 默认按不报告参考文本状态的旧后端处理。
                                 let supportsPromptTextStatus = false;
+                                // 新版后端返回音频内容哈希；缺少该字段时强制上传当前 Blob。
+                                let serverAudioSha256 = '';
+                                let supportsAudioHash = false;
                                 // 检查请求成功时再解析真实状态。
                                 if (checkRes.ok) {
                                     // 读取 exists 和可选 has_prompt_text 字段。
@@ -5558,9 +5609,14 @@ ${voiceReferenceHardConstraints}`;
                                     hasPromptText = checkData.has_prompt_text === true;
                                     // 旧后端没有 has_prompt_text，不能因此无限重复上传。
                                     supportsPromptTextStatus = Object.prototype.hasOwnProperty.call(checkData, 'has_prompt_text');
+                                    supportsAudioHash = Object.prototype.hasOwnProperty.call(checkData, 'sha256');
+                                    serverAudioSha256 = String(checkData.sha256 || '').trim().toLowerCase();
                                 }
                                 // 文件缺失，或新版克隆后端明确缺参考文本时补传。
-                                if (!exists || (promptText && supportsPromptTextStatus && !hasPromptText)) {
+                                const audioChanged = !supportsAudioHash
+                                    || !localAudioSha256
+                                    || serverAudioSha256 !== localAudioSha256;
+                                if (!exists || audioChanged || (promptText && supportsPromptTextStatus && !hasPromptText)) {
                                     const formData = new FormData();
                                     // 第三个参数显式指定上传文件名。
                                     formData.append('audio', voiceFile, synthesisReference.audioPath);
