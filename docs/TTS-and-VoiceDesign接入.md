@@ -72,6 +72,15 @@ VoxCPM2 使用独立的 `/v1/voxcpm2/design` 路由，不与 Qwen 音色设计�
 
 参考音频必须已获得说话人授权、清晰且仅含一位说话人；参考文案应与实际语音逐字一致，不能写入未朗读的舞台说明、音频标签或 SSML（语音合成标记语言）。生成的参考音频和文案保存在浏览器本地音色库，并作为后续克隆的对应材料。
 
-## `8311` SoundEffect 状态
+## `8311` SoundEffect
 
-后端 `8311` 提供 MOSS-SoundEffect v2.0 的 `POST /v1/generate`，请求结束后释放对应 worker 的模型与显存。当前 WebUI 没有该接口的客户端、配置或脚本工作流按钮：可以将独立生成的音效导入 SFX 素材库，但不能宣称 WebUI 已自动生成或自动编排该音效。
+后端 `8311` 提供 MOSS-SoundEffect v2.0 的 `POST /v1/generate`，请求结束后释放对应 worker 的模型与显存。WebUI 通过 `soundeffect-client.js` 调用该接口；LLM 深度分析会把原文明确的非语言事件写入台词内 `sfx_plan`，用户可逐项生成或使用“生成全部 SoundEffect 音效”顺序生成。每次请求发送 `prompt` 与 `seconds`，返回的 WAV 以计划的 `audioAssetKey` 保存到浏览器 IndexedDB，并用于实时试听、离线 WAV/MP4 混音以及完整工程导入导出。页面没有 SFX 素材库、文件导入或名称匹配回退路径。
+
+```json
+{
+  "prompt": "近距离收音，木门被轻轻推开，铰链短促吱呀后停止",
+  "seconds": 1.2
+}
+```
+
+`prompt` 必须是可直接用于生成的非语言声音描述；`seconds` 由计划的 `duration_seconds` 提供，前端限制为大于 `0` 且不超过 `30` 秒。

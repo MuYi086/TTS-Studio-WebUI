@@ -85,6 +85,56 @@
         return validTag ? [validTag] : [];
     }
 
+    /**
+     * 规范化由 MOSS-SoundEffect 生成的音效计划及其绑定 WAV 资产键。
+     * @param {unknown} value 原始 sfx_plan 字段
+     * @returns {Array<Object>} 最多两条可持久化计划
+     */
+    function normalizeSfxPlans(value, lineId) {
+        const purposes = new Set(['semantic_cue', 'foreground_action', 'ambience', 'transition']);
+        const anchors = new Set(['dialogue_start', 'dialogue_end', 'break_start']);
+        const mixPresets = new Set(['cue_before_dialogue', 'action_under_dialogue', 'soft_ambience', 'transition']);
+        const defaultMixPreset = {
+            semantic_cue: 'cue_before_dialogue',
+            foreground_action: 'action_under_dialogue',
+            ambience: 'soft_ambience',
+            transition: 'transition'
+        };
+
+        return ensureArray(value).slice(0, 2).reduce((plans, item, index) => {
+            if (!item || typeof item !== 'object') return plans;
+            const prompt = typeof item.prompt === 'string' ? item.prompt.trim() : '';
+            if (!prompt) return plans;
+
+            const purpose = purposes.has(item.purpose) ? item.purpose : 'foreground_action';
+            const duration = toNumber(item.duration_seconds, 1.0);
+            const planId = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `sfx_plan_${index + 1}`;
+            plans.push({
+                ...item,
+                id: planId,
+                action: 'generate',
+                purpose,
+                sound_class: typeof item.sound_class === 'string' && item.sound_class.trim()
+                    ? item.sound_class.trim()
+                    : '未分类声音',
+                prompt: prompt.slice(0, 1000),
+                anchor: anchors.has(item.anchor) ? item.anchor : 'dialogue_start',
+                offset_ms: clamp(Math.round(toNumber(item.offset_ms, 0)), -500, 5000),
+                duration_seconds: clamp(duration > 0 ? duration : 1.0, 0.2, 30),
+                mix_preset: mixPresets.has(item.mix_preset) ? item.mix_preset : defaultMixPreset[purpose],
+                required: item.required === true,
+                // 每条计划拥有自己的生成 WAV；不再通过 name 回查工程级 SFX 素材库。
+                audioAssetKey: typeof item.audioAssetKey === 'string' && item.audioAssetKey
+                    ? item.audioAssetKey
+                    : `soundeffect_${lineId}_${planId}`,
+                audioUrl: '',
+                isGenerating: false,
+                generationError: ''
+            });
+            return plans;
+        }, []);
+    }
+
     function normalizeLibraryItem(kind, item) {
         const source = item && typeof item === 'object' ? cloneData(item) : {};
         const normalized = { ...source };
@@ -199,7 +249,7 @@
             ? (deliveryProfile === 'baseline' ? 'expressive' : deliveryProfile)
             : 'baseline';
 
-        return {
+        const normalized = {
             ...source,
             id,
             type: 'dialogue',
@@ -217,10 +267,8 @@
             // 极端表演只做人工试听标记，不会改变模型请求参数。
             needs_review: cloneMode === 'controllable' && (source.needs_review === true || nonverbalTags.length > 0),
             filter: source.filter || '',
-            sfx: ensureArray(source.sfx).map((item) => ({
-                name: item && item.name ? item.name : '',
-                position: toNumber(item && item.position, 0)
-            })),
+            // sfx_plan 直接携带 SoundEffect 生成 WAV 的稳定资产键。
+            sfx_plan: normalizeSfxPlans(source.sfx_plan, id),
             break_duration: toNumber(source.break_duration, 0),
             trimStart: trim.trimStart,
             trimEnd: trim.trimEnd,
@@ -235,6 +283,9 @@
             stepAudioEditXAudioUrl: '',
             isStepAudioEditXEditing: false
         };
+        // 历史工程的 line.sfx 是素材库名称引用；当前工作流只保留生成计划。
+        delete normalized.sfx;
+        return normalized;
     }
 
     function normalizeBgmLine(line, id) {
@@ -346,7 +397,6 @@
             version: PROJECT_VERSION_LABEL,
             savedAt: toNumber(source.savedAt || source.timestamp || Date.now(), Date.now()),
             libraries: {
-                sfx: ensureArray(librariesSource.sfx).map((item) => normalizeLibraryItem('sfx', item)),
                 bgm: ensureArray(librariesSource.bgm).map((item) => normalizeLibraryItem('bgm', item)),
                 timbres,
                 filters: cloneData(ensureArray(librariesSource.filters)) || [],

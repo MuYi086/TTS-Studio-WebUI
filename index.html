@@ -99,7 +99,7 @@
                 </button>
                 <button @click="activeTab = 'sfx'"
                     :class="['px-6 py-3 text-sm font-bold transition-colors whitespace-nowrap', activeTab === 'sfx' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700']">
-                    音效与滤波器
+                    背景音乐与滤波器
                 </button>
                 <button @click="activeTab = 'script'"
                     :class="['px-6 py-3 text-sm font-bold transition-colors whitespace-nowrap', activeTab === 'script' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700']">
@@ -433,115 +433,8 @@
             </section>
         </div>
 
-        <!-- 页面 6: 音效素材库 -->
+        <!-- 页面 6: 背景音乐与滤波器 -->
         <div v-if="activeTab === 'sfx'" class="space-y-8">
-            <section class="space-y-6">
-                <h2 class="text-lg font-bold text-slate-800 border-b pb-2">音效素材管理</h2>
-                <p>音效和背景音乐可以自行使用其他的AI模型生成，或者前往在线免费音效网站下载：<a style="color: blue;" href="https://pixabay.com/zh/sound-effects">Pixabay在线音效库</a></p>
-                <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                    <h3 class="text-sm font-bold text-slate-700 mb-4">{{ isEditingSfx ? '编辑音效' : '添加新音效' }}</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">音效名称</label>
-                            <input v-model="sfxForm.name"
-                                class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                placeholder="例如: 开门声 / 雷声">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">音效描述 (用于 AI
-                                判断插入)</label>
-                            <input v-model="sfxForm.description"
-                                class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                placeholder="例如: 沉重的木门被用力关上">
-                        </div>
-                        <div class="md:col-span-2">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">音频文件名 / 路径</label>
-                            <div class="flex gap-2 items-center">
-                                <input type="file" ref="sfxFileRef" @change="handleSfxFileUpload" accept=".wav,.mp3"
-                                    class="hidden">
-                                <button type="button" @click="$refs.sfxFileRef.click()"
-                                    class="whitespace-nowrap px-3 py-2 bg-slate-100 border border-slate-300 text-slate-600 rounded-lg text-xs hover:bg-slate-200 transition-colors">选择文件</button>
-                                <input v-model="sfxForm.filename"
-                                    class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="例如: door_slam.wav">
-                            </div>
-                            <p class="text-[10px] text-slate-400 mt-1"></p>
-                        </div>
-                        <div class="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
-                            <div class="flex items-center gap-4 mb-4">
-                                <span class="text-[10px] font-bold text-slate-500 uppercase w-16">默认音量</span>
-                                <input type="range" v-model.number="sfxForm.volume" min="0" max="2" step="0.05" class="flex-1 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
-                                <span class="text-xs text-slate-500 font-mono w-10 text-right">{{ Math.round((sfxForm.volume ?? 1) * 100) }}%</span>
-                                <button type="button" @click="playPreview(sfxForm)" :disabled="!sfxForm.filename" class="text-xs text-slate-400 hover:text-green-600 ml-2 disabled:opacity-30 disabled:cursor-not-allowed" title="试听">
-                                    <svg v-if="previewPlayingFile === getPreviewTrackKey(sfxForm)" class="h-5 w-5 text-green-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                    </svg>
-                                    <svg v-else class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <div v-if="sfxForm.filename">
-                                <div class="flex justify-between items-center px-0.5 mb-1">
-                                    <span class="text-[10px] font-bold text-slate-500 uppercase">音频剪辑 (预览)</span>
-                                    <span class="text-[10px] text-slate-400 font-mono">{{ Math.round(((sfxForm.trimEnd ?? 1) - (sfxForm.trimStart ?? 0)) * 100) }}%</span>
-                                </div>
-                                <div :key="getPreviewTrackKey(sfxForm)" class="relative w-full bg-slate-100 rounded border border-slate-200 overflow-hidden select-none group/wave" style="height: 40px;">
-                                    <canvas :ref="(el) => drawWaveform(el, sfxForm)" width="300" height="40" class="w-full h-full block opacity-60"></canvas>
-                                    <div class="absolute inset-0 pointer-events-none">
-                                        <div class="absolute top-0 bottom-0 left-0 bg-slate-500/30 border-r border-blue-500" :style="{ width: (sfxForm.trimStart ?? 0) * 100 + '%' }"></div>
-                                        <div class="absolute top-0 bottom-0 right-0 bg-slate-500/30 border-l border-red-500" :style="{ width: (1 - (sfxForm.trimEnd ?? 1)) * 100 + '%' }"></div>
-                                        <div class="absolute top-0 bottom-0 w-4 -ml-2 cursor-ew-resize pointer-events-auto hover:bg-blue-500/10 transition-colors flex justify-center group/handle" :style="{ left: (sfxForm.trimStart ?? 0) * 100 + '%' }" @mousedown.stop="startDragTrim($event, sfxForm, 'start')">
-                                            <div class="w-0.5 h-full bg-blue-500 group-hover/handle:w-1 transition-all"></div>
-                                        </div>
-                                        <div class="absolute top-0 bottom-0 w-4 -ml-2 cursor-ew-resize pointer-events-auto hover:bg-red-500/10 transition-colors flex justify-center group/handle" :style="{ left: (sfxForm.trimEnd ?? 1) * 100 + '%' }" @mousedown.stop="startDragTrim($event, sfxForm, 'end')">
-                                            <div class="w-0.5 h-full bg-red-500 group-hover/handle:w-1 transition-all"></div>
-                                        </div>
-                                        <div v-if="previewPlayingFile === getPreviewTrackKey(sfxForm)" class="absolute top-0 bottom-0 w-0.5 bg-green-500 z-20 pointer-events-none shadow-[0_0_4px_rgba(34,197,94,0.8)]" :style="{ left: (playbackProgress * 100) + '%' }"></div>
-                                    </div>
-                                </div>
-                                <div class="text-[10px] text-slate-400 mt-1 text-right">提示：拖动红蓝线条裁剪音频，点击保存后生效</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button type="button" @click.prevent="saveSfx"
-                            class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all">保存音效</button>
-                        <button type="button" v-if="isEditingSfx" @click="resetSfxForm"
-                            class="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300 transition-all">取消</button>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
-                    <div v-for="sfx in sfxLibrary" :key="sfx.id" class="bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-shadow flex flex-col">
-                        <div class="flex items-start justify-between p-4">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox" v-model="sfx.enabled" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer mt-1 flex-shrink-0" title="启用/禁用此资源">
-                                <div>
-                                    <div class="font-bold text-slate-800 text-sm">{{ sfx.name }}</div>
-                                    <div class="text-xs text-slate-500 mt-0.5">{{ sfx.description }}</div>
-                                    <div class="text-xs text-slate-400 mt-1">{{ sfx.filename }}</div>
-                                </div>
-                            </div>
-                            <div class="flex gap-2 flex-shrink-0 ml-2">
-                                <button @click="playPreview(sfx)" class="text-xs text-slate-400 hover:text-green-600 mr-1" title="试听">
-                                    <svg v-if="previewPlayingFile === getPreviewTrackKey(sfx)" class="h-4 w-4 text-green-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                    </svg>
-                                    <svg v-else class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                                    </svg>
-                                </button>
-                                <button @click="editSfx(sfx)" class="text-xs text-blue-600 hover:underline font-medium">编辑</button>
-                                <button @click="deleteSfx(sfx.id)" class="text-xs text-red-500 hover:underline font-medium">删除</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div v-if="sfxLibrary.length === 0" class="col-span-full text-center py-8 text-slate-400 text-sm">暂无音效素材</div>
-                </div>
-            </section>
-
             <section class="space-y-6 border-t border-slate-200 pt-6">
                 <h2 class="text-lg font-bold text-slate-800 border-b pb-2">背景音乐管理 (BGM)</h2>
                 <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
@@ -877,6 +770,10 @@
                                 :class="['w-full px-3 py-2 text-white rounded-lg text-sm font-bold transition-all flex items-center justify-center', isAnalyzingScript ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50']">
                                 <span v-if="isAnalyzingScript" class="animate-spin mr-2">⏳</span>
                                 {{ isAnalyzingScript ? '停止分析' : 'AI 深度分析' }}
+                            </button>
+                            <button @click="generateAllSoundEffects" :disabled="isGeneratingSoundEffects"
+                                class="w-full px-3 py-2 text-amber-800 bg-amber-100 rounded-lg text-sm font-bold transition-all hover:bg-amber-200 disabled:cursor-wait disabled:opacity-50">
+                                {{ isGeneratingSoundEffects ? soundEffectGenerationStatus : '生成全部 SoundEffect 音效' }}
                             </button>
                         </div>
 
@@ -1363,26 +1260,24 @@
                                     </div>
                             </div>
 
-                                <!-- 音效管理条 -->
-                                <div class="flex flex-wrap items-center gap-2 w-full">
-                                    <div v-for="(sfx, sIdx) in line.sfx" :key="sIdx"
-                                        class="flex items-center bg-blue-50 border border-blue-100 rounded px-2 py-1 text-xs">
-                                        <span class="mr-1"></span>
-                                        <select v-model="sfx.name"
-                                            class="bg-transparent outline-none border-b border-transparent hover:border-blue-300 text-blue-700 font-medium max-w-[100px] cursor-pointer">
-                                            <option v-for="libSfx in sfxLibrary" :key="libSfx.id" :value="libSfx.name">
-                                                {{ libSfx.name }}</option>
-                                        </select>
-                                        <span class="mx-1 text-slate-400">@</span>
-                                        <input type="number" v-model="sfx.position" step="0.1" min="0" max="1"
-                                            class="w-10 bg-transparent text-center outline-none border-b border-transparent hover:border-blue-300"
-                                            title="插入位置 (0.0 - 1.0)">
-                                        <button @click="removeLineSfx(line, sIdx)"
-                                            class="ml-2 text-slate-400 hover:text-red-500 font-bold">×</button>
+                                <!-- 每项音效都直接由 SoundEffect 生成并绑定到当前台词，不再引用工程级 SFX 素材库。 -->
+                                <div v-if="line.sfx_plan && line.sfx_plan.length > 0"
+                                    class="w-full rounded border border-amber-200 bg-amber-50/70 px-2 py-1.5">
+                                    <div class="mb-1 text-[10px] font-bold text-amber-700">SoundEffect 音效计划</div>
+                                    <div v-for="(plan, planIdx) in line.sfx_plan" :key="plan.id || planIdx"
+                                        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-amber-900 leading-relaxed">
+                                        <span class="rounded bg-amber-100 px-1.5 py-0.5 font-medium">{{ plan.sound_class }}</span>
+                                        <span class="text-amber-700">{{ plan.anchor }} · {{ plan.offset_ms || 0 }}ms · {{ plan.duration_seconds }}s</span>
+                                        <span class="min-w-0 break-words">{{ plan.prompt }}</span>
+                                        <span v-if="plan.required" class="font-bold text-red-600">需确认</span>
+                                        <button @click="generateSoundEffect(line, plan)" :disabled="plan.isGenerating"
+                                            class="rounded border border-amber-300 bg-white px-1.5 py-0.5 font-medium text-amber-700 hover:bg-amber-100 disabled:cursor-wait disabled:opacity-50">
+                                            {{ plan.isGenerating ? '生成中…' : (plan.audioUrl ? '重新生成' : '生成音效') }}
+                                        </button>
+                                        <button v-if="plan.audioUrl" @click="playGeneratedSoundEffect(plan)"
+                                            class="rounded border border-emerald-300 bg-white px-1.5 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">试听</button>
+                                        <span v-if="plan.generationError" class="w-full text-red-600">生成失败：{{ plan.generationError }}</span>
                                     </div>
-                                    <button @click="addLineSfx(line)"
-                                        class="text-[10px] text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 rounded px-2 py-1 hover:border-blue-400 transition-colors flex items-center gap-1">+
-                                        音效</button>
                                 </div>
 
                                 <!-- 文本与音效区域 -->
@@ -1443,7 +1338,7 @@
                     spellcheck="false"></textarea>
                 <div class="mt-2 text-xs text-slate-500">
                     <span class="font-bold">可用变量:</span> ${emotionList}, ${sfxSection}, ${bgmSection}, ${filterSection},
-                    ${bgmExampleLine}, ${sfxExample}, ${rawScript}, ${bgImageCount}。当前 VoxCPM2 表演通过
+                    ${bgmExampleLine}, ${rawScript}, ${bgImageCount}。当前 VoxCPM2 表演通过
                     <code>clone_mode</code>、<code>delivery_profile</code> 与 <code>control_instruction</code> 路由；括号内自然语言写入
                     <code>control_instruction</code>，括号外正文写入 <code>text_content</code>，不要混在一起。
                 </div>
@@ -1527,6 +1422,7 @@
 
     <script src="./project-storage.js"></script>
     <script src="./voice-design.js"></script>
+    <script src="./soundeffect-client.js"></script>
     <script src="./editConfig/emotion.js"></script>
     <script src="./editConfig/paralinguistic.js"></script>
     <script src="./editConfig/speakingStyle.js"></script>
@@ -1570,10 +1466,15 @@
                 const STEP_AUDIO_EDITX_API_BASE_URL = 'http://127.0.0.1:8300';
                 // project-storage.js 通过 window 暴露兼容层，本页只消费它的公开 API。
                 const projectStorage = window.UnitaleProjectStorage;
+                // SoundEffect 客户端只封装 8311 请求，生成结果仍由本页写入工程资产库。
+                const soundEffectClient = window.UnitaleSoundEffectClient;
 
                 // 配套脚本未成功加载时立即终止启动，避免后续以不完整 schema 保存工程。
                 if (!projectStorage) {
                     throw new Error('project-storage.js 未正确加载');
+                }
+                if (!soundEffectClient) {
+                    throw new Error('soundeffect-client.js 未正确加载');
                 }
 
                 // 解构工程协议常量和唯一的数据规范化入口，避免页面复制 schema 转换逻辑。
@@ -1810,10 +1711,8 @@
                         version: PROJECT_VERSION_LABEL,
                         // savedAt 记录本次本地保存时间。
                         savedAt: Date.now(),
-                        // 资源库只保存可序列化元数据；真正的 Blob 位于 assets 仓库。
+                        // 资源库只保存可序列化元数据；生成式 SFX 绑定到各 dialogue.sfx_plan 的资产键。
                         libraries: {
-                            // 克隆音效元数据，移除 Vue 响应式代理引用。
-                            sfx: cloneData(sfxLibrary.value),
                             // 克隆 BGM 元数据。
                             bgm: cloneData(bgmLibrary.value),
                             // 克隆音色及其稳定资产键、参考文本等元数据。
@@ -2339,14 +2238,6 @@
                 const emotionForm = ref({ id: '', name: '', vector: [0, 0, 0, 0, 0, 0, 0, 0] });
                 // 控制情绪表单提交时新增还是覆盖自定义预设。
                 const isEditingEmotion = ref(false);
-                // 音效库状态
-                // SFX 是工程级素材，脚本台词只按名称引用它。
-                const sfxLibrary = ref([]);
-                // trimStart/trimEnd 为 0~1 比例，volume 是素材库层音量。
-                const sfxForm = ref({ id: '', name: '', description: '', filename: '', assetKey: '', trimStart: 0, trimEnd: 1, volume: 0.3 });
-                // 控制音效表单提交时新增还是覆盖已有素材。
-                const isEditingSfx = ref(false);
-
                 // BGM库状态
                 // BGM 资源由独立时间轴控制块播放或停止。
                 const bgmLibrary = ref([]);
@@ -2590,6 +2481,10 @@
                 let sequenceAbortController = null;
                 // WAV 与 SRT 导出共用的加载锁。
                 const isExportingAudio = ref(false);
+                // SoundEffect 批量生成按 8311 的单 worker/GPU 锁顺序执行，避免并发占用显存。
+                const isGeneratingSoundEffects = ref(false);
+                // 批量生成时展示当前进度；单条生成状态保存在 sfx_plan 项上。
+                const soundEffectGenerationStatus = ref('');
                 // 隐藏的工程 JSON 文件输入框。
                 const importFileRef = ref(null);
                 // 隐藏的小说 TXT 文件输入框。
@@ -2756,16 +2651,18 @@
 - **提示语去重**: “他低声说”“她哭着问”等提示语中的“低声、哭着、颤抖、愤怒”等表现线索，转入对应角色的 \`control_instruction\`；不要同时生成“他低声说”的旁白和一条同样要求低声的台词。
 - **正文边界**: \`text_content\` 必须是括号外的实际朗读正文，不得包含 \`(声音颤抖)\`、角色头标、参考音频路径、\`[fear]\`、\`[BREATH]\`、舞台说明、SSML 或自定义标签；括号内的自然语言表演描述必须移入 \`control_instruction\`。
 
-## 3. 音效插入 (sfx)
-- 如果情节需要（如“摔门而去”、“雷声大作”），且音效库中有对应素材，请在 JSON 对象中添加 \`sfx\` 字段。
-- **严格限制**: 只能使用【音效库】中列出的名称。如果库为空或没有匹配项，**绝对不要**添加此字段。
-- **禁止混用**: **绝对禁止**在 \`sfx\` 字段中使用【背景音乐库】中的名称。SFX 只能使用【音效库】的内容。
-- **支持多音效**: 一句台词中可以插入多个音效，只要位置合理（如开头关门，中间脚步声）。
-- 格式: \`"sfx": [{"name": "音效名称", "position": 0.5}, {"name": "另一音效", "position": 0.9}]\`
-- \`position\`: 0.0-1.0 之间的浮点数，表示音效在**台词念白时长内**的插入位置（例如 0.0 为开始，1.0 为念白结束）。
-- **重要**: \`position\` 计算**不包含** \`break_duration\`（停顿时间）。即 1.0 代表台词说完的那一刻，而不是停顿结束的那一刻。
-- **间隔音效**: 如果音效发生在台词后的停顿期间，请将其加入该台词的 \`sfx\` 列表，位置设为 1.0。
-- **特别重要** 尽量给每句都配上合适的SFX音效，如果有的话
+## 3. SoundEffect 音效生成计划 (sfx_plan)
+所有非语言音效都必须由 MOSS-SoundEffect v2.0 生成；当前页面没有 SFX 素材库，也不接受 \`sfx\` 名称引用。原文有明确可听事件时，在对应 \`dialogue\` 对象输出 \`sfx_plan\`，页面会将其中的 \`prompt\` 和 \`duration_seconds\` 发送到 \`http://127.0.0.1:8311/v1/generate\` 并把返回 WAV 绑定到该条台词。
+
+### 计划格式与规则
+- 每项格式固定为：\`{"id":"简短唯一ID","action":"generate","purpose":"foreground_action","sound_class":"声音类别","prompt":"中文非语言声效描述","anchor":"dialogue_start","offset_ms":0,"duration_seconds":1.2,"mix_preset":"cue_before_dialogue","required":false}\`。
+- 只标记原文明确发生、且听众应当听见的非语言事件，例如电话/视频通话接通或挂断、敲门、开关门、物体落地或破碎、脚步、车辆、机械开合或明确的天气声。音效库不存在，不得因此遗漏这些事件。
+- 不为情绪、表情、心理活动、普通说话、重复动作或单纯“营造氛围”强行生成音效；人物笑、叹气、犹豫音等仍使用 \`voxcpm_nonverbal_tags\`，不要写进 \`sfx_plan\`。
+- \`prompt\` 是唯一传给 SoundEffect 的文本，必须具体描述声音来源、动作、质感、空间/距离和收尾；不要写人物台词、BGM、文件路径、品牌名或抽象情绪。例如“近距离收音，玻璃弹珠掉落在木地板后清脆碎裂，短促，碎片余响迅速收尾”。
+- \`purpose\` 只能为 \`semantic_cue\`、\`foreground_action\`、\`ambience\`、\`transition\`；\`anchor\` 只能为 \`dialogue_start\`、\`dialogue_end\`、\`break_start\`；\`mix_preset\` 只能为 \`cue_before_dialogue\`、\`action_under_dialogue\`、\`soft_ambience\`、\`transition\`。\`action\` 固定为 \`generate\`，\`offset_ms\` 为相对锚点的 -500–5000 毫秒；仅 \`cue_before_dialogue\` 的短提示可用 -40 到 -120ms 前置，\`duration_seconds\` 为 0.2–30 的数字。
+- 默认每条 \`dialogue\` 至多一个前景计划；只有两个独立、明确且紧密相连的事件才可使用两个。持续配乐仍交给独立 \`bgm\` 控制块，绝不写进 \`sfx_plan\`。
+
+示例：“视频通话接通了，我的男朋友微笑着。”应保留 \`"sfx_plan": [{"id":"call_connect","action":"generate","purpose":"semantic_cue","sound_class":"视频通话接通提示","prompt":"短促清晰的手机视频通话接通电子提示音，近距离，干净利落地收尾","anchor":"dialogue_start","offset_ms":0,"duration_seconds":0.8,"mix_preset":"cue_before_dialogue","required":false}]\`。
 
 ## 4. 背景音乐控制 (BGM Control)
 - **开头BGM**: 请**务必**在脚本的最开始尝试匹配并插入一个适合当前氛围的 BGM。只要【背景音乐库】中有合适的，就**必须**插入。
@@ -2795,9 +2692,9 @@
 - **严格 JSON**: 输出格式必须是严格的 JSON 数组，不包含任何额外说明或代码块标记。
 - **数组元素**: 必须是以下两种对象之一：
   - 每个 dialogue 还应包含 \`control_instruction\`：保存括号内的自然语言表演指令；\`text_content\` 只保存括号外的真实合成文本。
-  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "括号外正文", "control_instruction": "括号内自然语言指令", "emotion": "...", "intensity": "...", "clone_mode": "controllable", "delivery_profile": "fear", "voxcpm_nonverbal_tags": [], "needs_review": true, "break_duration": 0, "filter": "...", "sfx": [...]}\`
+  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "括号外正文", "control_instruction": "括号内自然语言指令", "emotion": "...", "intensity": "...", "clone_mode": "controllable", "delivery_profile": "fear", "voxcpm_nonverbal_tags": [], "needs_review": true, "break_duration": 0, "filter": "...", "sfx_plan": [...]}\`
   2. **BGM对象**: \`{"type": "bgm", "action": "play", "name": "..."}\` 或 \`{"type": "bgm", "action": "stop"}\`
-  - **严禁生成** \`{"type": "sfx", ...}\` 这种独立音效块。音效必须包含在台词对象的 \`sfx\` 字段中。
+  - **严禁生成** \`sfx\` 字段或 \`{"type": "sfx", ...}\` 这种独立音效块。音效只能包含在台词对象的 \`sfx_plan\` 字段中，供 SoundEffect 生成。
 
 
 ## 小说原文:
@@ -2813,7 +2710,7 @@
   {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "control_instruction": "声音发紧，语速极快，带着恐惧和急迫感，短促有力地警告", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "urgent", "voxcpm_nonverbal_tags": [], "needs_review": true, "break_duration": 0},
   {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
   {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "control_instruction": "压低声音，语速放慢，带着克制的恐惧和悬疑感", "emotion": "fear", "intensity": "较强", "clone_mode": "controllable", "delivery_profile": "suspense", "needs_review": true, "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0\${sfxExample}},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0, "sfx_plan": [{"id":"desk_phone_vibration","action":"generate","purpose":"semantic_cue","sound_class":"座机震动","prompt":"办公桌上的座机持续震动，塑料外壳在木质桌面轻微嗡鸣与碰撞，近距离收音，短促重复后收尾","anchor":"dialogue_end","offset_ms":0,"duration_seconds":2.0,"mix_preset":"transition","required":false}]},
   {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "control_instruction": "声音发颤，带着难以置信的恐惧，语速稍快，句尾上扬", "emotion": "fear", "intensity": "微弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": true, "break_duration": 0.5},
   {"type": "dialogue", "role_name": "老李", "text_content": "对，", "control_instruction": "短促地承认，声音压低，带着强忍的恐惧", "emotion": "fear", "intensity": "稍弱", "clone_mode": "controllable", "delivery_profile": "restrained", "needs_review": true, "break_duration": 0},
   {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
@@ -2836,6 +2733,7 @@
                 const normalizePromptTemplate = (template) => {
                     if (typeof template !== 'string') return template;
                     return template
+                        .replace(/\n## 3\. 音效插入 \(sfx\)[\s\S]*?(?=\n## 4\. 背景音乐控制)/, '')
                         .replace(/\n## 5\. 音频滤波器 \(Filter\)[\s\S]*?(?=\n## 6\. VoxCPM2 表演计划与非语言标签)/, '')
                         .replace(/\n## 8\. 背景图片块 \(bgImage\)[\s\S]*?(?=\n## 小说原文:)/, '');
                 };
@@ -3220,6 +3118,122 @@ ${voiceReferenceHardConstraints}`;
                     }
                 };
 
+                /**
+                 * 调用 8311 生成一条计划音效，并将返回的 WAV 直接绑定到该计划的稳定资产键。
+                 * @param {Object} line - 所属 dialogue 时间轴块
+                 * @param {Object} plan - LLM 输出的 sfx_plan 项
+                 * @returns {Promise<void>} 生成、保存和运行时 URL 更新结束后兑现
+                 */
+                const generateSoundEffect = async (line, plan) => {
+                    if (!line || !plan || plan.isGenerating) return;
+                    plan.isGenerating = true;
+                    plan.generationError = '';
+                    const controller = new AbortController();
+                    plan.abortController = controller;
+
+                    try {
+                        const audio = await soundEffectClient.generateSoundEffectAudio({
+                            prompt: plan.prompt,
+                            seconds: plan.duration_seconds,
+                            signal: controller.signal
+                        });
+                        // 首次生成创建稳定键，重新生成覆盖同一键，避免 IndexedDB 残留多份无引用 WAV。
+                        plan.audioAssetKey = plan.audioAssetKey
+                            || createAssetKey('soundeffect', `${line.id}_${plan.id || 'plan'}.wav`);
+                        await saveAssetToDB(plan.audioAssetKey, audio);
+                        // 同一计划重新生成会覆盖原 WAV，必须清除同键的旧解码缓存。
+                        audioBufferCache.delete(plan.audioAssetKey);
+                        registerLocalAsset(plan, audio, `${line.id}_${plan.id || 'plan'}.wav`);
+                        if (plan.audioUrl) URL.revokeObjectURL(plan.audioUrl);
+                        plan.audioUrl = URL.createObjectURL(audio);
+                    } catch (error) {
+                        if (error && error.name === 'AbortError') {
+                            plan.generationError = '已取消';
+                        } else {
+                            console.error('SoundEffect 生成失败:', error);
+                            plan.generationError = error && error.message ? error.message : '未知错误';
+                        }
+                    } finally {
+                        plan.isGenerating = false;
+                        delete plan.abortController;
+                        // 计划的音频键和错误状态均属于当前工程的台词数据，交给统一自动保存处理。
+                        triggerAutoSave();
+                    }
+                };
+
+                /** 顺序生成当前脚本中所有尚未得到 WAV 的 SoundEffect 计划。 */
+                const generateAllSoundEffects = async () => {
+                    if (isGeneratingSoundEffects.value) return;
+                    const pendingPlans = scriptLines.value.flatMap((line) =>
+                        line && line.type === 'dialogue'
+                            ? (line.sfx_plan || [])
+                                .filter((plan) => plan && !plan.audioUrl && !plan.isGenerating)
+                                .map((plan) => ({ line, plan }))
+                            : []
+                    );
+                    if (pendingPlans.length === 0) return alert('当前脚本没有待生成的 SoundEffect 音效。');
+
+                    isGeneratingSoundEffects.value = true;
+                    try {
+                        for (let index = 0; index < pendingPlans.length; index++) {
+                            const { line, plan } = pendingPlans[index];
+                            soundEffectGenerationStatus.value = `生成音效 ${index + 1}/${pendingPlans.length}`;
+                            // 后端每次请求占用独立 worker 与共享 GPU 锁，因此前端也保持顺序请求。
+                            await generateSoundEffect(line, plan);
+                        }
+                    } finally {
+                        isGeneratingSoundEffects.value = false;
+                        soundEffectGenerationStatus.value = '';
+                    }
+                };
+
+                /** 试听某个已生成并绑定到计划的 SoundEffect WAV。 */
+                const playGeneratedSoundEffect = (plan) => playPreview(plan);
+
+                /**
+                 * 将 SoundEffect 计划的锚点和毫秒偏移转换为相对台词开头的墙钟秒数。
+                 * dialogue_end 与 break_start 都以台词有效播放结束为基准，后者仅表达语义用途。
+                 */
+                const getSoundEffectStartOffset = (plan, dialogueDuration) => {
+                    const offsetSeconds = Math.max(-0.5, Math.min(5, (Number(plan && plan.offset_ms) || 0) / 1000));
+                    const startsAtDialogueEnd = plan && (plan.anchor === 'dialogue_end' || plan.anchor === 'break_start');
+                    return (startsAtDialogueEnd ? dialogueDuration : 0) + offsetSeconds;
+                };
+
+                /**
+                 * 对台词起点之前的短提示音预留调度时间，使负偏移不被 Web Audio 截断。
+                 * 只允许 dialogue_start 使用负偏移，最大提前 500ms。
+                 */
+                const getSoundEffectPreRoll = (plans) => (plans || []).reduce((preRoll, plan) => {
+                    if (!plan || plan.anchor !== 'dialogue_start') return preRoll;
+                    return Math.max(preRoll, -Math.min(0, getSoundEffectStartOffset(plan, 0)));
+                }, 0);
+
+                /** 返回受控混音预设，LLM 只能选择预设名而不能直接指定增益或压缩参数。 */
+                const getSoundEffectMixSettings = (plan) => {
+                    const presets = {
+                        cue_before_dialogue: { gain: 0.22, fadeIn: 0.01, fadeOut: 0.12 },
+                        action_under_dialogue: { gain: 0.3, fadeIn: 0.015, fadeOut: 0.18 },
+                        soft_ambience: { gain: 0.12, fadeIn: 0.5, fadeOut: 0.8 },
+                        transition: { gain: 0.25, fadeIn: 0.01, fadeOut: 0.16 }
+                    };
+                    return presets[plan && plan.mix_preset] || presets.action_under_dialogue;
+                };
+
+                /** 在实时与离线上下文中复用同一套音效增益和包络规则。 */
+                const scheduleSoundEffectGain = (gainParam, plan, lineVolume, startTime, duration) => {
+                    const settings = getSoundEffectMixSettings(plan);
+                    const safeDuration = Math.max(0.02, Number(duration) || 0.02);
+                    const fadeInEnd = startTime + Math.min(settings.fadeIn, safeDuration / 2);
+                    const fadeOutStart = Math.max(fadeInEnd, startTime + safeDuration - Math.min(settings.fadeOut, safeDuration / 2));
+                    const numericLineVolume = Number(lineVolume);
+                    const targetGain = (Number.isFinite(numericLineVolume) ? numericLineVolume : 1) * settings.gain;
+                    gainParam.setValueAtTime(0, startTime);
+                    gainParam.linearRampToValueAtTime(targetGain, fadeInEnd);
+                    gainParam.setValueAtTime(targetGain, fadeOutStart);
+                    gainParam.linearRampToValueAtTime(0, startTime + safeDuration);
+                };
+
                 // --- 预览播放逻辑 ---
                 // 当前试听素材的稳定键；null 表示没有预览正在播放。
                 const previewPlayingFile = ref(null);
@@ -3501,8 +3515,8 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 // Watchers for Auto-Save
-                // 监听原文、角色和所有工程级资源库的深层变更。
-                watch([rawScript, characters, sfxLibrary, bgmLibrary, timbres, filterLibrary, emotionPresets], () => {
+                // 监听原文、角色和工程级资源库的深层变更；生成式 SFX 已内嵌在 scriptLines。
+                watch([rawScript, characters, bgmLibrary, timbres, filterLibrary, emotionPresets], () => {
                     // 恢复工程时会连续赋值，期间禁止把半成品自动覆盖回数据库。
                     if (isRestoring.value) return; // 如果正在恢复数据，不触发自动保存
                     triggerAutoSave();
@@ -3600,8 +3614,7 @@ ${voiceReferenceHardConstraints}`;
                     const libraries = projectEnvelope.libraries || {};
                     const project = projectEnvelope.project || {};
 
-                    // SFX/BGM 旧记录可能没有 volume，恢复页面当前默认 0.3。
-                    sfxLibrary.value = (libraries.sfx || []).map(item => ({ ...item, volume: item.volume ?? 0.3 }));
+                    // BGM 旧记录可能没有 volume，恢复页面当前默认 0.3。
                     bgmLibrary.value = (libraries.bgm || []).map(item => ({ ...item, volume: item.volume ?? 0.3 }));
                     // 音色的字段规范化已经由 project-storage.js 完成，可直接接管列表。
                     timbres.value = libraries.timbres || [];
@@ -3677,8 +3690,7 @@ ${voiceReferenceHardConstraints}`;
                  * @returns {Promise<void>} 所有可用素材恢复完成后兑现
                 */
                 const restoreProjectAssetsFromState = async () => {
-                    // 先恢复三个工程级音频资源库。
-                    await restoreAssetCollection(sfxLibrary.value, 'filename');
+                    // 先恢复 BGM 和音色两类工程级音频资源库；SFX 由 dialogue.sfx_plan 自身持有。
                     await restoreAssetCollection(bgmLibrary.value, 'filename');
                     await restoreAssetCollection(timbres.value, 'refPath');
 
@@ -3701,6 +3713,15 @@ ${voiceReferenceHardConstraints}`;
                                     registerLocalAsset(line, blob, `${line.id}.wav`);
                                     // audioUrl 是本次会话临时地址，不写入工程 JSON。
                                     line.audioUrl = URL.createObjectURL(blob);
+                                }
+                                // SoundEffect 输出绑定在计划本身，不从工程级 SFX 素材库查找。
+                                for (const plan of line.sfx_plan || []) {
+                                    const planKey = plan.audioAssetKey || `soundeffect_${line.id}_${plan.id}`;
+                                    const planBlob = await loadStoredAssetBlob(plan, planKey);
+                                    if (!planBlob) continue;
+                                    plan.audioAssetKey = planKey;
+                                    registerLocalAsset(plan, planBlob, `${line.id}_${plan.id}.wav`);
+                                    plan.audioUrl = URL.createObjectURL(planBlob);
                                 }
                                 // EditX 结果拥有独立资产键；原台词缺失时也应允许它单独恢复试听。
                                 const editKey = line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`;
@@ -4907,7 +4928,7 @@ ${voiceReferenceHardConstraints}`;
                     event.target.value = ''; // Reset file input
                 };
 
-                // ==================== 8. 工程级音色、音效、BGM、滤波器与情绪库 ====================
+                    // ==================== 8. 工程级音色、BGM、滤波器与情绪库 ====================
 
                 // --- 音色库管理逻辑 ---
                 /**
@@ -5112,102 +5133,6 @@ ${voiceReferenceHardConstraints}`;
                     isEditingTimbre.value = false;
                     // 释放对用户 File 对象的引用。
                     timbreFile.value = null; // Reset the stored file
-                };
-
-                // --- 音效库管理逻辑 ---
-                // 移除 saveSfxToLocal
-
-                /**
-                 * 校验并新增或更新音效素材记录。
-                 * @returns {Promise<void>} 保存流程结束后兑现
-                */
-                const saveSfx = async () => {
-                    // 元数据必须能通过名称被台词引用，并通过 filename 找到文件。
-                    if (!sfxForm.value.name || !sfxForm.value.filename) {
-                        return alert('请填写音效名称和文件路径');
-                    }
-
-                    try {
-                        // 旧记录缺 assetKey 时显式补空字符串，交给兼容恢复处理。
-                        const normalizedSfx = { ...sfxForm.value, assetKey: sfxForm.value.assetKey || '' };
-                        // 编辑按 ID 替换，新建补 ID 与 enabled。
-                        if (isEditingSfx.value) {
-                            // 按表单 ID 定位现有音效。
-                            const index = sfxLibrary.value.findIndex(s => s.id === sfxForm.value.id);
-                            // 找到时保留原位置并覆盖元数据。
-                            if (index !== -1) sfxLibrary.value[index] = normalizedSfx;
-                        } else {
-                            // 新音效获得时间戳 ID，且默认启用。
-                            sfxLibrary.value.push({ ...normalizedSfx, id: Date.now().toString(), enabled: true });
-                        }
-                        // 非阻塞预解码，首次试听可以命中缓存。
-                        if (sfxForm.value.filename) loadAudioBuffer(normalizedSfx);
-                        // saveSfxToLocal();
-                        // 工程深度 watcher 负责持久化资源库，提交后重置表单。
-                        resetSfxForm();
-                    } catch (e) {
-                        alert(`保存音效失败: ${e.message}`);
-                    }
-                };
-
-                /**
-                 * 将指定音效载入编辑表单，并补齐剪辑默认值。
-                 * @param {Object} sfx - 待编辑的音效记录
-                 * @returns {void}
-                */
-                const editSfx = (sfx) => {
-                    // 默认值写在前面，已有记录字段在后面覆盖，兼容旧数据缺少剪辑参数。
-                    sfxForm.value = { trimStart: 0, trimEnd: 1, volume: 1.0, ...sfx };
-                    isEditingSfx.value = true;
-                };
-
-                /**
-                 * 经用户确认后删除指定音效记录。
-                 * @param {string} id - 音效 ID
-                 * @returns {void}
-                */
-                const deleteSfx = (id) => {
-                    if (!confirm('确定删除？')) return;
-                    // 删除资源记录不会自动移除台词中的同名引用，播放时会安全跳过缺失项。
-                    sfxLibrary.value = sfxLibrary.value.filter(s => s.id !== id);
-                };
-
-                /** 重置音效表单及其剪辑参数。 */
-                const resetSfxForm = () => {
-                    // 新导入音效默认全长播放，素材库音量为 0.3。
-                    sfxForm.value = { id: '', name: '', description: '', filename: '', assetKey: '', trimStart: 0, trimEnd: 1, volume: 0.3 };
-                    isEditingSfx.value = false;
-                };
-
-                /**
-                 * 接收音效文件，初始化剪辑参数并写入本地素材存储。
-                 * @param {Event} event - 文件输入框 change 事件
-                 * @returns {void}
-                */
-                const handleSfxFileUpload = (event) => {
-                    // 仅处理第一个选中文件。
-                    const file = event.target.files[0];
-                    if (file) {
-                        // 编辑时沿用原稳定键，新建时创建 SFX 专用键。
-                        sfxForm.value.assetKey = sfxForm.value.assetKey || createAssetKey('sfx', file.name);
-                        // 文件名同时作为旧版路径兼容字段。
-                        sfxForm.value.filename = file.name;
-                        // 新文件重置为全长和默认音量。
-                        sfxForm.value.trimStart = 0;
-                        sfxForm.value.trimEnd = 1;
-                        sfxForm.value.volume = 0.3;
-                        // 内存、IndexedDB、工程元数据和解码缓存依次更新。
-                        // 先注册当前会话可立即读取的 File。
-                        registerLocalAsset(sfxForm.value, file, file.name);
-                        // 再把原始二进制写入素材仓库。
-                        saveAssetToDB(sfxForm.value.assetKey, file); // Save to DB
-                        // 安排工程元数据自动保存。
-                        triggerAutoSave();
-                        // 非阻塞预解码，缩短第一次试听等待。
-                        loadAudioBuffer(sfxForm.value);
-                    }
-                    // 允许下次再次选择同名文件。
-                    event.target.value = '';
                 };
 
                 // --- BGM库管理逻辑 ---
@@ -6024,36 +5949,14 @@ ${voiceReferenceHardConstraints}`;
                              * @returns {Promise<Array<Object>>} 可调度的音效缓冲及参数
                              */
                             const loadSfx = async () => {
-                                // 台词没有绑定音效时直接返回空数组，保持后续调度代码统一。
-                                if (!line.sfx || line.sfx.length === 0) return [];
-                                // 每个行内音效只保存名称和位置，这里回查资源库以取得文件与默认参数。
-                                const promises = line.sfx.map(async (sfxItem) => {
-                                    // 名称是工程 schema 中连接台词音效与音效库条目的稳定引用。
-                                    const sfxLibItem = sfxLibrary.value.find(s => s.name === sfxItem.name);
-                                    // 只有资源库条目和文件标识都存在时才尝试解码。
-                                    if (sfxLibItem && sfxLibItem.filename) {
-                                        // 复用统一加载器读取并解码音效素材。
-                                        const buf = await loadAudioBuffer(sfxLibItem);
-                                        // 把 AudioBuffer 与本次调度需要的库级音量、裁剪范围组合起来。
-                                        if (buf) return { 
-                                            // 实际用于 AudioBufferSourceNode 的解码音频。
-                                            buffer: buf, 
-                                            // 保留行内引用，以读取相对位置。
-                                            item: sfxItem, 
-                                            // 资源库级音量缺失时按 1 倍处理。
-                                            libVolume: sfxLibItem.volume ?? 1.0,
-                                            // 音效资源自身的归一化裁剪起点。
-                                            trimStart: sfxLibItem.trimStart ?? 0,
-                                            // 音效资源自身的归一化裁剪终点。
-                                            trimEnd: sfxLibItem.trimEnd ?? 1
-                                        };
-                                    }
-                                    // 素材缺失或解码失败的音效以 null 标记，稍后统一过滤。
-                                    return null;
+                                // 每项 sfx_plan 自带 SoundEffect 生成后的资产键，不再回查工程级 SFX 素材库。
+                                const plans = (line.sfx_plan || []).filter((plan) => plan && plan.audioAssetKey);
+                                if (plans.length === 0) return [];
+                                const promises = plans.map(async (plan) => {
+                                    const buffer = await loadAudioBuffer(plan);
+                                    return buffer ? { buffer, plan } : null;
                                 });
-                                // 并行等待所有音效完成读取，避免逐个加载拉长试听启动时间。
                                 const results = await Promise.all(promises);
-                                // 只把成功获得 AudioBuffer 的音效交给调度器。
                                 return results.filter(r => r !== null);
                             };
 
@@ -6133,56 +6036,26 @@ ${voiceReferenceHardConstraints}`;
                             // playbackRate 改变对白实际播放时长，但不改变原缓冲数据。
                             dialogueSource.playbackRate.value = speed;
 
-                            // 预留 50ms 调度窗口，使对白与音效可以基于同一时间点精确启动。
+                            // 预留 50ms 调度窗口；负偏移提示音会占用额外前置时间。
                             const now = audioContext.currentTime + 0.05;
+                            const preRoll = getSoundEffectPreRoll(sfxBuffers.map(({ plan }) => plan));
+                            const dialogueStartTime = now + preRoll;
 
-                            // 为已经加载成功的每个行内音效创建并安排一次性音源。
-                            sfxBuffers.forEach(({ buffer, item, libVolume, trimStart: sfxTrimStart, trimEnd: sfxTrimEnd }) => {
-                                // 行内音效位置按“对白原音频上的裁剪区间”解释。
-                                const originalDuration = dialogueBuffer.duration;
-                                // 当前对白裁剪起点在原音频中的绝对秒数。
-                                const absStart = originalDuration * trimStart;
-                                // 当前对白裁剪终点在原音频中的绝对秒数。
-                                const absEnd = originalDuration * trimEnd;
-                                // 裁剪后可听区间的原速时长。
-                                const trimmedDuration = absEnd - absStart;
-                                // position 是裁剪区间内 0～1 的相对位置；非法值退回开头。
-                                const pos = parseFloat(item.position) || 0;
-                                // 把相对位置换算成原始对白缓冲中的绝对触发秒数。
-                                const absSfxTime = absStart + (trimmedDuration * pos);
-
-                                // 只调度落在当前对白裁剪窗口中的音效。
-                                if (absSfxTime >= absStart && absSfxTime <= absEnd) {
-                                    // 每次触发都为音效创建新的、一次性的 BufferSourceNode。
-                                    const sSrc = audioContext.createBufferSource();
-                                    // 绑定已经解码的音效缓冲。
-                                    sSrc.buffer = buffer;
-                                    // 独立增益节点允许组合台词级音效音量和资源库默认音量。
-                                    const sGain = audioContext.createGain();
-                                    // 最终音效音量 = 当前台词音效总音量 × 资源库条目默认音量。
-                                    const finalSfxVol = (line.sfxVolume ?? 0.5) * (libVolume ?? 1.0);
-                                    // 在统一启动基准点写入增益，避免运行时突变。
-                                    sGain.gain.setValueAtTime(finalSfxVol, now);
-                                    // 音效不经过对白滤镜，直接通过自己的增益进入主输出。
-                                    sSrc.connect(sGain).connect(getAudioOutputNode());
-
-                                    // 计算音效相对裁剪对白开头的触发延迟。
-                                    const relativeStart = absSfxTime - absStart;
-                                    // 音效资源本身也支持按比例裁剪，从对应偏移处读取。
-                                    const sOffset = buffer.duration * sfxTrimStart;
-                                    // 限制本次播放为音效资源裁剪后的有效时长。
-                                    const sDuration = buffer.duration * (sfxTrimEnd - sfxTrimStart);
-                                    // 对白加速后触发延迟也按同倍率缩短，确保语义位置不漂移。
-                                    sSrc.start(now + relativeStart / speed, sOffset, sDuration);
-
-                                    // 保存活动节点，便于用户停止、切换台词或清理时批量终止。
-                                    sfxSources.push(sSrc);
-                                    // 音效自然结束后从活动表移除，避免引用长期堆积。
-                                    sSrc.onended = () => {
-                                        const idx = sfxSources.indexOf(sSrc);
-                                        if (idx > -1) sfxSources.splice(idx, 1);
-                                    };
-                                }
+                            // 每个计划都使用其自身生成的 WAV，并以计划锚点相对白台词起点调度。
+                            const effectiveDialogueDuration = playDuration / speed;
+                            sfxBuffers.forEach(({ buffer, plan }) => {
+                                const sSrc = audioContext.createBufferSource();
+                                sSrc.buffer = buffer;
+                                const sGain = audioContext.createGain();
+                                const soundEffectStartTime = dialogueStartTime + getSoundEffectStartOffset(plan, effectiveDialogueDuration);
+                                scheduleSoundEffectGain(sGain.gain, plan, line.sfxVolume, soundEffectStartTime, buffer.duration);
+                                sSrc.connect(sGain).connect(getAudioOutputNode());
+                                sSrc.start(soundEffectStartTime);
+                                sfxSources.push(sSrc);
+                                sSrc.onended = () => {
+                                    const idx = sfxSources.indexOf(sSrc);
+                                    if (idx > -1) sfxSources.splice(idx, 1);
+                                };
                             });
 
                             // 对白自然结束或被 stop 时，统一回收 UI 与动画状态。
@@ -6201,15 +6074,15 @@ ${voiceReferenceHardConstraints}`;
                             };
 
                             // 在统一基准时刻，从裁剪偏移开始播放指定原始时长。
-                            dialogueSource.start(now, startTimeOffset, playDuration);
+                            dialogueSource.start(dialogueStartTime, startTimeOffset, playDuration);
 
                             /** 按播放速率更新台词在原始音频中的进度比例。 */
                             const updateProgress = () => {
                                 // 本行若已经停止或被另一行替换，就终止递归动画。
                                 if (isAuditioningId.value !== auditioningId) return;
                                 // 计算相对预定启动时刻实际流逝的墙钟秒数。
-                                const elapsed = audioContext.currentTime - now;
-                                // 预调度的 50ms 内 elapsed 为负，进度应停在裁剪起点。
+                                const elapsed = audioContext.currentTime - dialogueStartTime;
+                                // 预调度和前置提示音期间 elapsed 为负，进度应停在裁剪起点。
                                 if (elapsed >= 0) {
                                     // 墙钟时间乘播放速度得到已消费的原音频时间，再除总时长转成比例。
                                     const progress = trimStart + (elapsed * speed / duration);
@@ -6221,7 +6094,7 @@ ${voiceReferenceHardConstraints}`;
                                 }
 
                                 // 实际墙钟播放时长为原裁剪时长除以播放倍率。
-                                if (audioContext.currentTime < now + (playDuration / speed)) {
+                                if (audioContext.currentTime < dialogueStartTime + (playDuration / speed)) {
                                     // 下一帧继续读取 AudioContext 的高精度时钟。
                                     playbackAnimationFrame = requestAnimationFrame(updateProgress);
                                 } else {
@@ -6484,7 +6357,7 @@ ${voiceReferenceHardConstraints}`;
                  */
                 const exportScriptState = async () => {
                     // 完整工程会内嵌二进制素材，导出前先提示可能产生较大的 JSON 文件。
-                    if (!confirm('即将导出包含所有素材（音效、BGM、音色）的完整工程文件。如果素材较多，文件可能较大，请耐心等待。')) return;
+                    if (!confirm('即将导出包含所有素材（SoundEffect 音效、BGM、音色）的完整工程文件。如果素材较多，文件可能较大，请耐心等待。')) return;
 
                     // 打开全局遮罩，防止导出过程中重复触发工程操作。
                     isExportingProject.value = true;
@@ -6509,8 +6382,6 @@ ${voiceReferenceHardConstraints}`;
                             exportedAt: new Date().toISOString(),
                             // 资源库只复制可序列化元数据，二进制稍后单独嵌入。
                             libraries: {
-                                // 复制音效库，随后在副本条目中加入 _fileData。
-                                sfx: cloneData(sfxLibrary.value),
                                 // 复制 BGM 库。
                                 bgm: cloneData(bgmLibrary.value),
                                 // 复制音色库及参考文本元数据。
@@ -6561,8 +6432,6 @@ ${voiceReferenceHardConstraints}`;
                             }
                         };
 
-                        // 音效资源的文件引用字段为 filename。
-                        await processLibrary(exportEnvelope.libraries.sfx || [], 'filename');
                         // BGM 资源同样使用 filename。
                         await processLibrary(exportEnvelope.libraries.bgm || [], 'filename');
                         // 音色参考音频使用 refPath，与后端协议字段保持一致。
@@ -6601,6 +6470,16 @@ ${voiceReferenceHardConstraints}`;
                                             line.stepAudioEditXAudioBase64 = await blobToBase64(editBlob);
                                         } catch (e) {
                                             console.warn('导出 Step-Audio-EditX 音频失败:', line.id, e);
+                                        }
+                                    }
+                                    // 每个计划的 WAV 直接绑定在 dialogue.sfx_plan，不经过工程级音效库。
+                                    for (const plan of line.sfx_plan || []) {
+                                        const planBlob = await loadStoredAssetBlob(plan, plan.audioAssetKey);
+                                        if (!planBlob) continue;
+                                        try {
+                                            plan.soundEffectAudioBase64 = await blobToBase64(planBlob);
+                                        } catch (e) {
+                                            console.warn('导出 SoundEffect 音频失败:', line.id, plan.id, e);
                                         }
                                     }
                                 // 背景图片行使用独立的 imageBase64 和 imageMimeType 字段。
@@ -6696,8 +6575,8 @@ ${voiceReferenceHardConstraints}`;
                         // 先移走超长 Base64，可显著降低 JSON.parse 处理大字符串字段时的压力。
                         let tinyJsonStr;
                         try {
-                            // 只匹配本应用约定的三个内嵌素材字段，不改写其他普通字符串。
-                            tinyJsonStr = text.replace(/"(_fileData|audioBase64|imageBase64)":"(data:[^"]+)"/g, (match, key, base64) => {
+                            // 只匹配本应用约定的内嵌素材字段，不改写其他普通字符串。
+                            tinyJsonStr = text.replace(/"(_fileData|audioBase64|imageBase64|soundEffectAudioBase64)":"(data:[^"]+)"/g, (match, key, base64) => {
                                 // 保存真实 Data URL，并用数组下标建立占位符映射。
                                 extractedBlobs.push(base64);
                                 // 保留原字段名，只把字段值替换成可逆的短标记。
@@ -6775,9 +6654,7 @@ ${voiceReferenceHardConstraints}`;
                         scriptLines.value = [];
                         // 保留一个合法默认脚本骨架，确保恢复中途界面仍满足基本结构约束。
                         scriptList.value = [{ id: 'default', name: '脚本 1', data: { rawScript: '', scriptLines: [], rawAnalysisResult: '', characters: [] } }];
-                        // 工程导入按约定覆盖五类项目资源库，但不覆盖模型配置。
-                        // 清空音效库。
-                        sfxLibrary.value = [];
+                        // 工程导入按约定覆盖 BGM、音色、滤镜、情绪与脚本，但不覆盖模型配置。
                         // 清空 BGM 库。
                         bgmLibrary.value = [];
                         // 清空音色库。
@@ -6827,10 +6704,8 @@ ${voiceReferenceHardConstraints}`;
                             }
                         };
 
-                        // 先恢复三类资源库素材，使后续脚本引用可以找到对应条目。
+                        // 先恢复 BGM 与音色资源库素材，使后续脚本引用可以找到对应条目。
                         exportStatus.value = '恢复资源库素材...';
-                        // 恢复音效 Blob。
-                        await restoreEmbeddedLibraryAssets(normalizedProject.libraries.sfx, 'filename');
                         // 恢复 BGM Blob。
                         await restoreEmbeddedLibraryAssets(normalizedProject.libraries.bgm, 'filename');
                         // 恢复音色参考音频 Blob。
@@ -6901,6 +6776,33 @@ ${voiceReferenceHardConstraints}`;
                                         console.warn('Step-Audio-EditX audio restore failed', error);
                                     }
                                     delete line.stepAudioEditXAudioBase64;
+                                }
+
+                                // SoundEffect 计划音频按台词内计划恢复，不再从工程级音效库查找。
+                                if (line.type === 'dialogue') {
+                                    for (const plan of line.sfx_plan || []) {
+                                        if (!plan || !plan.soundEffectAudioBase64) continue;
+                                        try {
+                                            const realSoundEffectBase64 = resolveEmbeddedBase64(plan.soundEffectAudioBase64);
+                                            if (!realSoundEffectBase64) continue;
+                                            let blob;
+                                            if (realSoundEffectBase64.startsWith('data:')) {
+                                                const mimeMatch = realSoundEffectBase64.match(/^data:(.*?);/);
+                                                blob = base64ToBlob(realSoundEffectBase64, mimeMatch ? mimeMatch[1] : 'audio/wav');
+                                            } else {
+                                                const response = await fetch(realSoundEffectBase64);
+                                                blob = await response.blob();
+                                            }
+                                            const assetKey = plan.audioAssetKey || `soundeffect_${line.id}_${plan.id}`;
+                                            plan.audioAssetKey = assetKey;
+                                            registerLocalAsset(plan, blob, `${line.id}_${plan.id}.wav`);
+                                            plan.audioUrl = URL.createObjectURL(blob);
+                                            assetsToSave.push({ key: assetKey, blob });
+                                        } catch (error) {
+                                            console.warn('SoundEffect audio restore failed', error);
+                                        }
+                                        delete plan.soundEffectAudioBase64;
+                                    }
                                 }
 
                                 // 背景图采用与台词音频平行的恢复流程。
@@ -7035,7 +6937,7 @@ ${voiceReferenceHardConstraints}`;
 
                     try {
                         // 按用途分开缓存 AudioBuffer，后续调度只做内存查找。
-                        const assets = { dialogues: {}, sfx: {}, bgm: {} };
+                        const assets = { dialogues: {}, soundEffects: {}, bgm: {} };
 
                         // 逐条加载对白；统一加载器会优先命中已经解码的缓存。
                         for (const line of dialogueLines) {
@@ -7044,17 +6946,12 @@ ${voiceReferenceHardConstraints}`;
                             if (buffer) assets.dialogues[line.id] = buffer;
                         }
 
-                        // Set 去重脚本中重复引用的音效名称，避免同一素材反复解码。
-                        const usedSfxNames = new Set();
-                        // 扫描所有类型的脚本块，收集行内 sfx 数组中的资源名。
-                        scriptLines.value.forEach(l => { if (l.sfx) l.sfx.forEach(s => usedSfxNames.add(s.name)); });
-                        for (const name of usedSfxNames) {
-                            // 行内只保存名称，这里回到资源库解析实际素材条目。
-                            const item = sfxLibrary.value.find(s => s.name === name);
-                            // 同时有条目和文件引用时才尝试加载。
-                            if (item && item.filename) {
-                                // 个别音效加载失败时留空，仍允许其余轨道完成导出。
-                                try { assets.sfx[name] = await loadAudioBuffer(item); } catch (e) { }
+                        // 逐项读取绑定在 sfx_plan 上的 SoundEffect WAV；没有生成结果的计划不参与导出。
+                        for (const line of scriptLines.value) {
+                            if (!line || line.type !== 'dialogue') continue;
+                            for (const plan of line.sfx_plan || []) {
+                                if (!plan || !plan.audioAssetKey || assets.soundEffects[plan.audioAssetKey]) continue;
+                                try { assets.soundEffects[plan.audioAssetKey] = await loadAudioBuffer(plan); } catch (e) { }
                             }
                         }
 
@@ -7116,6 +7013,11 @@ ${voiceReferenceHardConstraints}`;
 
                                     // 保留实时 playLineAudio 的 50ms 预调度间隙，使两种输出节奏一致。
                                     currentTime += 0.05;
+                                    // cue_before_dialogue 的负偏移在离线时间轴中也为台词留出同样的前置空间。
+                                    const generatedPlans = (line.sfx_plan || []).filter((plan) => (
+                                        plan && plan.audioAssetKey && assets.soundEffects[plan.audioAssetKey]
+                                    ));
+                                    currentTime += getSoundEffectPreRoll(generatedPlans);
                                     // 保存离线调度所需的缓冲、行配置、裁剪和速度快照。
                                     events.push({ type: 'dialogue', time: currentTime, buffer: buffer, line: line, trimStart, trimEnd, playDuration, speed });
                                     // 游标越过这段对白在最终音频中的实际时长。
@@ -7128,8 +7030,19 @@ ${voiceReferenceHardConstraints}`;
                         // 脚本结束仍未 stop 的 BGM 多留 2 秒，给淡出包络提供尾部空间。
                         if (currentBgm) bgmSegments.push({ ...currentBgm, end: currentTime + 2 });
 
-                        // 在脚本游标后预留 1 秒，避免最后节点尾音被边界截断。
-                        const totalDuration = currentTime + 1;
+                        // SoundEffect 可在台词结束后开始，离线缓冲必须纳入其偏移与计划时长，避免尾音被截断。
+                        const soundEffectTailEnd = events.reduce((latest, event) => {
+                            const dialogueDuration = event.playDuration / event.speed;
+                            return (event.line.sfx_plan || []).reduce((planLatest, plan) => {
+                                if (!plan || !plan.audioAssetKey || !assets.soundEffects[plan.audioAssetKey]) return planLatest;
+                                const endsAt = event.time
+                                    + getSoundEffectStartOffset(plan, dialogueDuration)
+                                    + assets.soundEffects[plan.audioAssetKey].duration;
+                                return Math.max(planLatest, endsAt);
+                            }, latest);
+                        }, 0);
+                        // 在时间轴和最长音效尾部后各预留 1 秒，避免边界截断。
+                        const totalDuration = Math.max(currentTime, soundEffectTailEnd) + 1;
                         // 创建双声道、44.1kHz 的离线上下文；它不连接扬声器，只生成缓冲。
                         const offlineCtx = new OfflineAudioContext(2, totalDuration * 44100, 44100);
 
@@ -7239,57 +7152,20 @@ ${voiceReferenceHardConstraints}`;
                             // 在事件时间点从裁剪偏移播放指定源时长。
                             dSrc.start(evt.time, offset, duration);
 
-                            // 有行内音效配置时，逐个计算相对对白的离线触发时刻。
-                            if (evt.line.sfx) {
-                                evt.line.sfx.forEach(s => {
-                                    // 通过名称读取已去重加载的音效缓冲。
-                                    const sBuffer = assets.sfx[s.name];
-                                    if (sBuffer) {
-                                        // 以下位置换算与实时 playLineAudio 保持完全相同。
-                                        const originalDuration = evt.buffer.duration;
-                                        // 对白裁剪起点在源缓冲中的秒数。
-                                        const absStart = originalDuration * evt.trimStart;
-                                        // 对白裁剪终点在源缓冲中的秒数。
-                                        const absEnd = originalDuration * evt.trimEnd;
-                                        // 当前对白裁剪窗口的源时长。
-                                        const trimmedDuration = absEnd - absStart;
-                                        // position 表示裁剪后对白内的 0～1 相对位置。
-                                        const pos = parseFloat(s.position) || 0;
-                                        // 换算成原对白缓冲坐标上的绝对音效位置。
-                                        const absSfxTime = absStart + (trimmedDuration * pos);
-
-                                        // 只渲染位于当前对白有效裁剪窗口内的音效。
-                                        if (absSfxTime >= absStart && absSfxTime <= absEnd) {
-                                            // 为该次音效触发创建离线源节点。
-                                            const sSrc = offlineCtx.createBufferSource();
-                                            sSrc.buffer = sBuffer;
-                                            // 独立增益节点混合行级与资源库音效音量。
-                                            const sGain = offlineCtx.createGain();
-                                            // 回查资源库以取得默认音量和音效自身裁剪范围。
-                                            const libItem = sfxLibrary.value.find(l => l.name === s.name);
-                                            const libVol = libItem ? (libItem.volume ?? 1.0) : 1.0;
-                                            const scriptVol = evt.line.sfxVolume ?? 0.5;
-                                            // 与实时播放一致，两个音量系数相乘。
-                                            sGain.gain.value = scriptVol * libVol;
-
-                                            // 音效资源允许只使用自身缓冲的一部分。
-                                            const sTrimStart = libItem?.trimStart ?? 0;
-                                            const sTrimEnd = libItem?.trimEnd ?? 1;
-                                            // 把音效裁剪比例换算成 start 所需的偏移和持续秒数。
-                                            const sOffset = sBuffer.duration * sTrimStart;
-                                            const sDuration = sBuffer.duration * (sTrimEnd - sTrimStart);
-
-                                            // 音效直接经过自己的增益进入离线混音输出。
-                                            sSrc.connect(sGain).connect(offlineCtx.destination);
-
-                                            // 计算其相对裁剪对白起点的源时间距离。
-                                            const relativeStart = absSfxTime - absStart;
-                                            // 对白倍速同样缩放触发延迟，使音效保持在指定语义位置。
-                                            sSrc.start(evt.time + relativeStart / evt.speed, sOffset, sDuration);
-                                        }
-                                    }
-                                });
-                            }
+                            // 每项 SoundEffect 计划按锚点和偏移直接混入离线时间轴。
+                            const effectiveDialogueDuration = evt.playDuration / evt.speed;
+                            (evt.line.sfx_plan || []).forEach((plan) => {
+                                if (!plan || !plan.audioAssetKey) return;
+                                const sBuffer = assets.soundEffects[plan.audioAssetKey];
+                                if (!sBuffer) return;
+                                const sSrc = offlineCtx.createBufferSource();
+                                sSrc.buffer = sBuffer;
+                                const sGain = offlineCtx.createGain();
+                                const soundEffectStartTime = evt.time + getSoundEffectStartOffset(plan, effectiveDialogueDuration);
+                                scheduleSoundEffectGain(sGain.gain, plan, evt.line.sfxVolume, soundEffectStartTime, sBuffer.duration);
+                                sSrc.connect(sGain).connect(offlineCtx.destination);
+                                sSrc.start(soundEffectStartTime);
+                            });
                         });
 
                         // 一次性执行整个离线音频图，得到最终双声道 PCM 缓冲。
@@ -7762,8 +7638,8 @@ ${voiceReferenceHardConstraints}`;
                         // 新台词默认播放生成音频的完整范围。
                         trimStart: 0,
                         trimEnd: 1,
-                        // 显式初始化行内音效数组，方便界面直接 push。
-                        sfx: [],
+                        // 手动新增台词没有既有素材引用；需要时由 LLM 输出 SoundEffect 生成计划。
+                        sfx_plan: [],
                         // 默认不在台词后增加额外停顿。
                         break_duration: 0,
                         // 行内音效初始使用 1 倍总音量。
@@ -7908,31 +7784,6 @@ ${voiceReferenceHardConstraints}`;
                     el.style.height = 'auto';
                     // 再把可滚动内容高度设置为元素实际高度，从而消除内部滚动条。
                     el.style.height = el.scrollHeight + 'px';
-                };
-
-                /**
-                 * 为台词添加一个默认位于中点的音效引用。
-                 * @param {Object} line - 台词块
-                 * @returns {void}
-                 */
-                const addLineSfx = (line) => {
-                    // 兼容旧台词缺少 sfx 字段的情况。
-                    if (!line.sfx) line.sfx = [];
-                    // 资源库有条目时默认选第一项，否则保留可编辑占位名。
-                    const defaultSfx = sfxLibrary.value.length > 0 ? sfxLibrary.value[0].name : 'New SFX';
-                    // 新音效默认在裁剪后对白的 50% 位置触发。
-                    line.sfx.push({ name: defaultSfx, position: 0.5 });
-                };
-
-                /**
-                 * 删除台词中的指定音效引用。
-                 * @param {Object} line - 台词块
-                 * @param {number} index - 音效引用索引
-                 * @returns {void}
-                 */
-                const removeLineSfx = (line, index) => {
-                    // 旧数据无数组时静默跳过；有数组则删除指定引用。
-                    if (line.sfx) line.sfx.splice(index, 1);
                 };
 
                 /** 停止顺序播放，并淡出当前 BGM、清理音频节点和舞台状态。 */
@@ -8650,21 +8501,8 @@ ${voiceReferenceHardConstraints}`;
                     // 为本次 fetch 创建独立取消信号。
                     analysisAbortController.value = new AbortController();
 
-                    // sfxSection 将按资源库启用状态动态注入系统提示词。
-                    let sfxSection = "";
-                    // enabled:false 的素材不允许 LLM 在新时间轴中引用。
-                    const enabledSfx = sfxLibrary.value.filter(s => s.enabled !== false);
-
-                    // 有可用音效时把名称和描述枚举给模型。
-                    if (enabledSfx.length > 0) {
-                        // Markdown 列表同时提供稳定名称和语义描述。
-                        const sfxList = enabledSfx.map(s => `- ${s.name}: ${s.description}`).join('\n');
-                        // 强调只能引用真实名称，减少资源幻觉和 SFX/BGM 混用。
-                        sfxSection = `# 音效库 (Sound Effects)\n你还可以使用以下音效素材，请根据剧情需要插入：\n${sfxList}\n**注意：必须严格使用列表中的名称，严禁编造不存在的音效。且绝对禁止使用 BGM 库中的名称。**`;
-                    } else {
-                        // 空库时明确要求省略 sfx 字段，避免生成无法播放的引用。
-                        sfxSection = `# 音效库 (Sound Effects)\n当前音效库为空。\n**注意：请勿生成任何 'sfx' 字段。**`;
-                    }
+                    // 音效不再引用工程素材库：所有明确事件都由 8311 SoundEffect 根据 sfx_plan 生成。
+                    const sfxSection = `# SoundEffect 音效生成（严格遵守）\n当前 WebUI 没有 SFX 素材库。原文中存在明确可听的非语言事件时，必须在对应 dialogue 输出 sfx_plan；页面会逐项把 prompt 和 duration_seconds 发送到 MOSS-SoundEffect v2.0（http://127.0.0.1:8311/v1/generate）生成 WAV。\n\n1. 严禁输出 sfx 字段、音效名称、文件名或任何库内复用引用。\n2. 只为明确可闻事件生成计划：电话/视频通话接通或挂断、敲门、开关门、物体落地或破碎、脚步、机械开合、车辆和明确天气声等；音效库不存在不能成为省略这些事件的理由。\n3. 每项 sfx_plan 必须为 {"id":"简短唯一ID","action":"generate","purpose":"semantic_cue|foreground_action|ambience|transition","sound_class":"声音类别","prompt":"中文、可直接生成的非语言声音描述","anchor":"dialogue_start|dialogue_end|break_start","offset_ms":0,"duration_seconds":1.2,"mix_preset":"cue_before_dialogue|action_under_dialogue|soft_ambience|transition","required":false}。offset_ms 限 -500 到 5000；只有 cue_before_dialogue 的短提示可使用 -40 到 -120ms 前置，其余使用非负偏移。\n4. prompt 必须具体说明声源、动作、材质/质感、空间/距离与收尾；不能含人物台词、人声、BGM、文件路径、品牌名或抽象情绪。\n5. 默认每条 dialogue 最多一个前景计划；只有两个独立且紧密相连的明确事件才可使用两个。人物笑、叹气、犹豫音使用 voxcpm_nonverbal_tags，不生成 SoundEffect。`;
 
                     // bgmSection 与音效区独立，向模型说明可用背景音乐和约束。
                     let bgmSection = "";
@@ -8674,7 +8512,7 @@ ${voiceReferenceHardConstraints}`;
                         // 构造供模型理解剧情适配性的名称/描述列表。
                         const bgmList = enabledBgm.map(s => `- ${s.name}: ${s.description}`).join('\n');
                         // 提示中要求逐字匹配，保证后面能按名称关联本地素材。
-                        bgmSection = `# 背景音乐库 (Background Music)\n现有以下背景音乐素材可用：\n${bgmList}\n\n**核心指令：**\n1. 必须**逐字匹配**使用列表中的名称。\n2. 如果列表中没有适合当前剧情的音乐，**请勿生成** BGM 播放指令。\n3. **严禁编造**列表中不存在的 BGM 名称。\n4. **绝对禁止**使用 SFX 库中的名称。`;
+                        bgmSection = `# 背景音乐库 (Background Music)\n现有以下背景音乐素材可用：\n${bgmList}\n\n**核心指令：**\n1. 必须**逐字匹配**使用列表中的名称。\n2. 如果列表中没有适合当前剧情的音乐，**请勿生成** BGM 播放指令。\n3. **严禁编造**列表中不存在的 BGM 名称。\n4. SoundEffect 的短促环境/动作声写入 dialogue.sfx_plan，不能用 BGM 名称或 BGM 控制块代替。`;
                     } else {
                         // 空 BGM 库允许 stop 以终止之前状态，但禁止生成新的 play。
                         bgmSection = `# 背景音乐库 (Background Music)\n**当前背景音乐库为空 (EMPTY)。**\n\n**核心指令：**\n1. **严禁生成**任何 action="play" 的 BGM 控制块。\n2. 你只能生成 action="stop" 的指令（如果需要停止之前的音乐）。\n3. 绝对不要编造 BGM 名称。`;
@@ -8705,11 +8543,6 @@ ${voiceReferenceHardConstraints}`;
                         ? `{"type": "bgm", "action": "play", "name": "${enabledBgm[0].name}"},`
                         : '';
 
-                    // 音效 JSON 示例同样只在资源可用时生成。
-                    const sfxExample = enabledSfx.length > 0
-                        ? `, "sfx": [{"name": "${enabledSfx[0].name}", "position": 0.2}]`
-                        : '';
-
                     // 用户启用自定义模板时使用编辑内容，否则使用内置完整模板。
                     const templateToUse = useCustomPrompt.value ? customPromptTemplate.value : defaultPromptTemplate;
                     // 逐个替换模板占位符，生成本次请求的最终完整 Prompt。
@@ -8724,8 +8557,8 @@ ${voiceReferenceHardConstraints}`;
                         .replace(/\${filterSection}/g, filterSection)
                         // 注入或移除 BGM 格式示例。
                         .replace(/\${bgmExampleLine}/g, bgmExampleLine)
-                        // 注入或移除行内音效示例片段。
-                        .replace(/\${sfxExample}/g, sfxExample)
+                        // 删除旧版音效素材库示例占位符，生成式计划由 sfxSection 统一约束。
+                        .replace(/\${sfxExample}/g, '')
                         // 注入分析开始时固定的小说原文。
                         .replace(/\${rawScript}/g, sourceScript)
                         // 注入用户要求生成的背景图片控制块数量。
@@ -8772,6 +8605,14 @@ ${voiceReferenceHardConstraints}`;
 - 请在整个 JSON 数组中严格插入且仅插入 ${bgImageCount.value} 个 \`type":"bgImage"\` 对象。
 - 第一个 \`bgImage\` 对象必须出现在“第一个 dialogue 对象之前”，用于视频开场背景；允许开头存在 \`bgm\` 控制块。
 - 除开场第一张外，其余 \`bgImage\` 必须按剧情节奏插入在台词之间（至少间隔一个 \`dialogue\`），避免连续出现多个 \`bgImage\`。
+`;
+                    }
+
+                    // 历史自定义模板可能没有 ${sfxSection} 占位符；仍强制注入当前生成计划协议。
+                    if (!templateToUse.includes('${sfxSection}')) {
+                        finalPrompt += `
+
+${sfxSection}
 `;
                     }
 
@@ -8911,6 +8752,73 @@ ${voiceReferenceHardConstraints}`;
                             // 一次性替换角色列表，使已不在新脚本中的角色退出当前工作副本。
                             characters.value = newCharacterList;
 
+                            /**
+                             * 规范化模型给出的待生成音效计划。
+                             * 计划只描述待 SoundEffect 生成的明确声音事件，不接受任何素材库引用。
+                             * @param {unknown} value - 模型返回的 sfx_plan
+                             * @returns {Array<Object>} 可安全显示和持久化的计划数组
+                             */
+                            const normalizeSfxPlans = (value) => {
+                                // 单条台词最多保留两个独立且紧密相连的明确事件，避免模型过度编排。
+                                if (!Array.isArray(value)) return [];
+                                const allowedPurposes = new Set(['semantic_cue', 'foreground_action', 'ambience', 'transition']);
+                                const allowedAnchors = new Set(['dialogue_start', 'dialogue_end', 'break_start']);
+                                const allowedMixPresets = new Set(['cue_before_dialogue', 'action_under_dialogue', 'soft_ambience', 'transition']);
+                                const defaultMixPreset = {
+                                    semantic_cue: 'cue_before_dialogue',
+                                    foreground_action: 'action_under_dialogue',
+                                    ambience: 'soft_ambience',
+                                    transition: 'transition'
+                                };
+
+                                return value.slice(0, 2).reduce((plans, rawPlan, planIndex) => {
+                                    // 只有带有实际生成描述的对象才是有效计划，避免把模型的空壳字段存进工程。
+                                    const source = rawPlan && typeof rawPlan === 'object' ? rawPlan : null;
+                                    const prompt = source && typeof source.prompt === 'string'
+                                        ? source.prompt.trim()
+                                        : '';
+                                    if (!prompt) return plans;
+
+                                    const purpose = allowedPurposes.has(source.purpose)
+                                        ? source.purpose
+                                        : 'foreground_action';
+                                    const rawDuration = Number(source.duration_seconds);
+                                    const rawOffset = Number(source.offset_ms);
+                                    const soundClass = typeof source.sound_class === 'string' && source.sound_class.trim()
+                                        ? source.sound_class.trim()
+                                        : '未分类声音';
+                                    const rawId = typeof source.id === 'string' ? source.id.trim() : '';
+
+                                    plans.push({
+                                        // 缺失 ID 时生成行内稳定序号，避免渲染列表没有 key。
+                                        id: rawId || `sfx_plan_${planIndex + 1}`,
+                                        // 当前页面只接收待生成计划，返回 WAV 会绑定到该计划自身。
+                                        action: 'generate',
+                                        purpose,
+                                        sound_class: soundClass,
+                                        // 限制提示词长度，防止异常模型回复膨胀工程与界面。
+                                        prompt: prompt.slice(0, 1000),
+                                        anchor: allowedAnchors.has(source.anchor) ? source.anchor : 'dialogue_start',
+                                        offset_ms: Number.isFinite(rawOffset)
+                                            ? Math.max(-500, Math.min(5000, Math.round(rawOffset)))
+                                            : 0,
+                                        duration_seconds: Number.isFinite(rawDuration) && rawDuration > 0
+                                            ? Math.max(0.2, Math.min(30, rawDuration))
+                                            : 1.0,
+                                        mix_preset: allowedMixPresets.has(source.mix_preset)
+                                            ? source.mix_preset
+                                            : defaultMixPreset[purpose],
+                                        required: source.required === true,
+                                        // 生成后写入稳定资产键；URL、请求状态和错误只在当前页面会话保存。
+                                        audioAssetKey: '',
+                                        audioUrl: '',
+                                        isGenerating: false,
+                                        generationError: ''
+                                    });
+                                    return plans;
+                                }, []);
+                            };
+
                             // 把模型的异构对象规范化为当前页面统一的脚本块 schema。
                             scriptLines.value = validParsed.map(item => {
                                 /**
@@ -8954,18 +8862,6 @@ ${voiceReferenceHardConstraints}`;
                                     matchedFilter = findBestMatch(item.filter, filterLibrary.value);
                                 }
 
-                                // 默认没有行内音效。
-                                let matchedSfx = [];
-                                // 只处理真正的 sfx 数组，忽略模型返回的错误类型。
-                                if (item.sfx && Array.isArray(item.sfx)) {
-                                    matchedSfx = item.sfx.map(s => ({
-                                        // 匹配成功用规范名；失败保留模型原名供用户手动修正。
-                                        name: findBestMatch(s.name, sfxLibrary.value) || s.name,
-                                        // 触发位置不在此修改，交给时间轴播放逻辑解释。
-                                        position: s.position
-                                    }));
-                                }
-
                                 // 非 BGM play 块无需资源名称匹配。
                                 let matchedBgmName = '';
                                 if (item.type === 'bgm' && item.action === 'play') {
@@ -8977,6 +8873,10 @@ ${voiceReferenceHardConstraints}`;
 
                                 // 缺失 type 时会按 dialogue 处理，因此克隆计划也必须沿用同一默认值。
                                 const lineType = item.type || 'dialogue';
+                                // 所有明确声音事件都以 SoundEffect 生成计划保存，不再匹配工程级 SFX 素材库。
+                                const normalizedSfxPlan = lineType === 'dialogue'
+                                    ? normalizeSfxPlans(item.sfx_plan)
+                                    : [];
                                 // 兼容结构化 control_instruction，以及模型偶尔直接输出的“(指令)正文”人类剧本格式。
                                 const rawLineText = item.text_content || item.text || item.content || '';
                                 const inlineControl = lineType === 'dialogue'
@@ -9015,8 +8915,8 @@ ${voiceReferenceHardConstraints}`;
                                     needs_review: voxcpmPlan.needs_review,
                                     // 使用上面匹配出的规范滤镜名。
                                     filter: matchedFilter,
-                                    // 保存已规范化的行内音效数组。
-                                    sfx: matchedSfx,
+                                    // SoundEffect 生成计划会在用户点击生成后直接保存 WAV 到计划自身的资产键。
+                                    sfx_plan: normalizedSfxPlan,
                                     // 只接受数值型停顿，其他类型回退为 0 秒。
                                     break_duration: typeof item.break_duration === 'number' ? item.break_duration : 0,
                                     // 新生成音频默认保留完整裁剪区间。
@@ -9546,11 +9446,9 @@ ${voiceReferenceHardConstraints}`;
                     saveEmotion, editEmotion, deleteEmotion, resetEmotionForm, resetEmotionsToDefault,
                     isSystemEmotion,
 
-                    // 音效资源库、表单、编辑状态及其 CRUD/上传入口。
-                    sfxLibrary, sfxForm, isEditingSfx,
-                    saveSfx, editSfx, deleteSfx, resetSfxForm, handleSfxFileUpload,
-                    // 台词内部音效引用的添加和删除操作。
-                    addLineSfx, removeLineSfx,
+                    // SoundEffect 计划音效生成、批量生成与试听入口。
+                    generateSoundEffect, generateAllSoundEffects, isGeneratingSoundEffects,
+                    soundEffectGenerationStatus, playGeneratedSoundEffect,
 
                     // BGM 资源库、表单、编辑状态及其 CRUD/上传入口。
                     bgmLibrary, bgmForm, isEditingBgm,
