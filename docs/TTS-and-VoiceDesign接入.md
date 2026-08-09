@@ -32,6 +32,7 @@ WebUI 新建 TTS 配置固定为 `voxcpm2`。`8300` 与 `8305` 的历史配置�
 3. `nonverbal_tags` 是后端请求字段，来自工程字段 `voxcpm_nonverbal_tags`。允许 `laughing`、`sigh`、`Uhm`、`Shh`、`Question-ah`、`Question-ei`、`Question-en`、`Question-oh`、`Surprise-wa`、`Surprise-yo`、`Dissatisfaction-hnn`；标签只能在原文明确有可听见反应时使用，不得写入正文或参考文案。标签强制 `controllable`、默认 `expressive` 并将 `needs_review` 设为 `true`。
 4. 后端对每个文本分片将最终模型文本拼成 `(control_instruction)[tag]正文`，并在调用模型前向终端输出该文本、分片序号和克隆模式；不输出参考音频转写。
 5. `needs_review` 只是人工试听标记，不参与模型参数。`delivery_profile` 只控制表演方式，不保证或直接设定最终响度；成片响度仍应在合成后统一检测和归一化。
+6. 脚本制作页的可控克隆选择默认“关闭可控克隆”。关闭时，前端会把极致克隆约束附加到 LLM 分析请求，并在解析结果及“一键生成配音”开始前强制目标 `dialogue` 使用 `ultimate`、`baseline`、空 `control_instruction`、空 `voxcpm_nonverbal_tags` 和 `needs_review=false`。只有显式选择“开启可控克隆”才保留逐句 `controllable` 路由。
 
 VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar；可控克隆不会读取或传递 sidecar。
 

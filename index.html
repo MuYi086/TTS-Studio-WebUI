@@ -918,6 +918,16 @@
                                     {{ ttsModelLabel(conf) }}
                                 </option>
                             </select>
+                            <label class="block">
+                                <span class="block mb-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">可控克隆</span>
+                                <select data-testid="clone-mode-policy" v-model="cloneModePolicy"
+                                    class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white w-full"
+                                    title="控制 LLM 剧本分析及一键生成配音时是否允许可控克隆">
+                                    <option value="ultimate">关闭可控克隆</option>
+                                    <option value="controllable">开启可控克隆</option>
+                                </select>
+                            </label>
+                            <p class="text-[10px] leading-relaxed text-slate-400">关闭时，剧本分析结果与一键生成目标台词会统一使用极致克隆；开启后才由剧本按台词选择可控克隆。</p>
 
                             <div class="flex flex-wrap gap-2">
                                 <button data-testid="generate-all-lines" @click="generateAllLines" :disabled="isSequencePlaying"
@@ -2067,6 +2077,12 @@
                 const activeTtsConfigs = computed(() => ttsConfigs.value.filter(isSupportedTts));
                 // 兼容旧模板/工程脚本中的名称，后续新逻辑统一使用 activeTtsConfigs。
                 const activeVoxCpmTtsConfigs = activeTtsConfigs;
+                // 关闭为默认安全模式；仅用户显式开启后，LLM 才可为台词规划可控克隆。
+                const CLONE_MODE_POLICIES = Object.freeze({
+                    ultimate: 'ultimate',
+                    controllable: 'controllable'
+                });
+                const cloneModePolicy = ref(CLONE_MODE_POLICIES.ultimate);
 
                 // VoxCPM2 的表演档位是固定词表；自然语言控制指令由脚本 Prompt 逐句生成，档位作为路由与兜底。
                 const VOXCPM_DELIVERY_PROFILES = Object.freeze([
@@ -2142,6 +2158,40 @@
                     line.control_instruction = '';
                     line.voxcpm_nonverbal_tags = [];
                     line.needs_review = false;
+                };
+                /** 判断给定策略是否允许 LLM 保留逐句可控克隆计划。 */
+                const isControllableCloneEnabled = (policy = cloneModePolicy.value) =>
+                    policy === CLONE_MODE_POLICIES.controllable;
+                /**
+                 * 将剧本台词收敛到当前克隆策略，避免 Prompt 不遵守时产生与用户选择相反的请求。
+                 * @param {Object} line - dialogue 类型的台词块
+                 * @param {string} [policy] - 分析或批量任务开始时固定的克隆策略
+                 * @returns {void}
+                */
+                const applyCloneModePolicy = (line, policy = cloneModePolicy.value) => {
+                    if (!line || line.type !== 'dialogue') return;
+                    if (!isControllableCloneEnabled(policy)) {
+                        // 极致克隆不能遗留控制指令或非语言标签，否则后续归一化会回到可控克隆。
+                        switchVoxCpmLineToUltimate(line);
+                        return;
+                    }
+                    // 用户显式开启时完全沿用既有的逐句路由和数据清洗规则。
+                    normalizeVoxCpmLinePlan(line);
+                };
+                /**
+                 * 生成当前 LLM 请求必须遵守的克隆模式约束。
+                 * @param {string} [policy] - 分析任务开始时固定的克隆策略
+                 * @returns {string} 追加到 Prompt 的硬约束；开启时为空
+                */
+                const getCloneModePolicyPromptConstraint = (policy = cloneModePolicy.value) => {
+                    if (isControllableCloneEnabled(policy)) return '';
+                    return `
+
+## 可控克隆已关闭（最高优先级，严格遵守）
+- 当前任务禁止可控克隆。每一个 \`type: "dialogue"\` 对象的 \`clone_mode\` 必须是 \`"ultimate"\`。
+- 每一个 dialogue 的 \`delivery_profile\` 必须是 \`"baseline"\`，\`control_instruction\` 必须为空字符串或省略，\`voxcpm_nonverbal_tags\` 必须为 \`[]\`，\`needs_review\` 必须为 \`false\`。
+- 不得因情绪、恐惧、叹气、笑声或其他表演需求输出 \`"controllable"\`；这些信息仍可保留在剧情文本与 \`emotion\` 字段中。
+`;
                 };
                 /** 用户切换克隆模式时同步保持有效的档位组合。 */
                 const updateCloneMode = (line) => {
@@ -5727,9 +5777,15 @@ ${voiceReferenceHardConstraints}`;
                 
                                     // 有选中块时从该时间轴位置开始，否则从第一项开始。
                                     const startIndex = selectedLineIndex.value !== -1 ? selectedLineIndex.value : 0;
+                                    // 固定本批次开始时的策略，避免用户在请求进行中切换选择导致同批台词走不同模式。
+                                    const cloneModePolicyAtBatchStart = cloneModePolicy.value;
 
                                     // slice 固定本次处理范围，不受前面时间轴块影响。
                                     const linesToCheck = scriptLines.value.slice(startIndex);
+
+                                    // “关闭可控克隆”时，一键生成前先将本次目标台词统一为极致克隆。
+                                    // 该入口与 LLM 结果解析共用同一策略收敛函数，避免两处出现不同的字段转换。
+                                    linesToCheck.forEach(line => applyCloneModePolicy(line, cloneModePolicyAtBatchStart));
 
                 
 
@@ -8584,6 +8640,8 @@ ${voiceReferenceHardConstraints}`;
                     const analysisScriptId = currentScriptId.value;
                     // 固定本次分析原文，防止异步期间响应式输入被其他恢复逻辑覆盖。
                     const sourceScript = rawScript.value;
+                    // 分析期间即使用户切换选择，返回结果也必须与发起请求时的策略一致。
+                    const cloneModePolicyAtRequest = cloneModePolicy.value;
                     // 立即把原文写入当前脚本对象，避免自动保存读到旧空值。
                     syncCurrentScriptState();
 
@@ -8716,6 +8774,9 @@ ${voiceReferenceHardConstraints}`;
 - 除开场第一张外，其余 \`bgImage\` 必须按剧情节奏插入在台词之间（至少间隔一个 \`dialogue\`），避免连续出现多个 \`bgImage\`。
 `;
                     }
+
+                    // 关闭可控克隆时，无论内置还是自定义模板都必须向 LLM 明确追加极致克隆硬约束。
+                    finalPrompt += getCloneModePolicyPromptConstraint(cloneModePolicyAtRequest);
 
                     try {
                         // 固定本次请求使用的当前 LLM 配置引用。
@@ -8933,7 +8994,7 @@ ${voiceReferenceHardConstraints}`;
                                     : { clone_mode: 'ultimate', delivery_profile: 'baseline', voxcpm_nonverbal_tags: [], needs_review: false };
 
                                 // 返回页面时间轴要求的完整块对象，覆盖三类块的字段超集。
-                                return {
+                                const generatedLine = {
                                     // 每个模型项获得稳定的运行时块 ID。
                                     id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                                     // 缺少 type 时按最常见的 dialogue 处理。
@@ -8981,6 +9042,9 @@ ${voiceReferenceHardConstraints}`;
                                     // 同样没有可预览的运行时图片 URL。
                                     imageUrl: ''
                                 };
+                                // LLM 输出只是候选计划；页面在此按发起请求时的开关做最终收敛。
+                                applyCloneModePolicy(generatedLine, cloneModePolicyAtRequest);
+                                return generatedLine;
                             });
                         } else {
                             // 非数组结构无法转换为时间轴，保留原始结果供用户检查。
@@ -9526,6 +9590,8 @@ ${voiceReferenceHardConstraints}`;
                     drawWaveform, startDragTrim,
                     // 批量 TTS 生成状态以及清空全部生成音频的操作。
                     generateAllLines, isGeneratingAll, clearAllGeneratedAudio,
+                    // 剧本分析与一键生成共用的可控克隆策略。
+                    cloneModePolicy,
                     // 时间轴块排序操作。
                     moveLineUp, moveLineDown,
                     // 批量选择状态切换操作。
