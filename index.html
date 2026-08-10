@@ -232,7 +232,7 @@
                                 {{ ttsModelLabel(option) }}
                             </option>
                         </select>
-                        <p class="mt-1 text-[10px] text-slate-400">8305 使用 qwen3-tts；8306 根据选择的模型把请求分发到 voxcpm2 或 Ming-omni-tts-0.5B worker。</p>
+                        <p class="mt-1 text-[10px] text-slate-400">8305 使用 Qwen3-TTS；8306 根据选择的模型分发到 VoxCPM2 或 Ming；8307 使用 LongCat-AudioDiT-3.5B。</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -291,7 +291,7 @@
                             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">参考音频文本</label>
                             <textarea v-model="timbreForm.promptText" rows="2"
                                 class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-                                placeholder="可选：参考音频中实际说出的文字，用于 VoxCPM2 / Qwen3-TTS 等克隆模型"></textarea>
+                                placeholder="参考音频中实际说出的准确文字，用于 VoxCPM2 / Qwen3-TTS / LongCat 等克隆模型"></textarea>
                         </div>
                         <div class="md:col-span-2">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">参考音频文件</label>
@@ -1681,13 +1681,14 @@
                 const isEditing = ref(false);
 
                 // TTS 配置状态
-                // 本地服务按模型能力分组；8306 同时承载 VoxCPM2 与 Ming，具体由 backend 字段分发。
+                // 本地服务按模型能力分组；8306 同时承载 VoxCPM2 与 Ming，8307 独立承载 LongCat。
                 const TTS_PROTOCOLS = {
                     indextts2: 'indextts2',
                     referenceTextClone: 'reference-text-clone',
                     qwen3Tts: 'qwen3-tts',
                     voxcpm2: 'voxcpm2',
-                    ming: 'ming-omni-tts'
+                    ming: 'ming-omni-tts',
+                    longcatAudioDit: 'longcat-audiodit'
                 };
                 const TTS_MODEL_OPTIONS = Object.freeze([
                     {
@@ -1713,12 +1714,21 @@
                         protocol: TTS_PROTOCOLS.ming,
                         baseUrl: 'http://127.0.0.1:8306',
                         environment: 'Ming-omni-tts-0.5B'
+                    },
+                    {
+                        id: 'longcat-audiodit-3.5b-bf16',
+                        name: 'LongCat-AudioDiT 3.5B',
+                        backend: 'longcat-audiodit',
+                        protocol: TTS_PROTOCOLS.longcatAudioDit,
+                        baseUrl: 'http://127.0.0.1:8307',
+                        environment: 'LongCat-AudioDiT-3.5B-bf16'
                     }
                 ]);
-                // 端口可推断 Qwen/Vox；8306 的 Ming 必须由 modelId/backend 明确指定。
+                // 端口可推断 Qwen/Vox/LongCat；8306 的 Ming 必须由 modelId/backend 明确指定。
                 const TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT = Object.freeze({
                     '8305': TTS_PROTOCOLS.qwen3Tts,
-                    '8306': TTS_PROTOCOLS.voxcpm2
+                    '8306': TTS_PROTOCOLS.voxcpm2,
+                    '8307': TTS_PROTOCOLS.longcatAudioDit
                 });
                 /**
                  * 根据 TTS-and-VoiceDesign 的默认端口推断合成协议。
@@ -1755,30 +1765,34 @@
                 const getTtsBackend = (config) => {
                     const explicit = String(config?.backend || '').trim().toLowerCase();
                     if (explicit === 'ming' || explicit.includes('ming') || explicit.includes('omni')) return 'ming';
+                    if (explicit.includes('longcat') || explicit.includes('audiodit')) return 'longcat-audiodit';
                     if (explicit === 'qwen3-tts' || explicit.includes('qwen')) return 'qwen3-tts';
                     const modelId = String(config?.modelId || '').toLowerCase();
                     if (modelId.includes('ming') || modelId.includes('omni')) return 'ming';
+                    if (modelId.includes('longcat') || modelId.includes('audiodit')) return 'longcat-audiodit';
                     if (modelId.includes('qwen')) return 'qwen3-tts';
                     if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.qwen3Tts) return 'qwen3-tts';
                     if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.voxcpm2) return 'voxcpm2';
+                    if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.longcatAudioDit) return 'longcat-audiodit';
                     return '';
                 };
                 // 选择框使用稳定、短小的产品标识；环境名仍保留在配置和状态信息中。
                 const TTS_MODEL_LABELS = Object.freeze({
                     'qwen3-tts': 'Qwen3-TTS',
                     voxcpm2: 'VoxCPM2',
-                    ming: 'Ming-omni-tts-0.5B'
+                    ming: 'Ming-omni-tts-0.5B',
+                    'longcat-audiodit': 'LongCat-AudioDiT 3.5B'
                 });
                 const ttsModelLabel = (config) => {
                     const backend = getTtsBackend(config);
                     if (TTS_MODEL_LABELS[backend]) return TTS_MODEL_LABELS[backend];
                     return String(config?.name || config?.modelId || 'TTS').trim().replace(/\s+/g, '-');
                 };
-                const isSupportedTts = (config) => ['qwen3-tts', 'voxcpm2', 'ming'].includes(getTtsBackend(config));
+                const isSupportedTts = (config) => ['qwen3-tts', 'voxcpm2', 'ming', 'longcat-audiodit'].includes(getTtsBackend(config));
                 /** 判断当前 TTS 配置是否为支持逐句表演计划的 VoxCPM2 服务。 */
                 const usesVoxCpm2 = (config) =>
                     getTtsBackend(config) === 'voxcpm2';
-                /** 参考文本克隆协议；三个本地合成模型都使用角色参考音频。 */
+                /** 参考文本克隆协议；本地克隆模型都使用角色参考音频。 */
                 const usesReferenceText = (config) => isSupportedTts(config);
                 /** 当前页面可选择、可调用的 TTS 配置。 */
                 const activeTtsConfigs = computed(() => ttsConfigs.value.filter(isSupportedTts));
@@ -1953,7 +1967,7 @@
                 };
                 // 用户维护的 TTS 服务配置列表。
                 const ttsConfigs = ref([]);
-                // 新增配置默认使用 VoxCPM2；modelId 决定 8306 是否切换到 Ming worker。
+                // 新增配置默认使用 VoxCPM2；modelId 决定本地服务使用哪个 worker。
                 const ttsForm = ref({ id: '', name: '', baseUrl: '', modelId: 'voxcpm2', backend: 'voxcpm2', protocol: TTS_PROTOCOLS.voxcpm2 });
                 // 标识 TTS 表单当前处于新增还是编辑模式。
                 const isEditingTts = ref(false);
@@ -1969,11 +1983,15 @@
                 }));
                 const normalizeTtsConfig = (config) => {
                     const source = config && typeof config === 'object' ? { ...config } : {};
-                    const inferredModel = source.modelId || (String(source.name || '').toLowerCase().includes('ming') ? 'ming-omni-tts' : '');
+                    const sourceName = String(source.name || '').toLowerCase();
+                    const inferredModel = source.modelId
+                        || (sourceName.includes('ming') ? 'ming-omni-tts' : '')
+                        || (sourceName.includes('longcat') || sourceName.includes('audiodit') ? 'longcat-audiodit-3.5b-bf16' : '');
                     const option = TTS_MODEL_OPTIONS.find(item => item.id === inferredModel)
                         || TTS_MODEL_OPTIONS.find(item => item.backend === source.backend)
                         || (String(source.baseUrl || '').includes(':8305') ? TTS_MODEL_OPTIONS[0] : null)
-                        || (String(source.baseUrl || '').includes(':8306') ? TTS_MODEL_OPTIONS[1] : null);
+                        || (String(source.baseUrl || '').includes(':8306') ? TTS_MODEL_OPTIONS[1] : null)
+                        || (String(source.baseUrl || '').includes(':8307') ? TTS_MODEL_OPTIONS[3] : null);
                     const modelId = option?.id || source.modelId || '';
                     const backend = source.backend || option?.backend || '';
                     return {
@@ -3758,7 +3776,7 @@ ${voiceReferenceHardConstraints}`;
                     ttsForm.value.backend = option.backend;
                     ttsForm.value.protocol = option.protocol;
                     ttsForm.value.environment = option.environment;
-                    if (!ttsForm.value.baseUrl || /^https?:\/\/127\.0\.0\.1:(8305|8306)$/.test(ttsForm.value.baseUrl.trim())) {
+                    if (!ttsForm.value.baseUrl || /^https?:\/\/127\.0\.0\.1:(8305|8306|8307)$/.test(ttsForm.value.baseUrl.trim())) {
                         ttsForm.value.baseUrl = option.baseUrl;
                     }
                 };
@@ -5062,7 +5080,7 @@ ${voiceReferenceHardConstraints}`;
                             normalizeVoxCpmLinePlan(line);
                         }
                         const isVoxCpm2Controllable = backend === 'voxcpm2' && line.clone_mode === 'controllable';
-                        // 三个本地克隆模型都优先使用音色绑定中的真实参考文本。
+                        // 本地克隆模型都优先使用音色绑定中的真实参考文本。
                         const promptText = isVoxCpm2Controllable ? '' : synthesisReference.promptText;
                         if (!isVoxCpm2Controllable && !promptText) {
                             throw new Error(`${cfg.name} 需要角色「${line.role}」绑定音色的真实参考文本。`);
@@ -5070,7 +5088,7 @@ ${voiceReferenceHardConstraints}`;
                         const payload = {
                             text: line.text,
                             audio_path: synthesisReference.audioPath,
-                            // 8306 通过 backend 字段在 VoxCPM2 与 Ming worker 之间路由。
+                            // 8306 通过 backend 字段在 VoxCPM2 与 Ming worker 之间路由；8307 直接处理 LongCat。
                             backend
                         };
                         if (backend === 'voxcpm2') {
@@ -5090,7 +5108,7 @@ ${voiceReferenceHardConstraints}`;
                                 payload.prompt_text = promptText;
                             }
                         } else {
-                            // Qwen/Ming 等其他克隆协议继续沿用各自的 prompt_text 字段。
+                            // Qwen/Ming/LongCat 等其他克隆协议继续沿用各自的 prompt_text 字段。
                             payload.prompt_text = promptText;
                         }
 

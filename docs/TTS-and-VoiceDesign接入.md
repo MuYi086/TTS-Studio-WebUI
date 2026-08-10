@@ -11,6 +11,7 @@ bash start.sh
 curl http://127.0.0.1:8300/v1/health
 curl http://127.0.0.1:8305/v1/health
 curl http://127.0.0.1:8306/v1/health
+curl http://127.0.0.1:8307/v1/health
 ```
 
 接入 TTS 时，服务需要兼容：
@@ -22,8 +23,9 @@ curl http://127.0.0.1:8306/v1/health
 | 当前 WebUI 合成服务 | 端口 | WebUI 协议 | 前端发送的合成关键字段 |
 | --- | ---: | --- | --- |
 | VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`backend="voxcpm2"`、`clone_mode`，再按模式二选一传 `prompt_text` 或 `control_instruction`，以及 `nonverbal_tags`；`cfg_value` 由后端 `VOXCPM2_CFG_VALUE` 统一控制 |
+| LongCat-AudioDiT-3.5B-bf16 | `8307` | `longcat-audiodit` | `audio_path`、`text`、准确的 `prompt_text`；worker 按官方接口拼接参考文本与目标文本，并使用 24 kHz 单声道参考音频 |
 
-WebUI 新建 TTS 配置固定为 `voxcpm2`。`8300` 与 `8305` 的历史配置会保留在浏览器中，但不出现在当前合成选择器、不可编辑且绝不会被调用；页面不会把它们静默改为 `8306`。后端仍保留这些服务，供其自身兼容场景使用。
+WebUI 会为 Qwen3-TTS、VoxCPM2、Ming-omni-tts 和 LongCat-AudioDiT 创建内置 TTS 配置；用户在脚本工作台的 TTS 下拉框中选中的配置决定当前台词请求的 Base URL 与后端模型。历史配置会保留在浏览器中，但只有协议可识别的本地模型才进入当前合成选择器，页面不会把旧端口静默改写为其他模型。
 
 ## 台词合成中的参考文案与 VoxCPM2 表演计划
 
@@ -35,6 +37,8 @@ WebUI 新建 TTS 配置固定为 `voxcpm2`。`8300` 与 `8305` 的历史配置�
 6. 脚本制作页的可控克隆选择默认“关闭可控克隆”。关闭时，前端会把极致克隆约束附加到 LLM 分析请求，并在解析结果及“一键生成配音”开始前强制目标 `dialogue` 使用 `ultimate`、`baseline`、空 `control_instruction`、空 `voxcpm_nonverbal_tags` 和 `needs_review=false`。只有显式选择“开启可控克隆”才保留逐句 `controllable` 路由。
 
 VoxCPM2 的 Ultimate Cloning 后端优先使用本次合成请求里的 `prompt_text`，再回退到上传时保存的 sidecar；可控克隆不会读取或传递 sidecar。
+
+LongCat-AudioDiT 只走参考音频克隆路径，不支持 VoxCPM2 的 `clone_mode`、`control_instruction` 或 `nonverbal_tags` 表演字段。它要求 `prompt_text` 与参考音频逐字一致；WebUI 会把角色绑定的参考文案作为 `prompt_text`，先上传参考音频和 sidecar，再请求 `POST http://127.0.0.1:8307/v2/synthesize`。模型只接受 CUDA，官方示例默认使用 16 步、APG guidance（自适应投影引导），并受模型配置的 `max_wav_duration` 总时长上限约束。
 
 参考音频同步不能只依赖 `file_name` 是否存在：WebUI 会计算本地 Blob 的 `sha256`，并与 `GET /v1/check/audio` 返回的服务端哈希比较；同名但内容已变化时会重新上传，避免使用旧参考音频。
 

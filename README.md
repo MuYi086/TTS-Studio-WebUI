@@ -43,7 +43,10 @@ bash start.sh
 
 | 当前 WebUI 台词合成服务 | Base URL | 协议 |
 | --- | --- | --- |
+| Qwen3-TTS Base | `http://127.0.0.1:8305` | `Qwen3-TTS（参考文本克隆）` |
 | VoxCPM2 | `http://127.0.0.1:8306` | `VoxCPM2（极致 / 可控克隆）` |
+| Ming-omni-tts 0.5B | `http://127.0.0.1:8306` | `Ming（参考文本克隆）` |
+| LongCat-AudioDiT-3.5B-bf16 | `http://127.0.0.1:8307` | `LongCat（参考文本声音克隆）` |
 
 `8300` 还提供：
 
@@ -54,11 +57,11 @@ bash start.sh
 
 `/v1/voxcpm2/design` 是独立的 VoxCPM2 音色设计接口，不与 Qwen 的 `/v1/qwen/design` 混用。它按 VoxCPM2 官方格式生成无参考音频音色，`cfg_value` 与克隆请求统一由后端顶部的 `VOXCPM2_CFG_VALUE` 控制（官方 Demo 默认 `2.0`），`inference_timesteps=10`。项目默认不固定随机种子，只有复现实验时才显式传非负 `seed`；官方示例中的 `seed=42` 也只用于固定随机结果，不代表固定音质提升。
 
-当前 WebUI 的台词合成只会调用 VoxCPM2 的固定 `POST http://127.0.0.1:8306/v2/synthesize` 接口。每条 `dialogue` 保存 `clone_mode`、`delivery_profile`、`control_instruction`、`voxcpm_nonverbal_tags` 与 `needs_review`：`ultimate` + `baseline` 会提交准确的 `prompt_text`；需要情绪表演的台词使用 `controllable`，将括号内自然语言保存到 `control_instruction`，将括号外正文保存到 `text`，并明确省略 `prompt_text`。脚本制作页默认“关闭可控克隆”，此时 LLM 分析提示词和结果归一化都会强制所有台词使用 `ultimate`，一键生成开始前也会对当前目标台词执行相同收敛；只有选择“开启可控克隆”才保留原有逐句路由。WebUI 不写死 `cfg_value`，由 8306 后端顶部的 `VOXCPM2_CFG_VALUE` 统一控制。手动新增台词仍以 `ultimate` + `baseline` 作为安全基线。非语言标签只允许官方白名单中的一个，出现标签必定标记为需试听；后端会在模型调用前输出 `(control_instruction)[tag]正文`。参考音频同步按 Blob 内容 `sha256` 校验，同名文件内容更新后会重新上传，不会继续复用服务端旧缓存。这两个 VoxCPM2 路径互斥，表演档位不直接控制最终响度。历史 IndexTTS2/Qwen3-TTS 配置会保留在浏览器中供删除，但不会显示在合成选择器、不可编辑，也不会被调用；不会把 `8300` 或 `8305` 自动改写为 `8306`。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
+当前 WebUI 的台词合成会根据“配音与播放”中的模型选择调用 VoxCPM2 或 LongCat 的固定 `POST /v2/synthesize` 接口。VoxCPM2 每条 `dialogue` 保存 `clone_mode`、`delivery_profile`、`control_instruction`、`voxcpm_nonverbal_tags` 与 `needs_review`；LongCat 使用同一角色参考音频和准确的 `prompt_text`，不发送 VoxCPM2 表演字段。脚本制作页默认“关闭可控克隆”，此时 VoxCPM2 仍统一使用 `ultimate`；只有选择“开启可控克隆”才保留逐句路由。LongCat-AudioDiT-3.5B 运行在 `8307`，官方克隆路径要求 CUDA、24 kHz 单声道参考音频和逐字准确的参考文本，默认 16 步 APG，并受模型的最大总时长限制。参考音频同步按 Blob 内容 `sha256` 校验，同名文件内容更新后会重新上传。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
 
 Step-Audio-EditX 编辑按钮第一次使用当前行已生成的原始音频作为 `prompt_audio`；如果该行已有编辑结果，则后续点击优先使用最近一次编辑结果作为新的 `prompt_audio`，支持二次、三次及连续叠加编辑。每次点击都会先上传当前 prompt 音频，并生成唯一的 `step-audio-editx/<line-id>_<timestamp>_<nonce>.wav` 路径，避免后端按相同路径复用旧文件。请求仍使用当前行文本作为 `prompt_text` 和 `generated_text`，并发送 `edit_type="emotion"`、`edit_info=line.emotion`。首次点击前必须先生成原始台词，且 `emotion` 必须是 [`editConfig/emotion.js`](editConfig/emotion.js) 中的官方标签。编辑结果以独立资产键保存，不会替换原始台词音频；清除编辑结果后，下一次点击会重新从原始台词开始。
 
-新建 TTS 配置固定为 VoxCPM2；本机默认端口为 `8306`。旧端口映射仅用于识别历史配置并将其隔离出当前合成链路。
+本机默认提供 Qwen3-TTS（`8305`）、VoxCPM2（`8306`）、Ming-omni-tts（`8306`）和 LongCat-AudioDiT-3.5B（`8307`）内置配置；用户选择的模型会直接决定台词合成服务。旧配置仍保留在浏览器中，但不会被静默改写或调用。
 
 > 后端 `8311` 的 MOSS-SoundEffect 服务负责全部非语言音效。LLM 分析将明确事件写入 `sfx_plan`；在台词卡片点击“生成音效”或点击“生成全部 SoundEffect 音效”后，WebUI 会调用 `POST /v1/generate`，将返回 WAV 绑定到计划并保存到浏览器本地工程。页面不提供 SFX 素材库或本地音效导入回退路径。
 
@@ -67,7 +70,7 @@ Step-Audio-EditX 编辑按钮第一次使用当前行已生成的原始音频作
 1. 配置并选中 LLM 与 TTS 服务。
 2. 导入参考音频与 BGM，维护情绪预设。
 3. 在“脚本制作”粘贴原文；默认“关闭可控克隆”，如需 LLM 按台词规划可控克隆，先选择“开启可控克隆”，再运行“LLM 深度分析”。检查角色和脚本块；长旁白应优先在自然语义停顿处分段，不要按固定字数硬切。
-4. 分析角色音色，生成或编辑参考文案，再通过 Qwen / MiMo / VoxCPM2 生成并绑定参考音色。
+4. 分析角色音色，生成或编辑参考文案，再通过 Qwen / MiMo / VoxCPM2 生成并绑定参考音色；台词合成时可在模型下拉框选择 LongCat-AudioDiT。
 5. 在台词卡片生成并试听 `sfx_plan` 的 SoundEffect 音效，再调整停顿、音量与裁剪范围；需要强化情绪时，先生成单行原音频，再点击“使用Step-Audio-EditX”试听编辑结果。若要叠加效果，可连续点击该按钮；清除编辑结果即可回到原始音频基线。
 6. 定期导出完整工程；最终导出 `SRT`、`WAV` 或 `MP4`。
 
