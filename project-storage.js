@@ -266,7 +266,6 @@
             voxcpm_nonverbal_tags: nonverbalTags,
             // 极端表演只做人工试听标记，不会改变模型请求参数。
             needs_review: cloneMode === 'controllable' && (source.needs_review === true || nonverbalTags.length > 0),
-            filter: source.filter || '',
             // sfx_plan 直接携带 SoundEffect 生成 WAV 的稳定资产键。
             sfx_plan: normalizeSfxPlans(source.sfx_plan, id),
             break_duration: toNumber(source.break_duration, 0),
@@ -285,6 +284,8 @@
         };
         // 历史工程的 line.sfx 是素材库名称引用；当前工作流只保留生成计划。
         delete normalized.sfx;
+        // 滤镜已废弃；导入旧工程时丢弃引用，避免再次写入当前工程。
+        delete normalized.filter;
         return normalized;
     }
 
@@ -300,26 +301,14 @@
         };
     }
 
-    function normalizeBgImageLine(line, id) {
-        const source = line && typeof line === 'object' ? cloneData(line) : {};
-        return {
-            ...source,
-            id,
-            type: 'bgImage',
-            bgImagePrompt: source.bgImagePrompt || source.image_prompt || source.imagePrompt || source.prompt || '',
-            bgImageAssetKey: source.bgImageAssetKey || `bgImage_${id}`,
-            imageUrl: '',
-            imageMimeType: source.imageMimeType || ''
-        };
-    }
-
     function normalizeScriptLine(line) {
         const source = line && typeof line === 'object' ? line : {};
         const id = source.id || createId('line');
         const type = source.type || 'dialogue';
 
         if (type === 'bgm') return normalizeBgmLine(source, id);
-        if (type === 'bgImage') return normalizeBgImageLine(source, id);
+        // 背景图功能已经移除；旧工程的背景控制块在导入时直接忽略。
+        if (type === 'bgImage') return null;
         return normalizeDialogueLine(source, id);
     }
 
@@ -327,7 +316,7 @@
         const source = script && typeof script === 'object' ? cloneData(script) : {};
         const data = source.data && typeof source.data === 'object' ? source.data : {};
         const lookup = options || {};
-        const normalizedLines = ensureArray(data.scriptLines).map(normalizeScriptLine);
+        const normalizedLines = ensureArray(data.scriptLines).map(normalizeScriptLine).filter(Boolean);
 
         const providedCharacters = ensureArray(data.characters).length
             ? ensureArray(data.characters)
@@ -399,7 +388,6 @@
             libraries: {
                 bgm: ensureArray(librariesSource.bgm).map((item) => normalizeLibraryItem('bgm', item)),
                 timbres,
-                filters: cloneData(ensureArray(librariesSource.filters)) || [],
                 emotions: cloneData(ensureArray(librariesSource.emotions)) || []
             },
             project: {
@@ -429,7 +417,6 @@
                     const safe = cloneData(line) || {};
                     delete safe.audioUrl;
                     delete safe.stepAudioEditXAudioUrl;
-                    delete safe.imageUrl;
                     delete safe.isGenerating;
                     delete safe.isStepAudioEditXEditing;
                     delete safe.abortController;

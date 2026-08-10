@@ -69,15 +69,6 @@
 
 <body class="p-4 md:p-8">
     <div id="app" class="w-full max-w-[96%] mx-auto p-6 rounded-2xl shadow-2xl">
-        <div v-if="previewImageUrl" @click="closeImagePreview"
-            class="fixed inset-0 z-[10000] bg-slate-950/78 backdrop-blur-sm flex items-center justify-center p-4">
-            <button @click.stop="closeImagePreview"
-                class="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-white/15 text-white text-sm font-bold hover:bg-white/25 transition-all">
-                关闭
-            </button>
-            <img :src="previewImageUrl" alt="背景图片大图预览" @click.stop
-                class="max-w-[95vw] max-h-[92vh] object-contain rounded-xl shadow-2xl bg-white">
-        </div>
         <header class="mb-6 flex justify-between items-end">
             <div>
                 <h1 class="text-2xl font-bold text-slate-800">TTS <span class="text-blue-600">1.5</span></h1>
@@ -145,7 +136,6 @@
                 </button>
                 <input data-testid="import-project-input" type="file" ref="importFileRef" @change="handleImportFile" accept=".json" class="hidden">
                 <input type="file" ref="importTxtRef" @change="handleImportTxt" accept=".txt" class="hidden">
-                <input type="file" ref="bgImagePickerRef" @change="handleBgImageFileChange" accept="image/*" class="hidden">
             </div>
         </div>
 
@@ -542,87 +532,6 @@
                 </div>
             </section>
 
-            <section class="space-y-6 border-t border-slate-200 pt-6">
-                <h2 class="text-lg font-bold text-slate-800 border-b pb-2">音频滤波器管理</h2>
-                <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                    <h3 class="text-sm font-bold text-slate-700 mb-4">{{ isEditingFilter ? '编辑滤波器' : '添加新滤波器' }}</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">滤波器名称</label>
-                            <input v-model="filterForm.name"
-                                class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                placeholder="例如: 电话音 / 水下">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">滤波器描述 (用于 AI
-                                判断)</label>
-                            <input v-model="filterForm.description"
-                                class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                placeholder="例如: 声音通过电话传输，频段变窄">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">滤波器类型</label>
-                            <select v-model="filterForm.type"
-                                class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                                <option value="lowpass">低通 (Lowpass) - 适合水下/闷声</option>
-                                <option value="highpass">高通 (Highpass) - 适合收音机/尖锐</option>
-                                <option value="bandpass">带通 (Bandpass) - 适合电话/对讲机</option>
-                                <option value="distortion">失真 (Distortion) - 适合机器人/损坏设备</option>
-                            </select>
-                        </div>
-                        <div v-if="filterForm.type !== 'distortion'">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">频率 (Hz): {{
-                                filterForm.frequency }}</label>
-                            <input type="range" v-model.number="filterForm.frequency" min="20" max="20000" step="10"
-                                class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
-                        </div>
-                        <div v-if="filterForm.type !== 'distortion'">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Q 值 (共振峰): {{
-                                filterForm.Q }}</label>
-                            <input type="range" v-model.number="filterForm.Q" min="0.1" max="20" step="0.1"
-                                class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
-                        </div>
-                        <div v-if="filterForm.type === 'distortion'">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">失真度 (Amount): {{
-                                filterForm.gain }}</label>
-                            <input type="range" v-model.number="filterForm.gain" min="0" max="1000" step="10"
-                                class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-red-600">
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button type="button" @click.prevent="saveFilter"
-                            class="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all">保存滤波器</button>
-                        <button type="button" v-if="isEditingFilter" @click="resetFilterForm"
-                            class="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300 transition-all">取消</button>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <div v-for="filter in filterLibrary" :key="filter.id"
-                        class="p-4 bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-shadow flex justify-between items-center">
-                        <div class="flex items-center gap-3">
-                            <input type="checkbox" v-model="filter.enabled"
-                                class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                                title="启用/禁用此资源">
-                            <div>
-                                <div class="font-bold text-slate-800 text-sm">{{ filter.name }}</div>
-                                <div class="text-xs text-slate-500 mt-0.5">{{ filter.description }}</div>
-                                <div class="text-[10px] text-slate-400 mt-1 font-mono">{{ filter.type }} | {{
-                                    filter.type === 'distortion' ? `Amt:${filter.gain}` : `Freq:${filter.frequency}Hz`
-                                    }}</div>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                            <button @click="editFilter(filter)"
-                                class="text-xs text-blue-600 hover:underline font-medium">编辑</button>
-                            <button @click="deleteFilter(filter.id)"
-                                class="text-xs text-red-500 hover:underline font-medium">删除</button>
-                        </div>
-                    </div>
-                    <div v-if="filterLibrary.length === 0"
-                        class="col-span-full text-center py-8 text-slate-400 text-sm">暂无滤波器，请添加</div>
-                </div>
-            </section>
         </div>
 
         <!-- 页面 5: 脚本制作 (重构：左右分栏) -->
@@ -789,18 +698,6 @@
                                     class="px-2 py-2 bg-purple-100 text-purple-600 rounded-lg text-sm font-bold hover:bg-purple-200 transition-all">
                                     ➕ 插入BGM
                                 </button>
-                                <button @click="addBgImageBlock"
-                                    class="px-2 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-200 transition-all">
-                                    ➕ 插入背景图片
-                                </button>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2 px-2 py-2 bg-white border border-slate-200 rounded-lg">
-                                <label class="text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">背景图片数量</label>
-                                <input type="number" v-model.number="bgImageCount" min="0" max="100"
-                                    class="w-20 px-2 py-1 border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
-                                    title="LLM 将严格插入的 bgImage 块数量" />
-                                <span class="text-[10px] text-slate-400 whitespace-nowrap">张</span>
-                                <span class="text-[10px] text-slate-400 ml-2">（若需关闭，可从Prompt管理中删除背景图片块相关提示词）</span>
                             </div>
                         </div>
 
@@ -853,14 +750,7 @@
                 </div>
 
                 <!-- 拆分结果列表 -->
-                <div v-if="scriptLines.length > 0"
-                    class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"
-                    :style="stageBgUrl ? {
-                        backgroundImage: `linear-gradient(to bottom, rgba(255,255,255,0.76), rgba(255,255,255,0.58)), url(${stageBgUrl})`,
-                        backgroundRepeat: 'no-repeat, no-repeat',
-                        backgroundPosition: 'center center, center center',
-                        backgroundSize: '100% 100%, contain'
-                    } : {}">
+                <div v-if="scriptLines.length > 0" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                     <div class="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
                         <h3 class="text-sm font-bold text-slate-700">2. 脚本台词列表 ({{ scriptLines.length }} 行)</h3>
                         <div class="flex flex-col gap-1 md:min-w-[280px]">
@@ -930,78 +820,6 @@
                                 </button>
                             </div>
 
-                            <!-- 背景图片块 -->
-                            <div v-else-if="line.type === 'bgImage'"
-                                :class="['flex flex-col gap-2 p-3 rounded-lg mb-2 transition-all group cursor-pointer border', selectedLineIndex === index ? 'bg-emerald-50 border-emerald-300 shadow-md' : 'bg-emerald-50/50 border-emerald-200', currentSequenceIndex === index ? 'ring-2 ring-green-500' : '']">
-                                <div class="flex flex-wrap items-start gap-3">
-                                    <div
-                                        class="flex flex-col items-center justify-center gap-1 w-8 flex-shrink-0 border-r border-emerald-200 pr-2">
-                                        <button @click.stop="moveLineUp(index)"
-                                            class="text-emerald-400 hover:text-emerald-700 p-0.5 hover:bg-emerald-100 rounded"
-                                            title="上移">▲</button>
-                                        <div class="text-xs font-bold text-emerald-500 select-none">{{ index + 1 }}</div>
-                                        <button @click.stop="moveLineDown(index)"
-                                            class="text-emerald-400 hover:text-emerald-700 p-0.5 hover:bg-emerald-100 rounded"
-                                            title="下移">▼</button>
-                                    </div>
-
-                                    <div class="flex-1 min-w-[260px]">
-                                        <div class="flex items-center justify-between gap-2 mb-2">
-                                            <div class="font-bold text-xs text-emerald-700 uppercase tracking-wider">
-                                                背景图片块
-                                            </div>
-                                            <button @click="removeScriptLine(index)"
-                                                class="text-slate-300 hover:text-red-500 p-2"
-                                                title="删除"><svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fill-rule="evenodd"
-                                                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                                                    clip-rule="evenodd" />
-                                            </svg></button>
-                                        </div>
-
-                                        <div class="grid grid-cols-1 md:grid-cols-[160px_1fr] gap-3">
-                                            <!-- 图片展示 -->
-                                            <div class="space-y-2">
-                                                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                                    图片预览
-                                                </div>
-                                                <div class="w-full bg-white border border-emerald-200 rounded-lg overflow-hidden">
-                                                    <img v-if="line.imageUrl"
-                                                        :src="line.imageUrl"
-                                                        @click.stop="openImagePreview(line.imageUrl)"
-                                                        class="w-full h-[90px] object-cover bg-white cursor-zoom-in" />
-                                                    <div v-else
-                                                        class="w-full h-[90px] flex items-center justify-center bg-white/50 border-dashed text-[10px] text-emerald-600 border border-emerald-200">
-                                                        未选择
-                                                    </div>
-                                                </div>
-                                                <button @click.stop="openBgImagePicker(index)" type="button"
-                                                    class="w-full px-2 py-1.5 bg-emerald-100 text-emerald-700 text-[11px] border border-emerald-200 rounded hover:bg-emerald-200 transition-all font-bold">
-                                                    选择图片（保存）
-                                                </button>
-                                            </div>
-
-                                            <!-- LLM 提示词展示 -->
-                                            <div class="space-y-2 min-w-0">
-                                                <div class="flex items-center justify-between gap-2">
-                                                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                                        LLM 图片提示词（中文）
-                                                    </div>
-                                                    <button @click.stop="copyBgImagePrompt(line)" type="button"
-                                                        class="px-2 py-1 bg-white text-emerald-700 text-[11px] border border-emerald-200 rounded hover:bg-emerald-50 transition-all font-bold">
-                                                        复制
-                                                    </button>
-                                                </div>
-                                                <textarea v-model="line.bgImagePrompt"
-                                                    rows="3"
-                                                    class="w-full bg-white border border-emerald-200 rounded px-2 py-1.5 text-[11px] text-emerald-900 focus:ring-0 outline-none resize-none"
-                                                    placeholder="由 AI 分析后生成的中文图片提示词"></textarea>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
                             <!-- 台词块 -->
                             <div v-else
                                 :class="['flex flex-col gap-2 p-3 rounded-lg mb-2 transition-all group cursor-pointer border', selectedLineIndex === index ? 'bg-blue-50 border-blue-300 shadow-md' : 'bg-white border-slate-200 shadow-sm hover:bg-slate-50', currentSequenceIndex === index ? 'ring-2 ring-green-500' : '']">
@@ -1023,14 +841,6 @@
                                             class="w-full px-2 py-1.5 text-xs border rounded bg-white focus:ring-1 focus:ring-blue-500 outline-none font-bold text-slate-700">
                                             <option v-for="roleName in availableRoles" :key="roleName"
                                                 :value="roleName">{{ roleName }}</option>
-                                        </select>
-                                        <!-- 滤波器选择 -->
-                                        <select v-model="line.filter"
-                                            class="w-full px-2 py-1 text-[10px] border rounded bg-slate-50 focus:ring-1 focus:ring-blue-500 outline-none text-slate-500"
-                                            title="音频滤波器">
-                                            <option value="">无滤波器</option>
-                                            <option v-for="f in filterLibrary" :key="f.id" :value="f.name">{{ f.name }}
-                                            </option>
                                         </select>
                                     </div>
 
@@ -1337,8 +1147,8 @@
                     :class="['w-full h-[60vh] p-3 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-3', !useCustomPrompt ? 'bg-slate-100 text-slate-400' : 'bg-white text-slate-700']"
                     spellcheck="false"></textarea>
                 <div class="mt-2 text-xs text-slate-500">
-                    <span class="font-bold">可用变量:</span> ${emotionList}, ${sfxSection}, ${bgmSection}, ${filterSection},
-                    ${bgmExampleLine}, ${rawScript}, ${bgImageCount}。当前 VoxCPM2 表演通过
+                    <span class="font-bold">可用变量:</span> ${emotionList}, ${sfxSection}, ${bgmSection},
+                    ${clonePlanSection}, ${rawScript}。当前 VoxCPM2 表演通过
                     <code>clone_mode</code>、<code>delivery_profile</code> 与 <code>control_instruction</code> 路由；括号内自然语言写入
                     <code>control_instruction</code>，括号外正文写入 <code>text_content</code>，不要混在一起。
                 </div>
@@ -1433,7 +1243,7 @@
          * - 配置与提示词（Prompt）：管理大语言模型（LLM）、语音合成（TTS）、音色设计及提示词模板
          * - 存储兼容：维护工程状态、素材键、IndexedDB（浏览器数据库）与导入导出
          * - 模型调用：分析脚本、设计音色并生成台词音频
-         * - 播放导出：编排台词、音效、背景音乐（BGM）、背景图片及视频时间轴
+         * - 播放导出：编排台词、音效、背景音乐（BGM）及视频时间轴
          * - 页面展示：向根模板暴露响应式状态与交互动作
          * @module index
         */
@@ -1717,8 +1527,6 @@
                             bgm: cloneData(bgmLibrary.value),
                             // 克隆音色及其稳定资产键、参考文本等元数据。
                             timbres: cloneData(timbres.value),
-                            // 克隆滤镜参数集合。
-                            filters: cloneData(filterLibrary.value),
                             // 克隆系统和用户情绪预设。
                             emotions: cloneData(emotionPresets.value)
                         },
@@ -2078,19 +1886,23 @@
                     normalizeVoxCpmLinePlan(line);
                 };
                 /**
-                 * 生成当前 LLM 请求必须遵守的克隆模式约束。
+                 * 按本次分析锁定的克隆策略生成唯一的表演字段契约。
                  * @param {string} [policy] - 分析任务开始时固定的克隆策略
-                 * @returns {string} 追加到 Prompt 的硬约束；开启时为空
+                 * @returns {string} 可直接插入 Prompt 的当前策略区块
                 */
-                const getCloneModePolicyPromptConstraint = (policy = cloneModePolicy.value) => {
-                    if (isControllableCloneEnabled(policy)) return '';
-                    return `
+                const getClonePlanPromptSection = (policy = cloneModePolicy.value) => {
+                    if (!isControllableCloneEnabled(policy)) {
+                        return `# 当前克隆策略：极致克隆（最高优先级）
+- 每个 \`type: "dialogue"\` 必须输出 \`clone_mode: "ultimate"\`、\`delivery_profile: "baseline"\`、\`voxcpm_nonverbal_tags: []\`、\`needs_review: false\`。
+- \`control_instruction\` 必须省略或为空字符串。不得因情绪、问号、感叹号、停顿、笑声、叹气或任何剧情需要改为 \`controllable\`。
+- \`emotion\`、\`intensity\` 仍按原文填写，但它们不触发表演字段。`;
+                    }
 
-## 可控克隆已关闭（最高优先级，严格遵守）
-- 当前任务禁止可控克隆。每一个 \`type: "dialogue"\` 对象的 \`clone_mode\` 必须是 \`"ultimate"\`。
-- 每一个 dialogue 的 \`delivery_profile\` 必须是 \`"baseline"\`，\`control_instruction\` 必须为空字符串或省略，\`voxcpm_nonverbal_tags\` 必须为 \`[]\`，\`needs_review\` 必须为 \`false\`。
-- 不得因情绪、恐惧、叹气、笑声或其他表演需求输出 \`"controllable"\`；这些信息仍可保留在剧情文本与 \`emotion\` 字段中。
-`;
+                    return `# 当前克隆策略：允许可控克隆
+- 每个 \`type: "dialogue"\` 都输出 \`clone_mode\`、\`delivery_profile\`、\`voxcpm_nonverbal_tags\`、\`needs_review\`；无额外表演需求时使用 \`ultimate + baseline + [] + false\`。
+- 仅在原文明示需要改变发声方式、节奏、力度或情绪表达，且该变化值得交给 VoxCPM2 表演时，使用 \`clone_mode: "controllable"\` 与非 \`baseline\` 的 \`delivery_profile\`；此时 \`control_instruction\` 用 2–5 个具体维度简洁描述（如音量、语速、重音、气息、停顿），不要复述剧情或写入外层括号。
+- 非语言标签只能在原文明确写出、且能被听到的对应发声已经发生时使用：笑声→\`laughing\`、叹气→\`sigh\`、犹豫音→\`Uhm\`、示意安静的“嘘”声→\`Shh\`。疑问或惊讶标签（\`Question-ah\`、\`Question-ei\`、\`Question-en\`、\`Question-oh\`、\`Surprise-wa\`、\`Surprise-yo\`、\`Dissatisfaction-hnn\`）也必须由原文明确写出的相应拟声发声触发。
+- 不得仅凭问号、感叹号、情绪词、停顿、表情、视觉动作或剧情推断标签；没有上述明确发声时必须输出 \`[]\`。每句最多一个标签；有标签时使用 \`controllable\`、\`delivery_profile: "expressive"\`、\`needs_review: true\`。`;
                 };
                 /** 用户切换克隆模式时同步保持有效的档位组合。 */
                 const updateCloneMode = (line) => {
@@ -2246,14 +2058,6 @@
                 // 控制 BGM 表单提交时新增还是覆盖已有素材。
                 const isEditingBgm = ref(false);
 
-                // 滤波器库状态
-                // 滤波器只保存 Web Audio 参数，不包含二进制素材。
-                const filterLibrary = ref([]);
-                // type 决定创建 BiquadFilter 或 WaveShaper；frequency/Q/gain 为相应参数。
-                const filterForm = ref({ id: '', name: '', description: '', type: 'lowpass', frequency: 1000, Q: 1, gain: 0 });
-                // 控制滤波器表单提交时新增还是覆盖已有预设。
-                const isEditingFilter = ref(false);
-
                 // 聊天状态
                 // 独立聊天测试工具的用户输入。
                 const prompt = ref('');
@@ -2301,7 +2105,7 @@
                 // 脚本制作状态
                 // 当前脚本的小说原文工作副本。
                 const rawScript = ref('');
-                // 当前脚本的统一时间轴；元素类型只能是 dialogue、bgm 或 bgImage。
+                // 当前脚本的统一时间轴；元素类型只能是 dialogue 或 bgm。
                 const scriptLines = ref([]);
                 // 防止同一脚本重复发起分析，并控制分析按钮状态。
                 const isAnalyzingScript = ref(false);
@@ -2503,70 +2307,10 @@
                 let bgmGainNode = null;
                 // 当前试听/台词在完整音频中的 0~1 位置，用于波形进度条。
                 const playbackProgress = ref(0);
-                // 播放或导出舞台当前显示的背景图片。
-                const stageBgUrl = ref('');
-                // 要求 LLM 生成的背景图片块数量。
-                const bgImageCount = ref(0);
-                // 背景交叉淡入期间暂存上一张图片。
-                const stageBgFadePrevUrl = ref('');
-                // 背景切换起始的 performance.now 时间戳，视频渲染据此计算淡入比例。
-                const stageBgFadeStartTs = ref(0);
-                // 实时舞台转场固定 250ms；视频编码使用同一状态计算过渡帧。
-                const stageBgFadeDurationMs = 250; // 快速淡入时长
-                // 隐藏的背景图片文件输入框。
-                const bgImagePickerRef = ref(null);
-                // 非空时打开图片预览遮罩。
-                const previewImageUrl = ref('');
-                // 文件选择器异步返回前记录要写入的 bgImage 块索引。
-                const pendingBgImageLineIndex = ref(-1);
                 // 波形播放进度使用的 requestAnimationFrame ID。
                 let playbackAnimationFrame = null;
                 // 工程恢复期间暂停深度监听自动保存，防止半恢复状态覆盖存档。
                 const isRestoring = ref(false); // 新增：恢复数据时的锁
-
-                /**
-                 * 更新舞台背景并记录上一张图片，以便播放或导出时淡入切换。
-                 * @param {string} url - 新背景图片地址；空值表示清空
-                 * @returns {void}
-                */
-                const setStageBgUrlWithFade = (url) => {
-                    // 统一把 null/undefined 归一为空字符串。
-                    const next = url || '';
-                    // 保存当前背景作为转场旧帧。
-                    const prev = stageBgUrl.value || '';
-                    // 相同 URL 无需重新开始转场。
-                    if (prev === next) return;
-                    // 先记录旧背景和起点，再切换当前 URL。
-                    stageBgFadePrevUrl.value = prev;
-                    stageBgFadeStartTs.value = performance.now();
-                    stageBgUrl.value = next;
-                };
-
-                /** 清空舞台背景及其淡入状态。 */
-                const clearStageBgWithFade = () => {
-                    // 同时清理前景、旧图和时间戳，确保下次播放从空舞台开始。
-                    stageBgFadePrevUrl.value = '';
-                    stageBgFadeStartTs.value = 0;
-                    stageBgUrl.value = '';
-                };
-
-                /**
-                 * 打开指定图片的全屏预览。
-                 * @param {string} url - 图片地址
-                 * @returns {void}
-                */
-                const openImagePreview = (url) => {
-                    // 空地址不打开遮罩，避免渲染损坏图片。
-                    if (!url) return;
-                    // 模板通过 previewImageUrl 是否为空控制预览层。
-                    previewImageUrl.value = url;
-                };
-
-                /** 关闭图片预览。 */
-                const closeImagePreview = () => {
-                    // 清空 URL 即卸载预览内容。
-                    previewImageUrl.value = '';
-                };
 
                 // 剪辑拖拽状态
                 // 拖拽期间记录目标对象、边界类型、起点坐标和原始比例。
@@ -2582,13 +2326,13 @@
                 // Prompt Template
                 // 默认脚本分析 Prompt 本身属于可编辑业务配置；占位符会在 analyzeScript 中运行时替换。
                 const defaultPromptTemplate = `你的任务是将给定小说内容拆分为台词和旁白，并生成当前 WebUI 能直接消费的 VoxCPM2 逐句表演计划。
-**重要：emotion 是 Step-Audio-EditX 的官方情绪编辑标签；WebUI 会把它作为 edit_info。emotion/intensity 不能替代 VoxCPM2 的 clone_mode/delivery_profile。VoxCPM2 的自然语言表演指令必须放在独立的 control_instruction 字段，text_content 只保留括号外的真实合成文本。**
+**重要：emotion 是 Step-Audio-EditX 的官方情绪编辑标签；WebUI 会把它作为 edit_info。emotion/intensity 不能替代 VoxCPM2 的 clone_mode/delivery_profile。是否输出 control_instruction 以“当前克隆策略”区块为准；text_content 始终只保留括号外的真实合成文本。**
 
 \${sfxSection}
 
 \${bgmSection}
 
-\${filterSection}
+\${clonePlanSection}
 
 # 情绪与强度设置 (Emotion & Intensity)
 请为每一句台词（包括旁白）选择一个最合适的情绪和强度。
@@ -2601,33 +2345,10 @@
    - 请根据上下文判断情绪的强烈程度。
    - **旁白强度**: 如果旁白有情绪（如 \`sad\`、\`fear\`），强度必须很弱（建议选择 "微弱" 或 "稍弱"）。如果旁白的 \`emotion\` 为 \`coldness\`，强度应为 "中等"。
 
-# 人类剧本与 JSON 的对应关系
-人类可读剧本可以写成：\`(声音极度颤抖，带着哭腔，语速极快，气息不稳) 不要杀我。\`。但严格 JSON 中必须拆成 \`control_instruction\`: \`"声音极度颤抖，带着哭腔，语速极快，气息不稳"\` 与 \`text_content\`: \`"不要杀我。"\`；括号、角色头标和参考音频路径都不能进入 \`text_content\`。
-
-# 固定 VoxCPM2 后端接口
-当前页面必须兼容 \'http://127.0.0.1:8306/v2/synthesize\'，不要虚构新的请求字段或新的合成端点。页面将 JSON 字段映射为以下固定请求：
-- 可控克隆：\`{"text":"括号外正文","audio_path":"角色参考音频路径","backend":"voxcpm2","clone_mode":"controllable","control_instruction":"括号内自然语言","nonverbal_tags":[] }\`；不得发送 \`prompt_text\`。
-- 极致克隆：\`{"text":"稳定正文","audio_path":"角色参考音频路径","backend":"voxcpm2","clone_mode":"ultimate","prompt_text":"参考音频逐字转写","nonverbal_tags":[] }\`；不得发送 \`control_instruction\`。
-- \`control_instruction\` 不要包含外层括号；后端会负责组装为 \`(control_instruction)[tag]正文\`。\`delivery_profile\`、\`emotion\`、\`intensity\` 和 \`needs_review\` 只是 WebUI 的规划/复核字段，不直接作为 VoxCPM2 合成请求字段。
-
-# VoxCPM2 克隆与表演计划
-仅为每个 type="dialogue" 对象额外输出以下字段；它们独立于 emotion 与 intensity，不能互相替代：
-
-- \`clone_mode\`: 只能为 \`"ultimate"\` 或 \`"controllable"\`。
-- \`delivery_profile\`: 只能为 \`"baseline"\`、\`"expressive"\`、\`"suspense"\`、\`"fear"\`、\`"urgent"\`、\`"restrained"\`。
-- \`control_instruction\`: 字符串；可控克隆必填，内容是人类可读格式中括号内的自然语言，不要再包外层括号；极致克隆时为空字符串或省略。
-- \`voxcpm_nonverbal_tags\`: 数组，默认 \`[]\`，最多一个官方标签。标签只记录明确可听见的笑声、叹气、犹豫音等，绝不能写入 \`text_content\`。
-- \`needs_review\`: 布尔值；极端表演或有非语言标签时必须为 \`true\`。
-
-决策规则（以“能否控制表演”为第一判断）：
-1. 如果该句需要声音发抖、呼吸变紧、压低声音、克制悬疑、强忍、急促、停顿后说或突然爆发，使用 \`"controllable"\`，并选择最接近的非基线档位。
-2. 如果不需要改变角色默认说法，且角色绑定的参考音频有准确逐字参考文案，使用 \`"ultimate"\` + \`"baseline"\`。
-3. 恐惧、紧张和悬疑本身不是非语言标签，也不自动意味着耳语或喊叫；只有原文明示或确实需要该表演时才选择对应档位。
-4. 当前 WebUI 只有角色级参考音频，不支持逐句情绪参考音频。不要输出虚构的 \`ref_audio\` 或 \`ref_transcript\`；角色参考音频由角色绑定管理。自然语言表演描述必须输出到 \`control_instruction\`，页面会把它映射到固定的 \`/v2/synthesize\` 可控克隆请求。
-5. 出现明确可听见的笑声、叹气、犹豫音、嘘声、问号语气或惊讶语气时，使用 \`"controllable"\` + \`"expressive"\`，将 \`needs_review\` 设为 \`true\`，并只在 \`voxcpm_nonverbal_tags\` 填一个官方标签；不得根据一般情绪自行猜测标签。
-6. 同一角色在连续同一表演节拍中的相邻台词，应保持相同的 \`clone_mode\` 和 \`delivery_profile\`；当表演目标变化时，应在自然语义边界拆分台词。
-7. \`baseline\` 必须配合 \`ultimate\`；其他档位必须配合 \`controllable\`。恐惧高潮、急促/爆发或模式切换时 \`needs_review\` 必须为 \`true\`。
-8. 说话人提示语按信息类型分流：动作、场景和剧情信息保留为旁白；纯粹的发声方式改写为角色台词的 \`control_instruction\`；“说道”“问道”等无额外信息的连接词只在有助于听辨时保留，避免同一信息重复播报。
+# 文本与表演字段边界
+- \`text_content\` 只写实际朗读正文；不得包含角色头标、参考音频路径、舞台说明、SSML、自定义标签或括号内控制指令。
+- 当前克隆模式允许时，\`control_instruction\` 只写不带外层括号的自然语言表演描述；具体字段要求以“当前克隆策略”区块为准。
+- 动作、场景和剧情信息保留为旁白；当前策略允许控制时，纯发声方式可写入 \`control_instruction\`，否则保留为必要的简短旁白。只有“说道”“问道”等无信息连接词可在角色明确时合并或省略。
 
 # 规则
 
@@ -2636,86 +2357,32 @@
 - **对话正文优先保真**: 角色真正说出的内容原则上逐字保留；只允许为自然播音做必要的标点、断句和明显口误整理，不得改写成意思相近但措辞不同的新台词。
 - **说话人提示语分类处理**:
   1. 包含实际动作、场景变化、表情或剧情信息的提示语，作为“旁白”保留，例如“老李猛地按住了我的手，脸色惨白”。
-  2. 只描述发声方式、情绪或声音状态的提示语，改写为角色台词的 \`control_instruction\`，不要再单独生成同义旁白。例如“老李的声音在发抖”应转为“声音发抖，带着恐惧”，避免播报两次。
+  2. 只描述发声方式、情绪或声音状态的提示语，在当前策略允许时改写为角色台词的 \`control_instruction\`，不要再单独生成同义旁白；极致克隆策略下保留为必要的简短旁白。例如“老李的声音在发抖”仅在可控克隆时可转为“声音发抖，带着恐惧”。
   3. 只有“说道”“问道”“回答”等连接作用、且不承担身份或剧情信息的词，可在角色已经明确、听众不会混淆时合并或省略；如果省略会造成说话人或语义不清，则保留为简短旁白。
 - **一次表达一个信息**: 已经写入 \`control_instruction\` 的声音表现，不得再作为旁白重复；已经由角色音色和上下文明确的身份，也不要反复添加冗余的“某某说道”。
 - **有声书优先听感**: 每个信息只表达一次，旁白、角色台词和控制指令之间要自然衔接。遇到无法判断的情况，优先保留会影响剧情理解或说话人识别的信息。
 
 ## 1. 拆分与识别
-- **禁止无依据删改**: 不得遗漏、改变或省略原文中的剧情信息和有效对白；但可以按上一节规则，将纯发声提示语转为 \`control_instruction\`，将无信息连接词合并或省略。
+- **禁止无依据删改**: 不得遗漏、改变或省略原文中的剧情信息和有效对白；但只能在当前策略允许时按上一节规则将纯发声提示语转为 \`control_instruction\`，无信息连接词可合并或省略。
 - **内容提取**: 提取对话内容和所有非对话的旁白。
 - **角色识别**: 根据小说内容分析说话人。旁白的角色名统一标记为“旁白”。
-- **长度控制**: 按自然语义停顿、动作变化和情绪转折拆分，不要按固定字数机械切割。旁白以 25-45 个汉字为软目标，单行通常不超过 50-80 字；**避免过碎**（不要把每一句短句都拆成独立一行），也**避免过长**。
+- **长度控制**: 按自然语义停顿、动作变化和情绪转折拆分，不要按固定字数机械切割。旁白以 25-45 个汉字为软目标，单行通常不超过 50-60 字；**避免过碎**（不要把每一句短句都拆成独立一行），也**避免过长**。
 - **旁白处理**: 连续的旁白内容应优先合并，除非中间需要插入音效、有明显的时间跳跃，或合并后长度过长。
-- **表演节拍**: 同一角色从克制转为恐惧、从压低声音转为急促求救时，在自然边界拆成多个表演节拍，分别使用对应的可控档位。
-- **提示语去重**: “他低声说”“她哭着问”等提示语中的“低声、哭着、颤抖、愤怒”等表现线索，转入对应角色的 \`control_instruction\`；不要同时生成“他低声说”的旁白和一条同样要求低声的台词。
-- **正文边界**: \`text_content\` 必须是括号外的实际朗读正文，不得包含 \`(声音颤抖)\`、角色头标、参考音频路径、\`[fear]\`、\`[BREATH]\`、舞台说明、SSML 或自定义标签；括号内的自然语言表演描述必须移入 \`control_instruction\`。
+- **表演节拍**: 同一角色从克制转为恐惧、从压低声音转为急促求救时，在自然边界拆成多个表演节拍；是否使用可控档位由当前克隆策略决定。
+- **提示语去重**: 当前策略允许时，“他低声说”“她哭着问”等提示语中的表现线索可转入对应角色的 \`control_instruction\`；不要同时生成同义旁白和控制指令。极致克隆策略下保留必要旁白。
+- **正文边界**: \`text_content\` 必须是括号外的实际朗读正文，不得包含 \`(声音颤抖)\`、角色头标、参考音频路径、\`[fear]\`、\`[BREATH]\`、舞台说明、SSML 或自定义标签；当前策略允许控制时，括号内的自然语言表演描述才移入 \`control_instruction\`。
 
-## 3. SoundEffect 音效生成计划 (sfx_plan)
-所有非语言音效都必须由 MOSS-SoundEffect v2.0 生成；当前页面没有 SFX 素材库，也不接受 \`sfx\` 名称引用。原文有明确可听事件时，在对应 \`dialogue\` 对象输出 \`sfx_plan\`，页面会将其中的 \`prompt\` 和 \`duration_seconds\` 发送到 \`http://127.0.0.1:8311/v1/generate\` 并把返回 WAV 绑定到该条台词。
+# 节奏与停顿
+- 每个 dialogue 输出数值型 \`break_duration\`（秒），默认 0；仅在原文明确的动作、沉默、心理停顿或转场需要留白时设置，例如 0.5、1.0、2.0。
+- 不要为普通对话机械添加停顿，也不要将 BGM 或音效时长写入 \`break_duration\`。
 
-### 计划格式与规则
-- 每项格式固定为：\`{"id":"简短唯一ID","action":"generate","purpose":"foreground_action","sound_class":"声音类别","prompt":"中文非语言声效描述","anchor":"dialogue_start","offset_ms":0,"duration_seconds":1.2,"mix_preset":"cue_before_dialogue","required":false}\`。
-- 只标记原文明确发生、且听众应当听见的非语言事件，例如电话/视频通话接通或挂断、敲门、开关门、物体落地或破碎、脚步、车辆、机械开合或明确的天气声。音效库不存在，不得因此遗漏这些事件。
-- 不为情绪、表情、心理活动、普通说话、重复动作或单纯“营造氛围”强行生成音效；人物笑、叹气、犹豫音等仍使用 \`voxcpm_nonverbal_tags\`，不要写进 \`sfx_plan\`。
-- \`prompt\` 是唯一传给 SoundEffect 的文本，必须具体描述声音来源、动作、质感、空间/距离和收尾；不要写人物台词、BGM、文件路径、品牌名或抽象情绪。例如“近距离收音，玻璃弹珠掉落在木地板后清脆碎裂，短促，碎片余响迅速收尾”。
-- \`purpose\` 只能为 \`semantic_cue\`、\`foreground_action\`、\`ambience\`、\`transition\`；\`anchor\` 只能为 \`dialogue_start\`、\`dialogue_end\`、\`break_start\`；\`mix_preset\` 只能为 \`cue_before_dialogue\`、\`action_under_dialogue\`、\`soft_ambience\`、\`transition\`。\`action\` 固定为 \`generate\`，\`offset_ms\` 为相对锚点的 -500–5000 毫秒；仅 \`cue_before_dialogue\` 的短提示可用 -40 到 -120ms 前置，\`duration_seconds\` 为 0.2–30 的数字。
-- 默认每条 \`dialogue\` 至多一个前景计划；只有两个独立、明确且紧密相连的事件才可使用两个。持续配乐仍交给独立 \`bgm\` 控制块，绝不写进 \`sfx_plan\`。
-
-示例：“视频通话接通了，我的男朋友微笑着。”应保留 \`"sfx_plan": [{"id":"call_connect","action":"generate","purpose":"semantic_cue","sound_class":"视频通话接通提示","prompt":"短促清晰的手机视频通话接通电子提示音，近距离，干净利落地收尾","anchor":"dialogue_start","offset_ms":0,"duration_seconds":0.8,"mix_preset":"cue_before_dialogue","required":false}]\`。
-
-## 4. 背景音乐控制 (BGM Control)
-- **开头BGM**: 请**务必**在脚本的最开始尝试匹配并插入一个适合当前氛围的 BGM。只要【背景音乐库】中有合适的，就**必须**插入。
-- 当剧情氛围发生变化，需要切换或停止背景音乐时，请插入一个独立的 BGM 控制对象。
-- **格式**: \`{"type": "bgm", "action": "play", "name": "BGM名称"}\` 或 \`{"type": "bgm", "action": "stop"}\`
-- **严格限制**:
-  - \`name\` 字段**必须完全等于**【背景音乐库】中列出的某一个名称。
-  - **禁止混用**: **绝对禁止**在 BGM 控制块中使用【音效库】中的名称。BGM 只能使用【背景音乐库】的内容。
-  - 如果【背景音乐库】为空，或者没有匹配的音乐，**绝对不要**生成 action="play" 的控制块。
-  - 禁止使用 "MysteriousBGM", "SadPiano" 等示例中出现但库里没有的名称。
-- **注意**: 不要将 bgm 字段放在台词对象中。
-- 请多切换BGM，体现多样性
-
-- **停顿时间**: 分析台词后的剧情节奏，设置该台词结束后的停顿时间（秒）。
-- 默认为 0。如果有动作描写或心理活动暗示停顿，请设置相应时长（如 0.5, 1.0, 2.0）。
-- 示例: 两人对话间的尴尬沉默，或动作描写（如“他喝了一口茶”）需要的时间。
-
-## 6. VoxCPM2 表演计划与非语言标签
-- \`clone_mode\` 只能为 \`ultimate\` 或 \`controllable\`：需要自然语言控制表演时使用 \`controllable\`；只有稳定基线且有准确参考文案时使用 \`ultimate\`。
-- \`delivery_profile\` 只能为 \`baseline\`、\`expressive\`、\`suspense\`、\`fear\`、\`urgent\`、\`restrained\`；\`baseline\` 必须配合 \`ultimate\`，其他档位配合 \`controllable\`。精细的自然语言表演描述写入 \`control_instruction\`，不要把它压缩成只有档位名。
-- \`control_instruction\` 应描述情绪、声音质感、语速、气息、音量或发声动作中的 2–5 项；每句聚焦一个表演节拍，避免互相冲突的要求。字段值不要包含外层括号，页面/后端负责组装 VoxCPM2 的括号格式。
-- \`voxcpm_nonverbal_tags\` 必须始终是数组，最多一个元素。仅当原文明确存在可听见的非语言反应时才可填写；不可根据“害怕、激动”等情绪猜测添加。允许值仅为：\`laughing\`、\`sigh\`、\`Uhm\`、\`Shh\`、\`Question-ah\`、\`Question-ei\`、\`Question-en\`、\`Question-oh\`、\`Surprise-wa\`、\`Surprise-yo\`、\`Dissatisfaction-hnn\`。
-- 有标签时：\`clone_mode\` 必须为 \`controllable\`，\`delivery_profile\` 必须为 \`expressive\`，\`needs_review\` 必须为 \`true\`。标签只能写在 \`voxcpm_nonverbal_tags\`，绝不能写进 \`text_content\` 或参考文本。
-- 恐惧高潮、急促/爆发、明显模式切换等极端表演也必须将 \`needs_review\` 设为 \`true\`；该字段只提醒人工试听，不保证最终情绪效果。
-
-## 7. 输出格式
+## 输出格式
 - **严格 JSON**: 输出格式必须是严格的 JSON 数组，不包含任何额外说明或代码块标记。
 - **数组元素**: 必须是以下两种对象之一：
-  - 每个 dialogue 还应包含 \`control_instruction\`：保存括号内的自然语言表演指令；\`text_content\` 只保存括号外的真实合成文本。
-  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "括号外正文", "control_instruction": "括号内自然语言指令", "emotion": "...", "intensity": "...", "clone_mode": "controllable", "delivery_profile": "fear", "voxcpm_nonverbal_tags": [], "needs_review": true, "break_duration": 0, "filter": "...", "sfx_plan": [...]}\`
+  1. **台词对象**: 必须包含 \`type\`、\`role_name\`、\`text_content\`、\`emotion\`、\`intensity\`、\`break_duration\`、\`sfx_plan\`，以及“当前克隆策略”规定的表演字段。
   2. **BGM对象**: \`{"type": "bgm", "action": "play", "name": "..."}\` 或 \`{"type": "bgm", "action": "stop"}\`
   - **严禁生成** \`sfx\` 字段或 \`{"type": "sfx", ...}\` 这种独立音效块。音效只能包含在台词对象的 \`sfx_plan\` 字段中，供 SoundEffect 生成。
 
-
-## 小说原文:
-<novel_content>
-“别接那个电话！”老李猛地按住了我的手，脸色惨白，“那是昨晚值班的小张打来的。”
-我愣住了，看着办公桌上疯狂震动的座机：“可是……小张不是今早已经确认死亡了吗？”
-“对，”老李的声音在发抖，“所以，别接。如果你接了，他会问你为什么不救他。”
-</novel_content>
-
-## 输出:
-[
-\${bgmExampleLine}
-  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "control_instruction": "声音发紧，语速极快，带着恐惧和急迫感，短促有力地警告", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "urgent", "voxcpm_nonverbal_tags": [], "needs_review": true, "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "control_instruction": "压低声音，语速放慢，带着克制的恐惧和悬疑感", "emotion": "fear", "intensity": "较强", "clone_mode": "controllable", "delivery_profile": "suspense", "needs_review": true, "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0, "sfx_plan": [{"id":"desk_phone_vibration","action":"generate","purpose":"semantic_cue","sound_class":"座机震动","prompt":"办公桌上的座机持续震动，塑料外壳在木质桌面轻微嗡鸣与碰撞，近距离收音，短促重复后收尾","anchor":"dialogue_end","offset_ms":0,"duration_seconds":2.0,"mix_preset":"transition","required":false}]},
-  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "control_instruction": "声音发颤，带着难以置信的恐惧，语速稍快，句尾上扬", "emotion": "fear", "intensity": "微弱", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": true, "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "control_instruction": "短促地承认，声音压低，带着强忍的恐惧", "emotion": "fear", "intensity": "稍弱", "clone_mode": "controllable", "delivery_profile": "restrained", "needs_review": true, "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "coldness", "intensity": "中等", "clone_mode": "ultimate", "delivery_profile": "baseline", "needs_review": false, "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "control_instruction": "声音极度颤抖，压低声音，语速越来越快，带着绝望的警告", "emotion": "fear", "intensity": "强烈", "clone_mode": "controllable", "delivery_profile": "fear", "needs_review": true, "break_duration": 0}
-]
 
 # 输入内容
 
@@ -2734,8 +2401,13 @@
                     if (typeof template !== 'string') return template;
                     return template
                         .replace(/\n## 3\. 音效插入 \(sfx\)[\s\S]*?(?=\n## 4\. 背景音乐控制)/, '')
+                        // 旧默认模板曾将动态 SoundEffect 规则复制一遍；迁移时移除，避免同一请求出现冲突或重复指令。
+                        .replace(/\n## 3\. SoundEffect 音效生成计划 \(sfx_plan\)[\s\S]*?(?=\n## 4\. 背景音乐控制)/, '')
                         .replace(/\n## 5\. 音频滤波器 \(Filter\)[\s\S]*?(?=\n## 6\. VoxCPM2 表演计划与非语言标签)/, '')
-                        .replace(/\n## 8\. 背景图片块 \(bgImage\)[\s\S]*?(?=\n## 小说原文:)/, '');
+                        .replace(/\n## 8\. 背景图片块 \(bgImage\)[\s\S]*?(?=\n## 小说原文:)/, '')
+                        .replace(/\n# 固定 VoxCPM2 后端接口[\s\S]*?(?=\n# 规则)/, '')
+                        .replace(/\n## 4\. 背景音乐控制[\s\S]*?(?=\n## 6\. VoxCPM2 表演计划与非语言标签)/, '')
+                        .replace(/\n## 6\. VoxCPM2 表演计划与非语言标签[\s\S]*?(?=\n## 7\. 输出格式)/, '');
                 };
 
                 // 用户可编辑的脚本分析 Prompt，初始复制系统模板。
@@ -2914,8 +2586,8 @@ ${voiceReferenceHardConstraints}`;
                 const getAssetStorageKey = (item) => {
                     // 字符串参数在这里代表路径而不是结构化素材，因此不当作稳定键。
                     if (!item || typeof item === 'string') return '';
-                    // 不同时间轴/资源对象使用不同字段名，按通用资源到专用资源的顺序取第一个值。
-                    return item.assetKey || item.audioAssetKey || item.bgImageAssetKey || item.voiceAssetKey || '';
+                    // 不同资源对象使用不同字段名，按通用资源到专用资源的顺序取第一个值。
+                    return item.assetKey || item.audioAssetKey || item.voiceAssetKey || '';
                 };
 
                 /**
@@ -3516,7 +3188,7 @@ ${voiceReferenceHardConstraints}`;
 
                 // Watchers for Auto-Save
                 // 监听原文、角色和工程级资源库的深层变更；生成式 SFX 已内嵌在 scriptLines。
-                watch([rawScript, characters, bgmLibrary, timbres, filterLibrary, emotionPresets], () => {
+                watch([rawScript, characters, bgmLibrary, timbres, emotionPresets], () => {
                     // 恢复工程时会连续赋值，期间禁止把半成品自动覆盖回数据库。
                     if (isRestoring.value) return; // 如果正在恢复数据，不触发自动保存
                     triggerAutoSave();
@@ -3529,12 +3201,6 @@ ${voiceReferenceHardConstraints}`;
                     // 用户编辑通过防抖写入工程快照。
                     triggerAutoSave();
                 }, { deep: true });
-
-                // 背景图片目标数量是用户偏好而非工程 schema，继续使用独立 localStorage 键。
-                watch(bgImageCount, () => {
-                    // 写入前数值化并限制最小为 0，localStorage 只能保存字符串。
-                    localStorage.setItem('unitale_bgImageCount', String(Math.max(0, Number(bgImageCount.value) || 0)));
-                });
 
                 /**
                  * 合并系统情绪与已加载的自定义情绪，并保留系统项启用状态。
@@ -3618,8 +3284,6 @@ ${voiceReferenceHardConstraints}`;
                     bgmLibrary.value = (libraries.bgm || []).map(item => ({ ...item, volume: item.volume ?? 0.3 }));
                     // 音色的字段规范化已经由 project-storage.js 完成，可直接接管列表。
                     timbres.value = libraries.timbres || [];
-                    // 空滤波器库保留页面初始化的四个默认预设。
-                    filterLibrary.value = (libraries.filters && libraries.filters.length > 0) ? libraries.filters : filterLibrary.value;
                     // 情绪需要额外保护系统向量，因此走专用合并函数。
                     applyEmotionLibrary(libraries.emotions);
 
@@ -3686,7 +3350,7 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 /**
-                 * 从工程状态恢复资源库、角色、台词音频和背景图片素材。
+                 * 从工程状态恢复资源库、角色、台词音频和 SoundEffect 素材。
                  * @returns {Promise<void>} 所有可用素材恢复完成后兑现
                 */
                 const restoreProjectAssetsFromState = async () => {
@@ -3698,7 +3362,7 @@ ${voiceReferenceHardConstraints}`;
                     const allChars = scriptList.value.flatMap(s => s.data.characters || []);
                     await restoreAssetCollection(allChars, 'voiceFile');
 
-                    // 台词音频和背景图片嵌在每个脚本时间轴中，需要逐脚本遍历。
+                    // 台词音频和 SoundEffect 素材嵌在每个脚本时间轴中，需要逐脚本遍历。
                     for (const script of scriptList.value) {
                         // 旧脚本可能没有 scriptLines 字段。
                         const lines = script.data.scriptLines || [];
@@ -3731,18 +3395,6 @@ ${voiceReferenceHardConstraints}`;
                                     registerLocalAsset(editKey, editBlob, `${line.id}_step-audio-editx.wav`);
                                     line.stepAudioEditXAudioUrl = URL.createObjectURL(editBlob);
                                 }
-                            // bgImage 使用独立素材键和 imageUrl 运行时字段。
-                            } else if (line.type === 'bgImage') {
-                                // 兼容没有显式 bgImageAssetKey 的旧工程。
-                                const legacyBgKey = line.bgImageAssetKey || `bgImage_${line.id}`;
-                                // 按当前或兼容键恢复图片 Blob。
-                                const blob = await loadStoredAssetBlob(line, legacyBgKey);
-                                // 素材缺失时继续恢复其他时间轴块。
-                                if (!blob) continue;
-                                // 登记当前会话的图片 Blob 映射。
-                                registerLocalAsset(line, blob, `${line.id}.png`);
-                                // 创建供 img、舞台与视频编码读取的本地 URL。
-                                line.imageUrl = URL.createObjectURL(blob);
                             }
                         }
                     }
@@ -3815,19 +3467,6 @@ ${voiceReferenceHardConstraints}`;
                          currentTtsConfigId.value = '';
                      }
  
-                     // 初始化默认滤波器
-                     // 第 3 阶段：先建立默认库；后续工程恢复只有在存档非空时才覆盖它。
-                     filterLibrary.value = [
-                         // 电话音保留中频，模拟窄带通话。
-                         { id: 'f1', name: '电话音', description: '模拟电话通话时的窄频带声音', type: 'bandpass', frequency: 1700, Q: 1.5, gain: 0, enabled: true },
-                         // 水下效果削弱高频。
-                         { id: 'f2', name: '水下', description: '模拟在水下听到的闷声', type: 'lowpass', frequency: 400, Q: 1, gain: 0, enabled: true },
-                         // 老广播削弱低频，突出尖锐高频。
-                         { id: 'f3', name: '老广播', description: '模拟老式收音机或广播的尖锐声音', type: 'highpass', frequency: 1500, Q: 1, gain: 0, enabled: true },
-                         // 机械失真使用 WaveShaper，gain 作为失真曲线强度。
-                         { id: 'f4', name: '机械失真', description: '模拟机器人或设备损坏时的失真声音', type: 'distortion', frequency: 1000, Q: 1, gain: 50, enabled: true }
-                     ];
- 
                      // 初始化默认情绪
                      // 先复制数组，避免页面操作直接修改 SYSTEM_EMOTIONS 常量。
                      emotionPresets.value = [...SYSTEM_EMOTIONS];
@@ -3894,16 +3533,6 @@ ${voiceReferenceHardConstraints}`;
                         selectedVoiceDesignUrl.value = voiceDesignKey(voiceDesigns.value[0]);
                      }
 
-                     // 恢复脚本分析期望的背景图片数量，并过滤 NaN 与负数。
-                     const savedBgImageCount = localStorage.getItem('unitale_bgImageCount');
-                     // 仅在键存在时覆盖代码默认值。
-                     if (savedBgImageCount !== null) {
-                         // localStorage 字符串显式转换为数值。
-                         const parsedBgImageCount = Number(savedBgImageCount);
-                         // 非有限值回退为 0，合法值最小钳制为 0。
-                         bgImageCount.value = Number.isFinite(parsedBgImageCount) ? Math.max(0, parsedBgImageCount) : 0;
-                     }
- 
                      // --- Restore from IndexedDB ---
                      // 第 6 阶段：恢复工程结构。配置已经准备好，素材可随后在后台渐进恢复。
                      try {
@@ -3935,7 +3564,7 @@ ${voiceReferenceHardConstraints}`;
                              // 延迟 100ms 把首屏渲染机会让给浏览器，再加载/解码大量二进制素材。
                              setTimeout(async () => {
                                  try {
-                                     // 恢复资源库、角色、台词音频与背景图的运行时 URL。
+                                     // 恢复资源库、角色、台词音频与 SoundEffect 的运行时 URL。
                                      await restoreProjectAssetsFromState();
                                      if (needsSchemaBackfill) {
                                          // 只有旧 schema 才回写，避免每次启动无意义写事务。
@@ -5231,71 +4860,6 @@ ${voiceReferenceHardConstraints}`;
                     event.target.value = '';
                 };
 
-                // --- 滤波器库管理逻辑 ---
-                /** 将滤波器元数据写入旧版兼容 localStorage 键。 */
-                const saveFiltersToLocal = () => {
-                    // 当前主链路不再调用，保留旧键兼容能力。
-                    localStorage.setItem('storyforge_filters', JSON.stringify(filterLibrary.value));
-                };
-
-                /** 校验、数值化并新增或更新滤波器预设。 */
-                const saveFilter = () => {
-                    // 台词按名称引用滤波器，因此名称不能为空。
-                    if (!filterForm.value.name) return alert('请填写滤波器名称');
-
-                    // 表单副本避免直接修改列表项。
-                    const newFilter = { ...filterForm.value };
-                    // Ensure numbers
-                    // input[type=number] 经 v-model 仍可能是字符串，进入 Web Audio 前统一数值化。
-                    newFilter.frequency = Number(newFilter.frequency);
-                    newFilter.Q = Number(newFilter.Q);
-                    newFilter.gain = Number(newFilter.gain);
-
-                    // 编辑按 ID 覆盖，新建补 ID 与 enabled。
-                    if (isEditingFilter.value) {
-                        // 按表单 ID 定位已有滤镜。
-                        const index = filterLibrary.value.findIndex(f => f.id === filterForm.value.id);
-                        // 找到时原位覆盖数值化后的配置。
-                        if (index !== -1) filterLibrary.value[index] = newFilter;
-                    } else {
-                        // 新滤镜获得时间戳 ID 并默认启用。
-                        filterLibrary.value.push({ ...newFilter, id: Date.now().toString(), enabled: true });
-                    }
-                    // saveFiltersToLocal();
-                    // 深度 watcher 负责工程保存。
-                    resetFilterForm();
-                };
-
-                /**
-                 * 将指定滤波器载入编辑表单。
-                 * @param {Object} filter - 待编辑的滤波器预设
-                 * @returns {void}
-                */
-                const editFilter = (filter) => {
-                    // 使用副本隔离未提交输入。
-                    filterForm.value = { ...filter };
-                    isEditingFilter.value = true;
-                };
-
-                /**
-                 * 经用户确认后删除指定滤波器预设。
-                 * @param {string} id - 滤波器 ID
-                 * @returns {void}
-                */
-                const deleteFilter = (id) => {
-                    if (!confirm('确定删除此滤波器？')) return;
-                    // 已引用该名称的台词会在播放时因库中无匹配而不应用效果。
-                    filterLibrary.value = filterLibrary.value.filter(f => f.id !== id);
-                    // saveFiltersToLocal();
-                };
-
-                /** 重置滤波器表单及默认参数。 */
-                const resetFilterForm = () => {
-                    // 默认创建一个 1000Hz、Q=1 的低通滤波器。
-                    filterForm.value = { id: '', name: '', description: '', type: 'lowpass', frequency: 1000, Q: 1, gain: 0 };
-                    isEditingFilter.value = false;
-                };
-
                 // --- 情绪预设管理逻辑 ---
                 // 移除 saveEmotionPresetsToLocal
 
@@ -5424,28 +4988,6 @@ ${voiceReferenceHardConstraints}`;
                 let sfxSources = [];
                 // 正在试听/播放的台词 ID；null 表示没有台词活动。
                 const isAuditioningId = ref(null);
-
-                // Helper for distortion
-                /**
-                 * 生成供 WaveShaperNode 使用的失真曲线。
-                 * @param {number} amount - 失真强度
-                 * @returns {Float32Array} 包含 44100 个采样点的曲线
-                */
-                const makeDistortionCurve = (amount) => {
-                    // 非数字输入回退到中等失真 50。
-                    const k = typeof amount === 'number' ? amount : 50;
-                    // 一秒 44.1kHz 数量的曲线点可获得平滑波形。
-                    const n_samples = 44100;
-                    const curve = new Float32Array(n_samples);
-                    // 公式使用角度到弧度换算常量。
-                    const deg = Math.PI / 180;
-                    // 把索引映射到 -1~1，并应用非线性失真公式。
-                    for (let i = 0; i < n_samples; ++i) {
-                        const x = (i * 2) / n_samples - 1;
-                        curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
-                    }
-                    return curve;
-                };
 
                 // 自然语言情绪强度到系统单位向量缩放系数的映射。
                 const intensityMap = {
@@ -5785,7 +5327,7 @@ ${voiceReferenceHardConstraints}`;
                                             if (batchSignal.aborted) break;
 
                 
-                                            // BGM、背景图和已有音频台词都跳过。
+                                            // BGM 和已有音频台词都跳过。
                                             if (line.type === 'dialogue' && !line.audioUrl) {
 
                                                 try {
@@ -5994,45 +5536,8 @@ ${voiceReferenceHardConstraints}`;
                             // 最终对白音量 = 台词局部音量 × 角色全局音量。
                             dialogueGain.gain.setValueAtTime((line.dialogueVolume ?? 1.0) * charVol, audioContext.currentTime);
 
-                            // lastNode 始终指向当前效果链尾部，方便按需串入滤镜。
-                            let lastNode = dialogueSource;
-
-                            // 台词仅保存滤镜名称；存在绑定时再去滤镜库解析完整参数。
-                            if (line.filter) {
-                                const filterConfig = filterLibrary.value.find(f => f.name === line.filter);
-                                // 找不到滤镜时保持原声，兼容删除了资源库条目的旧工程。
-                                if (filterConfig) {
-                                    // 失真不是 Biquad 类型，需要单独使用 WaveShaperNode。
-                                    if (filterConfig.type === 'distortion') {
-                                        // 创建波形整形节点，将输入采样映射到失真曲线。
-                                        const waveShaper = audioContext.createWaveShaper();
-                                        // 根据资源库的 gain 参数生成本次使用的非线性曲线。
-                                        waveShaper.curve = makeDistortionCurve(filterConfig.gain);
-                                        // 过采样可减少强失真带来的混叠噪声。
-                                        waveShaper.oversample = '4x';
-                                        // 把当前链尾连接至失真节点。
-                                        lastNode.connect(waveShaper);
-                                        // 更新链尾，让后续增益节点接在失真之后。
-                                        lastNode = waveShaper;
-                                    } else {
-                                        // 高通、低通等常规滤镜共用 BiquadFilterNode。
-                                        const biquad = audioContext.createBiquadFilter();
-                                        // type 决定滤镜算法，例如 lowpass、highpass。
-                                        biquad.type = filterConfig.type;
-                                        // frequency 是截止或中心频率，单位为 Hz。
-                                        biquad.frequency.value = filterConfig.frequency;
-                                        // Q 控制滤镜在中心频率附近的锐度。
-                                        biquad.Q.value = filterConfig.Q;
-                                        // 将旧链尾输出送入当前滤镜。
-                                        lastNode.connect(biquad);
-                                        // 当前滤镜成为新的链尾。
-                                        lastNode = biquad;
-                                    }
-                                }
-                            }
-
-                            // 完成“对白 → 可选滤镜 → 对白增益 → 主输出”的 Web Audio 路由。
-                            lastNode.connect(dialogueGain).connect(getAudioOutputNode());
+                            // 完成“对白 → 对白增益 → 主输出”的 Web Audio 路由。
+                            dialogueSource.connect(dialogueGain).connect(getAudioOutputNode());
                             // playbackRate 改变对白实际播放时长，但不改变原缓冲数据。
                             dialogueSource.playbackRate.value = speed;
 
@@ -6386,8 +5891,6 @@ ${voiceReferenceHardConstraints}`;
                                 bgm: cloneData(bgmLibrary.value),
                                 // 复制音色库及参考文本元数据。
                                 timbres: cloneData(timbres.value),
-                                // 滤镜没有二进制素材，只需复制参数。
-                                filters: cloneData(filterLibrary.value),
                                 // 情绪预设同样只需复制名称和向量。
                                 emotions: cloneData(emotionPresets.value)
                             },
@@ -6437,7 +5940,7 @@ ${voiceReferenceHardConstraints}`;
                         // 音色参考音频使用 refPath，与后端协议字段保持一致。
                         await processLibrary(exportEnvelope.libraries.timbres || [], 'refPath');
 
-                        // 资源库之外，逐脚本嵌入台词音频和背景图片。
+                        // 资源库之外，逐脚本嵌入台词及其 SoundEffect 音频。
                         for (const script of exportEnvelope.project.scriptList || []) {
                             // 兼容脚本数据缺少 scriptLines 的异常或旧工程结构。
                             const lines = script.data.scriptLines || [];
@@ -6446,7 +5949,7 @@ ${voiceReferenceHardConstraints}`;
                                 const line = lines[i];
                                 // 分批刷新提示，避免大量台词转换时页面看起来失去响应。
                                 if (i % 20 === 0) {
-                                    exportStatus.value = '打包台词与图片...';
+                                    exportStatus.value = '打包台词音频...';
                                     await new Promise(r => requestAnimationFrame(r));
                                 }
 
@@ -6481,19 +5984,6 @@ ${voiceReferenceHardConstraints}`;
                                         } catch (e) {
                                             console.warn('导出 SoundEffect 音频失败:', line.id, plan.id, e);
                                         }
-                                    }
-                                // 背景图片行使用独立的 imageBase64 和 imageMimeType 字段。
-                                } else if (line.type === 'bgImage') {
-                                    // 新旧工程分别支持显式图片键与按 ID 推导的兼容键。
-                                    const blob = await loadStoredAssetBlob(line, line.bgImageAssetKey || `bgImage_${line.id}`);
-                                    if (!blob) continue;
-                                    try {
-                                        // 把图片内容嵌入工程 JSON。
-                                        line.imageBase64 = await blobToBase64(blob);
-                                        // 保存 MIME 作为非 Data URL 输入时的回退类型。
-                                        line.imageMimeType = blob.type;
-                                    } catch (e) {
-                                        console.warn('导出背景图片失败:', line.id, e);
                                     }
                                 }
                             }
@@ -6654,13 +6144,11 @@ ${voiceReferenceHardConstraints}`;
                         scriptLines.value = [];
                         // 保留一个合法默认脚本骨架，确保恢复中途界面仍满足基本结构约束。
                         scriptList.value = [{ id: 'default', name: '脚本 1', data: { rawScript: '', scriptLines: [], rawAnalysisResult: '', characters: [] } }];
-                        // 工程导入按约定覆盖 BGM、音色、滤镜、情绪与脚本，但不覆盖模型配置。
+                        // 工程导入按约定覆盖 BGM、音色、情绪与脚本，但不覆盖模型配置。
                         // 清空 BGM 库。
                         bgmLibrary.value = [];
                         // 清空音色库。
                         timbres.value = [];
-                        // 清空滤镜库。
-                        filterLibrary.value = [];
                         // 清空情绪预设，稍后规范化工程会恢复系统项。
                         emotionPresets.value = [];
                         // 清除旧工程运行时 Blob 映射，防止同名键取到旧素材。
@@ -6711,8 +6199,8 @@ ${voiceReferenceHardConstraints}`;
                         // 恢复音色参考音频 Blob。
                         await restoreEmbeddedLibraryAssets(normalizedProject.libraries.timbres, 'refPath');
 
-                        // 接着处理散布在每个脚本行中的台词音频与背景图片。
-                        exportStatus.value = '恢复台词音频与背景图片...';
+                        // 接着处理散布在每个脚本行中的台词与 SoundEffect 音频。
+                        exportStatus.value = '恢复台词音频...';
                         for (const script of normalizedProject.project.scriptList || []) {
                             for (const line of script.data.scriptLines || []) {
                                 // 容忍旧工程数组中的空元素。
@@ -6805,40 +6293,6 @@ ${voiceReferenceHardConstraints}`;
                                     }
                                 }
 
-                                // 背景图采用与台词音频平行的恢复流程。
-                                if (line.type === 'bgImage' && line.imageBase64) {
-                                    try {
-                                        // 解析预提取占位符或保留的旧版内容。
-                                        const realImageBase64 = resolveEmbeddedBase64(line.imageBase64);
-                                        if (realImageBase64) {
-                                            let blob;
-                                            // 当前格式的图片以内嵌 Data URL 保存。
-                                            if (realImageBase64.startsWith('data:')) {
-                                                // 优先从 Data URL 读取 MIME。
-                                                const mimeMatch = realImageBase64.match(/^data:(.*?);/);
-                                                // 再回退到导出字段，最后使用 PNG 默认值。
-                                                blob = base64ToBlob(realImageBase64, mimeMatch ? mimeMatch[1] : (line.imageMimeType || 'image/png'));
-                                            } else {
-                                                // 兼容旧工程中的远程或本地服务 URL。
-                                                const res = await fetch(realImageBase64);
-                                                blob = await res.blob();
-                                            }
-                                            // 为旧背景图补齐当前 schema 所需的稳定资产键。
-                                            line.bgImageAssetKey = line.bgImageAssetKey || `bgImage_${line.id}`;
-                                            // 注册运行时 Blob 映射，统一使用图片兼容文件名。
-                                            registerLocalAsset(line, blob, `${line.id}.png`);
-                                            // 对象 URL 供页面背景预览和视频导出即时使用。
-                                            line.imageUrl = URL.createObjectURL(blob);
-                                            // 将图片纳入后面的 IndexedDB 批量持久化。
-                                            assetsToSave.push({ key: line.bgImageAssetKey, blob });
-                                        }
-                                    } catch (err) {
-                                        // 单张图片恢复失败不会破坏其余脚本时间轴。
-                                        console.warn('Image restore failed', err);
-                                    }
-                                    // 清除传输字段，避免运行态工程持有冗余 Base64。
-                                    delete line.imageBase64;
-                                }
                             }
                         }
 
@@ -7113,42 +6567,8 @@ ${voiceReferenceHardConstraints}`;
                             // 传给 start 的 duration 是源缓冲时间，不除以播放倍率。
                             const duration = evt.playDuration;
 
-                            // lastNode 用于按配置串接可选的对白滤镜链。
-                            let lastNode = dSrc;
-                            // 行内滤镜仍只存名称，需要从滤镜库取得算法参数。
-                            if (evt.line.filter) {
-                                const fConfig = filterLibrary.value.find(f => f.name === evt.line.filter);
-                                // 资源已删除时保持原声并继续导出。
-                                if (fConfig) {
-                                    // distortion 使用 WaveShaperNode 模拟非线性失真。
-                                    if (fConfig.type === 'distortion') {
-                                        const ws = offlineCtx.createWaveShaper();
-                                        // 复用实时播放的曲线生成函数，确保两种输出听感一致。
-                                        ws.curve = makeDistortionCurve(fConfig.gain);
-                                        // 四倍过采样降低离线失真的高频混叠。
-                                        ws.oversample = '4x';
-                                        // 把音源连接到失真节点。
-                                        lastNode.connect(ws);
-                                        // 失真节点成为效果链的新尾部。
-                                        lastNode = ws;
-                                    } else {
-                                        // 其他滤镜通过标准双二阶滤波节点实现。
-                                        const bq = offlineCtx.createBiquadFilter();
-                                        // 应用滤镜算法类型。
-                                        bq.type = fConfig.type;
-                                        // 应用截止或中心频率。
-                                        bq.frequency.value = fConfig.frequency;
-                                        // 应用滤镜 Q 值。
-                                        bq.Q.value = fConfig.Q;
-                                        // 将当前链尾接入双二阶滤镜。
-                                        lastNode.connect(bq);
-                                        // 更新链尾供最终增益连接。
-                                        lastNode = bq;
-                                    }
-                                }
-                            }
-                            // 完成“对白 → 可选滤镜 → 对白增益 → 离线输出”的路由。
-                            lastNode.connect(dGain).connect(offlineCtx.destination);
+                            // 完成“对白 → 对白增益 → 离线输出”的路由。
+                            dSrc.connect(dGain).connect(offlineCtx.destination);
                             // 在事件时间点从裁剪偏移播放指定源时长。
                             dSrc.start(evt.time, offset, duration);
 
@@ -7203,7 +6623,7 @@ ${voiceReferenceHardConstraints}`;
                  * @returns {Promise<void>} 字幕导出完成、取消或失败后兑现
                  */
                 const exportSRT = async () => {
-                    // 字幕只对应可发声的对白块，忽略 BGM 和背景图片控制块。
+                    // 字幕只对应可发声的对白块，忽略 BGM 控制块。
                     const dialogueLines = scriptLines.value.filter(l => l.type === 'dialogue');
                     // 没有对白时既没有字幕文本，也没有可计算的时间范围。
                     if (dialogueLines.length === 0) return alert('脚本为空');
@@ -7537,8 +6957,6 @@ ${voiceReferenceHardConstraints}`;
                         control_instruction: '',
                         voxcpm_nonverbal_tags: [],
                         needs_review: false,
-                        // 空名称表示不应用音频滤镜。
-                        filter: '',
                         // 保存当前切分得到的原文句段。
                         text: text,
                         // 新台词默认播放生成音频的完整范围。
@@ -7583,35 +7001,6 @@ ${voiceReferenceHardConstraints}`;
                     }
                 };
 
-                /** 在选中项后或列表末尾插入背景图片控制块。 */
-                const addBgImageBlock = () => {
-                    // 单独保存 ID，图片资产键会基于该 ID 构造。
-                    const newId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
-                    const newBlock = {
-                        // 使用刚生成的唯一块 ID。
-                        id: newId,
-                        // bgImage 是只改变舞台视觉、不推进时间的控制块。
-                        type: 'bgImage',
-                        // 提示词可复制给外部图片生成工具。
-                        bgImagePrompt: '',
-                        // 选图后写入 IndexedDB，并通过该稳定键跨刷新恢复。
-                        bgImageAssetKey: '',
-                        // imageUrl 仅是本次页面会话使用的对象 URL，不进入工程结构存档。
-                        imageUrl: ''
-                    };
-                    // 插入规则与其他脚本块一致：优先放在当前选中项后。
-                    if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
-                        // splice 在当前索引后一位插入背景块。
-                        scriptLines.value.splice(selectedLineIndex.value + 1, 0, newBlock);
-                        // 选中位置移动到新背景块。
-                        selectedLineIndex.value++;
-                    } else {
-                        // 没有选择时追加并选中新块。
-                        scriptLines.value.push(newBlock);
-                        selectedLineIndex.value = scriptLines.value.length - 1;
-                    }
-                };
-
                 /** 在选中项后或列表末尾插入使用默认值的台词块。 */
                 const addDialogueBlock = () => {
                     // 手动添加的台词使用与自动拆分相同的默认时间轴字段。
@@ -7631,8 +7020,6 @@ ${voiceReferenceHardConstraints}`;
                         control_instruction: '',
                         voxcpm_nonverbal_tags: [],
                         needs_review: false,
-                        // 空滤镜名称表示保持原始合成声音。
-                        filter: '',
                         // 文本留空等待用户输入。
                         text: '',
                         // 新台词默认播放生成音频的完整范围。
@@ -7684,95 +7071,6 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 /**
-                 * 记录目标背景图片块并打开文件选择器。
-                 * @param {number} lineIndex - 背景图片块索引
-                 * @returns {void}
-                 */
-                const openBgImagePicker = (lineIndex) => {
-                    // 隐藏 input 的 change 事件无法携带脚本索引，因此先暂存目标位置。
-                    pendingBgImageLineIndex.value = lineIndex;
-                    // DOM ref 挂载完成时模拟点击，打开系统图片选择器。
-                    if (bgImagePickerRef.value) bgImagePickerRef.value.click();
-                };
-
-                /**
-                 * 将选中的图片绑定到目标背景块并保存到素材存储。
-                 * @param {Event} event - 图片文件输入框 change 事件
-                 * @returns {Promise<void>} 图片保存完成或失败后兑现
-                 */
-                const handleBgImageFileChange = async (event) => {
-                    // 从文件输入框读取第一张选中图片。
-                    const file = event.target.files && event.target.files[0];
-                    // 取出打开选择器前暂存的目标脚本索引。
-                    const lineIndex = pendingBgImageLineIndex.value;
-                    // 立即清空暂存索引，避免后续误绑定到旧块。
-                    pendingBgImageLineIndex.value = -1;
-                    // 重置 input，允许再次选择同一图片触发 change。
-                    event.target.value = '';
-                    // 用户取消选择时保持原背景不变。
-                    if (!file) return;
-
-                    // 目标块可能在选择文件期间被删除或移动，因此重新按索引验证类型。
-                    const line = scriptLines.value[lineIndex];
-                    if (!line || line.type !== 'bgImage') return;
-
-                    // 复用已有稳定键，旧块没有键时按块 ID 构造。
-                    const assetKey = line.bgImageAssetKey || `bgImage_${line.id}`;
-                    // 将确定的键写回块结构，供存档和恢复使用。
-                    line.bgImageAssetKey = assetKey;
-                    // 创建即时预览 URL，让用户无需等待数据库写入即可看到图片。
-                    line.imageUrl = URL.createObjectURL(file);
-
-                    try {
-                        // 注册运行时 Blob，供视频导出和工程导出统一读取。
-                        registerLocalAsset(line, file, file.name);
-                        // 用稳定资产键把原始图片持久化到 IndexedDB。
-                        await saveAssetToDB(assetKey, file);
-                    } catch (e) {
-                        // 存储失败保留当前会话预览，但明确提示刷新后可能无法恢复。
-                        console.error('Failed to save bgImage asset:', e);
-                        alert('保存背景图片失败，请重试。');
-                    }
-
-                    // 背景块元数据变化后保存工程结构。
-                    triggerAutoSave();
-                };
-
-                /**
-                 * 将背景图片提示词复制到剪贴板，并兼容旧浏览器回退方案。
-                 * @param {Object} line - 背景图片块
-                 * @returns {Promise<void>} 复制操作结束后兑现
-                 */
-                const copyBgImagePrompt = async (line) => {
-                    // 可选链兼容没有块对象的意外调用。
-                    const text = line?.bgImagePrompt || '';
-                    // 空提示词无需访问剪贴板权限。
-                    if (!text) return;
-                    try {
-                        // 优先使用现代异步 Clipboard API。
-                        await navigator.clipboard.writeText(text);
-                        alert('已复制背景图片提示词');
-                    } catch (e) {
-                        // 无安全上下文或剪贴板权限时，回退到隐藏 textarea 方案。
-                        const ta = document.createElement('textarea');
-                        // 把待复制文本写入临时输入元素。
-                        ta.value = text;
-                        // 固定定位并移出视口，避免影响页面布局和滚动。
-                        ta.style.position = 'fixed';
-                        ta.style.left = '-9999px';
-                        // execCommand 要求元素先进入文档树。
-                        document.body.appendChild(ta);
-                        // 选中 textarea 的全部内容。
-                        ta.select();
-                        // 调用旧版浏览器支持的同步复制命令。
-                        document.execCommand('copy');
-                        // 复制完成后移除临时元素。
-                        document.body.removeChild(ta);
-                        alert('已复制背景图片提示词');
-                    }
-                };
-
-                /**
                  * 根据内容高度自动调整文本域。
                  * @param {Event} event - 文本域 input 事件
                  * @returns {void}
@@ -7786,17 +7084,12 @@ ${voiceReferenceHardConstraints}`;
                     el.style.height = el.scrollHeight + 'px';
                 };
 
-                /** 停止顺序播放，并淡出当前 BGM、清理音频节点和舞台状态。 */
+                /** 停止顺序播放，并淡出当前 BGM、清理音频节点和高亮状态。 */
                 const stopScriptSequentially = () => {
                     // 此标志是播放循环每一轮检查的主动取消信号。
                     isSequencePlaying.value = false;
                     // 清空高亮的当前时间轴索引。
                     currentSequenceIndex.value = -1;
-                    // 普通播放结束时清空舞台；视频生成期间保留背景状态供渲染使用。
-                    if (!isGeneratingVideo.value) stageBgUrl.value = '';
-                    // 无论何种模式都结束背景交叉淡入所需的上一张图片状态。
-                    stageBgFadePrevUrl.value = '';
-                    stageBgFadeStartTs.value = 0;
                     // 停止当前对白的一次性音源节点。
                     if (dialogueSource) {
                         // 节点可能已经自然结束，对重复 stop 做容错。
@@ -7905,7 +7198,7 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 /**
-                 * 从选中位置按时间轴顺序执行背景、BGM、台词、音效和停顿。
+                 * 从选中位置按时间轴顺序执行 BGM、台词、音效和停顿。
                  * @returns {Promise<void>} 播放结束或手动停止后兑现
                  */
                 const playScriptSequentially = async () => {
@@ -7915,33 +7208,6 @@ ${voiceReferenceHardConstraints}`;
                     isSequencePlaying.value = true;
                     // 有选中块时从该位置开始，否则从时间轴首项开始。
                     const startIndex = selectedLineIndex.value !== -1 ? selectedLineIndex.value : 0;
-
-                    // 从时间轴中段开始时，向前恢复在起点之前最后生效的背景图片。
-                    if (startIndex > 0) {
-                        // 未找到之前保持 null，表示起点没有继承背景。
-                        let lastBgImageLine = null;
-                        // 逆序扫描，遇到第一个 bgImage 就是离起点最近的控制块。
-                        for (let i = startIndex - 1; i >= 0; i--) {
-                            // 读取当前向前扫描的脚本块。
-                            const line = scriptLines.value[i];
-                            // 第一条背景控制块就是起点应继承的状态。
-                            if (line.type === 'bgImage') {
-                                lastBgImageLine = line;
-                                // 已找到最终生效项，无需继续向前。
-                                break;
-                            }
-                        }
-                        // 该控制块有已恢复图片时，带转场更新舞台背景。
-                        if (lastBgImageLine && lastBgImageLine.imageUrl) {
-                            setStageBgUrlWithFade(lastBgImageLine.imageUrl);
-                        }
-                    } else {
-                        // 从开头播放时尝试把时间轴中的第一张有效图片用作开场舞台。
-                        const firstBgImageLine = scriptLines.value.find(l => l.type === 'bgImage');
-                        if (firstBgImageLine && firstBgImageLine.imageUrl) {
-                            setStageBgUrlWithFade(firstBgImageLine.imageUrl);
-                        }
-                    }
 
                     // 从中段播放还需恢复起点之前最后一条 BGM 指令的状态。
                     if (startIndex > 0) {
@@ -8023,10 +7289,6 @@ ${voiceReferenceHardConstraints}`;
                                     bgmGainNode = null;
                                 }
                             }
-                        // 背景块只更新舞台视觉，不消费额外时间。
-                        } else if (line.type === 'bgImage') {
-                            // 空 URL 表示清空背景，非空时由辅助函数处理交叉淡入状态。
-                            setStageBgUrlWithFade(line.imageUrl || '');
                         } else {
                             // 其余当前 schema 块按 dialogue 处理。
                             if (!line.audioUrl) {
@@ -8047,7 +7309,7 @@ ${voiceReferenceHardConstraints}`;
                         }
                     }
 
-                    // 自然到尾或主动中断都复用统一收尾，淡出 BGM 并复位舞台。
+                    // 自然到尾或主动中断都复用统一收尾，淡出 BGM 并复位状态。
                     stopScriptSequentially();
                 };
 
@@ -8076,7 +7338,7 @@ ${voiceReferenceHardConstraints}`;
                         return alert('缺少 Mp4Muxer 库，无法导出 MP4。');
                     }
 
-                    // 开启视频导出锁，收尾逻辑也据此决定是否清空舞台背景。
+                    // 开启视频导出锁，防止重复提交编码任务。
                     isGeneratingVideo.value = true;
                     // 向复用的导出状态区报告当前阶段。
                     exportStatus.value = '准备素材...';
@@ -8092,63 +7354,12 @@ ${voiceReferenceHardConstraints}`;
                             if (buffer) assets.dialogues[line.id] = buffer;
                         }
 
-                        // 收集所有实际绑定图片的背景控制块，并按 URL 去重。
-                        const bgUrls = Array.from(new Set(
-                            scriptLines.value.filter(l => l.type === 'bgImage' && l.imageUrl).map(l => l.imageUrl)
-                        ));
-                        // Map 让逐帧绘制可直接按 URL 获取已解码 Image 对象。
-                        const bgImageCache = new Map();
-                        for (const url of bgUrls) {
-                            // 每个唯一 URL 只创建和解码一次图片元素。
-                            const img = new Image();
-                            // 对普通 URL 请求匿名 CORS，避免画布因跨域素材被污染。
-                            img.crossOrigin = 'anonymous';
-                            // 成功或失败都兑现，确保单张坏图不会卡死整个导出。
-                            await new Promise((resolve) => {
-                                img.onload = resolve;
-                                img.onerror = resolve;
-                                // 设置 src 后浏览器开始异步解码图片。
-                                img.src = url;
-                            });
-                            // 即使加载失败也保留对象；绘制阶段会按现有状态执行原逻辑。
-                            bgImageCache.set(url, img);
-                        }
-
                         // currentTime 采用与 WAV/SRT 相同的对白、裁剪、倍速和停顿规则。
                         let currentTime = 0;
-                        // visualTimeline 保存每张背景图片生效的明确起止区间。
-                        const visualTimeline = [];
-                        // currentBgUrl 表示扫描当前位置正在生效的背景。
-                        let currentBgUrl = '';
-                        // 记录当前背景开始生效的时间轴秒数。
-                        let lastBgChangeTime = 0;
-
-                        // 第一张有效背景作为视频从 0 秒开始的默认画面。
-                        const firstBgLine = scriptLines.value.find(l => l.type === 'bgImage' && l.imageUrl);
-                        // 找到时只设置当前 URL，区间会在遇到下一张背景或时间轴结束时闭合。
-                        if (firstBgLine) currentBgUrl = firstBgLine.imageUrl;
-
-                        // 按脚本顺序扫描视觉控制块并累计对白实际时长。
+                        // 无背景图功能时，视频始终使用纯黑底；仅按对白与停顿累计时长。
                         for (const line of scriptLines.value) {
-                            // 背景块在当前时间游标处切换画面，但自身不推进时间。
-                            if (line.type === 'bgImage') {
-                                // 只有非空且不同于当前背景的 URL 才产生新视觉片段。
-                                if (line.imageUrl && line.imageUrl !== currentBgUrl) {
-                                    // 旧背景至少生效过一段正时长时才写入时间轴。
-                                    if (currentTime > lastBgChangeTime) {
-                                        visualTimeline.push({
-                                            // 保存旧背景 URL 及其左闭右开时间区间。
-                                            url: currentBgUrl,
-                                            start: lastBgChangeTime,
-                                            end: currentTime
-                                        });
-                                    }
-                                    // 新图片从当前游标开始成为活动背景。
-                                    currentBgUrl = line.imageUrl;
-                                    lastBgChangeTime = currentTime;
-                                }
                             // 对白块按真实可听时长推进视频时间轴。
-                            } else if (line.type === 'dialogue') {
+                            if (line.type === 'dialogue') {
                                 // 缺失或损坏音频的对白不会产生视频时长。
                                 const buffer = assets.dialogues[line.id];
                                 if (buffer) {
@@ -8170,20 +7381,7 @@ ${voiceReferenceHardConstraints}`;
                                 currentTime += (line.break_duration || 0);
                             }
                         }
-                        // 扫描结束后闭合最后一张背景到脚本终点的片段。
-                        if (currentTime > lastBgChangeTime) {
-                            // 最后视觉片段延伸到累计时间轴终点。
-                            visualTimeline.push({
-                                // 使用扫描结束时仍活动的背景。
-                                url: currentBgUrl,
-                                // 片段起点是上一次背景切换时间。
-                                start: lastBgChangeTime,
-                                // 片段终点是脚本累计时长。
-                                end: currentTime
-                            });
-                        }
-
-                        // 素材和视觉区间就绪，进入逐帧编码阶段。
+                        // 音频时长统计完成，进入纯黑背景的逐帧编码阶段。
                         exportStatus.value = '生成视频轨道...';
                         
                         // 静态背景视频使用 4fps，显著降低重复帧编码量。
@@ -8276,7 +7474,7 @@ ${voiceReferenceHardConstraints}`;
                         await new Promise(r => setTimeout(r, 0));
 
                         /**
-                         * 按固定帧率绘制背景转场并编码全部视频帧。
+                         * 按固定帧率绘制纯黑背景并编码全部视频帧。
                          * @returns {Promise<void>} 视频帧编码完成后兑现
                          */
                         const renderVideoPromise = async () => {
@@ -8284,59 +7482,11 @@ ${voiceReferenceHardConstraints}`;
                             const offscreenCanvas = new OffscreenCanvas(width, height);
                             // alpha:false 让输出始终为不透明画面，更符合视频编码器预期。
                             const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
-                            // 开启高质量插值，缩放背景图时减少锯齿和模糊。
-                            offscreenCtx.imageSmoothingEnabled = true;
-                            offscreenCtx.imageSmoothingQuality = 'high';
-                            /**
-                             * 以 cover 模式将图片居中绘制到画布。
-                             * @param {CanvasRenderingContext2D} ctx - 画布上下文
-                             * @param {CanvasImageSource} img - 待绘制图片
-                             * @param {number} cw - 画布宽度
-                             * @param {number} ch - 画布高度
-                             * @returns {void}
-                             */
-                            const drawCover = (ctx, img, cw, ch) => {
-                                // 选择能覆盖整个画布的较大缩放比，等价于 CSS object-fit: cover。
-                                const scale = Math.max(cw / img.width, ch / img.height);
-                                // 计算缩放后的图片尺寸。
-                                const dw = img.width * scale;
-                                const dh = img.height * scale;
-                                // 多出的宽度在左右均分，实现水平居中裁切。
-                                const dx = (cw - dw) / 2;
-                                // 多出的高度在上下均分，实现垂直居中裁切。
-                                const dy = (ch - dh) / 2;
-                                // 把整张源图绘制到计算后的目标矩形。
-                                ctx.drawImage(img, dx, dy, dw, dh);
-                            };
-
-                            // 将秒级视觉时间轴转换为 WebCodecs 使用的微秒级片段。
-                            const segments = visualTimeline
-                                // 丢弃空对象或零/负时长区间。
-                                .filter(stage => stage && stage.end > stage.start)
-                                .map((stage, index, arr) => {
-                                    // 最后一段扩展到含保护尾帧的 totalDuration。
-                                    const stageEnd = index === arr.length - 1 ? totalDuration : stage.end;
-                                    return {
-                                        // 空 URL 表示该片段只绘制黑色背景。
-                                        url: stage.url || '',
-                                        // VideoFrame 时间戳单位为微秒并取整。
-                                        startUs: Math.round(stage.start * 1000000),
-                                        // duration 至少为 1 微秒，防止构造无效帧。
-                                        durationUs: Math.max(1, Math.round((stageEnd - stage.start) * 1000000))
-                                    };
-                                });
-
-                            // 没有任何有效背景区间时，生成覆盖全片的黑色占位片段。
-                            if (segments.length === 0) {
-                                segments.push({
-                                    // 空 URL 使绘制循环只保留黑底。
-                                    url: '',
-                                    // 占位片段从视频 0 微秒开始。
-                                    startUs: 0,
-                                    // 覆盖完整视频时长，并保证 duration 为正。
-                                    durationUs: Math.max(1, Math.round(totalDuration * 1000000))
-                                });
-                            }
+                            // 背景图已移除，整个视频只保留一个纯黑片段。
+                            const segments = [{
+                                startUs: 0,
+                                durationUs: Math.max(1, Math.round(totalDuration * 1000000))
+                            }];
 
                             // 固定帧率下每帧的名义微秒时长。
                             const frameDurationUs = Math.round(1000000 / fps);
@@ -8348,21 +7498,13 @@ ${voiceReferenceHardConstraints}`;
                             // 记录已经提交给编码器的帧数。
                             let encodedFrames = 0;
 
-                            // 逐背景片段绘制一次画布，再复用同一静态画面生成该段所有帧。
+                            // 单一纯黑片段的画面可复用于全部帧。
                             for (let i = 0; i < segments.length; i++) {
                                 const stage = segments[i];
-                                // 读取当前片段绑定的背景 URL。
-                                const currentUrl = stage.url;
 
                                 // 每个片段先用纯黑覆盖整张画布，避免残留上一张图片。
                                 offscreenCtx.fillStyle = '#000';
                                 offscreenCtx.fillRect(0, 0, width, height);
-
-                                // 有成功预加载的背景时，以 cover 方式绘制到黑底上。
-                                if (currentUrl && bgImageCache.has(currentUrl)) {
-                                    const img = bgImageCache.get(currentUrl);
-                                    drawCover(offscreenCtx, img, width, height);
-                                }
 
                                 // 编码队列积压超过 30 帧时主动背压，避免内存无限增长。
                                 while (videoEncoder.encodeQueueSize > 30) {
@@ -8376,7 +7518,7 @@ ${voiceReferenceHardConstraints}`;
                                 
                                 // 当前片段需要的帧数按时长向上取整，至少一帧。
                                 const stageFrames = Math.max(1, Math.ceil(stage.durationUs / frameDurationUs));
-                                // 为当前静态背景生成连续时间戳的视频帧。
+                                // 为当前纯黑画面生成连续时间戳的视频帧。
                                 for (let frameIndex = 0; frameIndex < stageFrames; frameIndex++) {
                                     // 当前帧时间戳 = 片段起点 + 帧序号 × 固定帧长。
                                     const frameStartUs = stage.startUs + (frameIndex * frameDurationUs);
@@ -8399,7 +7541,7 @@ ${voiceReferenceHardConstraints}`;
                                         frame.close();
                                         throw new Error('视频编码器状态异常 (' + videoEncoder.state + ')。可能是分辨率或编码配置不受当前浏览器支持。');
                                     }
-                                    // 每个背景片段首帧设为关键帧，便于切换画面后独立解码。
+                                    // 单一片段首帧设为关键帧，便于独立解码。
                                     videoEncoder.encode(frame, { keyFrame: frameIndex === 0 });
                                     // encode 已接管帧内容，立即关闭 JS 侧 VideoFrame 引用。
                                     frame.close();
@@ -8407,7 +7549,7 @@ ${voiceReferenceHardConstraints}`;
                                     encodedFrames++;
                                 }
 
-                                // 每完成一个视觉片段刷新一次编码百分比。
+                                // 每完成一个片段刷新一次编码百分比。
                                 exportStatus.value = `编码视频 ${Math.round((encodedFrames / totalFrames) * 100)}%`;
                                 // 让出事件循环以刷新 UI 并让编码器继续处理队列。
                                 await new Promise(r => setTimeout(r, 0));
@@ -8469,7 +7611,7 @@ ${voiceReferenceHardConstraints}`;
                 
 
                 /**
-                 * 使用当前 LLM 将小说原文分析为台词、BGM 与背景图片时间轴。
+                 * 使用当前 LLM 将小说原文分析为台词与 BGM 时间轴。
                  * 再次触发时会取消当前分析任务。
                  * @returns {Promise<void>} 分析、解析和状态同步结束后兑现
                  */
@@ -8501,35 +7643,37 @@ ${voiceReferenceHardConstraints}`;
                     // 为本次 fetch 创建独立取消信号。
                     analysisAbortController.value = new AbortController();
 
-                    // 音效不再引用工程素材库：所有明确事件都由 8311 SoundEffect 根据 sfx_plan 生成。
-                    const sfxSection = `# SoundEffect 音效生成（严格遵守）\n当前 WebUI 没有 SFX 素材库。原文中存在明确可听的非语言事件时，必须在对应 dialogue 输出 sfx_plan；页面会逐项把 prompt 和 duration_seconds 发送到 MOSS-SoundEffect v2.0（http://127.0.0.1:8311/v1/generate）生成 WAV。\n\n1. 严禁输出 sfx 字段、音效名称、文件名或任何库内复用引用。\n2. 只为明确可闻事件生成计划：电话/视频通话接通或挂断、敲门、开关门、物体落地或破碎、脚步、机械开合、车辆和明确天气声等；音效库不存在不能成为省略这些事件的理由。\n3. 每项 sfx_plan 必须为 {"id":"简短唯一ID","action":"generate","purpose":"semantic_cue|foreground_action|ambience|transition","sound_class":"声音类别","prompt":"中文、可直接生成的非语言声音描述","anchor":"dialogue_start|dialogue_end|break_start","offset_ms":0,"duration_seconds":1.2,"mix_preset":"cue_before_dialogue|action_under_dialogue|soft_ambience|transition","required":false}。offset_ms 限 -500 到 5000；只有 cue_before_dialogue 的短提示可使用 -40 到 -120ms 前置，其余使用非负偏移。\n4. prompt 必须具体说明声源、动作、材质/质感、空间/距离与收尾；不能含人物台词、人声、BGM、文件路径、品牌名或抽象情绪。\n5. 默认每条 dialogue 最多一个前景计划；只有两个独立且紧密相连的明确事件才可使用两个。人物笑、叹气、犹豫音使用 voxcpm_nonverbal_tags，不生成 SoundEffect。`;
+                    // 音效不再引用工程素材库；按有声书制作的叙事提示、前景动作、短氛围和转场四层生成可落地计划。
+                    const sfxSection = `# 悬疑恐怖短篇的 SoundEffect 音效设计
+服务对白，用声音确认空间、动作、威胁接近和转折。每个 dialogue 必须输出 sfx_plan：无事件为 []，有事件仅放在承载它的 dialogue。页面只将 prompt 与 duration_seconds 发送给 MOSS-SoundEffect。直接输出 JSON，不要复述、检查或推理。
 
-                    // bgmSection 与音效区独立，向模型说明可用背景音乐和约束。
+## 四类可用声音
+1. semantic_cue（叙事提示）：来电铃声、视频来电、拨号/回铃、视频或电话接通、挂断、忙音/信号中断、短信/设备通知、门铃、警报、相机快门等状态信号。“视频通话接通”用短促接通提示音，非来电铃；“电话响了”才用来电铃。
+2. foreground_action（前景动作/Foley）：敲门次数/节奏、钥匙/锁舌/门把手、门窗/柜/抽屉开合、脚步/奔跑/上楼/靠近离开、单次倒吸气/喘息、箱子/家具拖拽、翻找/拿放/开盒开袋、纸张翻动/撕裂、倒液体、金属/木头/玻璃碰撞、跌落/碎裂。
+3. ambience（短场景氛围）：仅在明确、首次建立或明显变化的持续声源使用，如雨雷风、火焰、海浪、车辆/列车、动物、空调/电流/机器、空屋/走廊环境声；短时床底，非循环配乐，通常 8–20 秒，不在相邻每句重复。
+4. transition（转场/威胁落点）：仅用于句末、场景切换或危险临界点的明确事件，如门猛关、警报、物件破裂、远雷、怪物嘶嘶/低吼、爪子刮擦、异常脚步、无可辨认耳语。超自然效果必须有可听声源；黑影闪过、烟味、害怕不生成声音。
+
+## 悬疑恐怖的取舍
+- 仅计划“原文明示、合理可听、且能确认地点/动作/威胁距离/信息到达/转折”的事件。每句一个听觉焦点；只有紧密不可分的两个事件可输出两项。
+- 动作优先于氛围；连续同源动作合并；氛围只在建立、变化或转场出现。不得为恐怖感逐句添加低频、风声、心跳、耳语或音乐。
+- 笑声、叹气、犹豫音及可由 voxcpm_nonverbal_tags 表达的发声只用标签，不重复生成 SFX；台词、可辨认语言、BGM、情绪/心理、纯视觉/嗅觉描写不得写入 prompt。
+
+## sfx_plan 输出契约
+1. 不输出独立 type="sfx"、素材引用或文件名；音效只能写入 dialogue.sfx_plan。
+2. 每项为 {"id":"全文唯一的简短 snake_case ID","action":"generate","purpose":"semantic_cue|foreground_action|ambience|transition","sound_class":"声音类别","prompt":"中文非语言声音描述","anchor":"dialogue_start|dialogue_end|break_start","offset_ms":0,"duration_seconds":1.2,"mix_preset":"cue_before_dialogue|action_under_dialogue|soft_ambience|transition","required":false}。action 固定为 generate；offset_ms 为 -500 到 5000；duration_seconds 为 0.2 到 30。
+3. semantic_cue 用 dialogue_start + cue_before_dialogue；仅需台词前提示时 offset_ms 为 -40 到 -120。foreground_action 用 dialogue_start + action_under_dialogue 且 offset_ms 非负；句末/转场用 dialogue_end 或 break_start + transition；ambience 用 soft_ambience。purpose 必须匹配 mix_preset。
+4. prompt 是 MOSS-SoundEffect 唯一接收的文字，依次写声源、动作/节奏、原文可确定材质/质感、空间/距离、自然收尾；不确定材质用中性描述，不得编造。人体非语言 SFX 写“无可辨认说话声”。required 仅在缺声影响剧情理解时为 true。`;
+
+                    // BGM 与音效区独立，按需输出控制块，绝不把音乐当成固定背景。
                     let bgmSection = "";
                     // 只暴露当前启用的 BGM 资源。
                     const enabledBgm = bgmLibrary.value.filter(b => b.enabled !== false);
                     if (enabledBgm.length > 0) {
                         // 构造供模型理解剧情适配性的名称/描述列表。
                         const bgmList = enabledBgm.map(s => `- ${s.name}: ${s.description}`).join('\n');
-                        // 提示中要求逐字匹配，保证后面能按名称关联本地素材。
-                        bgmSection = `# 背景音乐库 (Background Music)\n现有以下背景音乐素材可用：\n${bgmList}\n\n**核心指令：**\n1. 必须**逐字匹配**使用列表中的名称。\n2. 如果列表中没有适合当前剧情的音乐，**请勿生成** BGM 播放指令。\n3. **严禁编造**列表中不存在的 BGM 名称。\n4. SoundEffect 的短促环境/动作声写入 dialogue.sfx_plan，不能用 BGM 名称或 BGM 控制块代替。`;
+                        bgmSection = `# 背景音乐（按需）\n可用素材：\n${bgmList}\n\n- 只有原文明确存在配乐，或剧情转场确实需要且所列素材明显适配时，才输出 BGM 控制块；不要求开场播放，也不要按固定频率切换。\n- 播放必须使用列表中的精确名称：\`{"type":"bgm","action":"play","name":"素材名"}\`；停止使用 \`{"type":"bgm","action":"stop"}\`。\n- 同一段音乐保持至明确需要停止或切换时再输出 stop / 下一条 play；不要把短促动作声、环境声或情绪词改写成 BGM。\n- 没有合适素材时不输出任何 BGM 对象，绝不编造名称。`;
                     } else {
-                        // 空 BGM 库允许 stop 以终止之前状态，但禁止生成新的 play。
-                        bgmSection = `# 背景音乐库 (Background Music)\n**当前背景音乐库为空 (EMPTY)。**\n\n**核心指令：**\n1. **严禁生成**任何 action="play" 的 BGM 控制块。\n2. 你只能生成 action="stop" 的指令（如果需要停止之前的音乐）。\n3. 绝对不要编造 BGM 名称。`;
-                    }
-
-                    // filterSection 告诉模型有哪些可用的对白音频效果。
-                    let filterSection = "";
-                    // 禁用滤镜不进入新脚本建议范围。
-                    const enabledFilters = filterLibrary.value.filter(f => f.enabled !== false);
-                    if (enabledFilters.length > 0) {
-                        // 名称用于后续关联，描述用于模型判断剧情适用场景。
-                        const fList = enabledFilters.map(f => `- ${f.name}: ${f.description}`).join('\n');
-                        // 严格名称约束减少模型输出不存在的滤镜。
-                        filterSection = `# 滤波器库 (Audio Filters)\n如果剧情需要特殊音效处理（如电话、水下、回忆），请使用以下滤波器：\n${fList}\n**注意：必须严格使用列表中的名称，如果没有匹配项则不要使用 filter 字段。**`;
-                    } else {
-                        // 空库时要求完全省略 filter 字段。
-                        filterSection = `# 滤波器库 (Audio Filters)\n当前滤波器库为空。\n**注意：请勿生成任何 filter 字段。**`;
+                        bgmSection = `# 背景音乐（当前无可用素材）\n- 不输出任何 \`type: "bgm"\` 对象，包括 play 和 stop；绝不编造 BGM 名称。`;
                     }
 
                     // 情绪只需名称列表；具体情绪向量留给后续 TTS 阶段解析。
@@ -8538,10 +7682,8 @@ ${voiceReferenceHardConstraints}`;
                         .map(e => e.key || e.name)
                         .join(', ');
 
-                    // JSON 示例中的 BGM 名称取真实资源第一项，空库时完全省略示例行。
-                    const bgmExampleLine = enabledBgm.length > 0
-                        ? `{"type": "bgm", "action": "play", "name": "${enabledBgm[0].name}"},`
-                        : '';
+                    // 当前策略按发起请求时的选择冻结，避免请求途中切换开关导致规则前后矛盾。
+                    const clonePlanSection = getClonePlanPromptSection(cloneModePolicyAtRequest);
 
                     // 用户启用自定义模板时使用编辑内容，否则使用内置完整模板。
                     const templateToUse = useCustomPrompt.value ? customPromptTemplate.value : defaultPromptTemplate;
@@ -8553,71 +7695,35 @@ ${voiceReferenceHardConstraints}`;
                         .replace(/\${sfxSection}/g, sfxSection)
                         // 注入动态 BGM 库说明。
                         .replace(/\${bgmSection}/g, bgmSection)
-                        // 注入动态滤镜库说明。
-                        .replace(/\${filterSection}/g, filterSection)
-                        // 注入或移除 BGM 格式示例。
-                        .replace(/\${bgmExampleLine}/g, bgmExampleLine)
+                        // 注入本次唯一有效的克隆策略。
+                        .replace(/\${clonePlanSection}/g, clonePlanSection)
                         // 删除旧版音效素材库示例占位符，生成式计划由 sfxSection 统一约束。
                         .replace(/\${sfxExample}/g, '')
+                        // 清理旧自定义模板中的已废弃滤镜和背景图占位符，避免字面量进入模型请求。
+                        .replace(/\${filterSection}/g, '')
+                        .replace(/\${bgImageCount}/g, '')
+                        .replace(/\${bgmExampleLine}/g, '')
                         // 注入分析开始时固定的小说原文。
-                        .replace(/\${rawScript}/g, sourceScript)
-                        // 注入用户要求生成的背景图片控制块数量。
-                        .replace(/\${bgImageCount}/g, bgImageCount.value);
+                        .replace(/\${rawScript}/g, sourceScript);
 
-                    // 自定义模板可能缺少新版本的背景图约束，因此只追加最低兼容说明。
-                    if (useCustomPrompt.value) {
-                        // 自定义模板也必须遵循当前唯一的 VoxCPM2 表演计划字段，不能让旧模板绕过标签安全规则。
-                        if (!finalPrompt.includes('voxcpm_nonverbal_tags')) {
-                            finalPrompt += `
-
-## VoxCPM2 非语言标签（严格遵守）
-- 每个 dialogue 都输出 \`voxcpm_nonverbal_tags\` 数组，最多一个官方标签；无明确可听见反应时输出 []。
-- 允许值仅为 laughing、sigh、Uhm、Shh、Question-ah、Question-ei、Question-en、Question-oh、Surprise-wa、Surprise-yo、Dissatisfaction-hnn。
-- 标签不能写进 text_content 或参考文本；有标签时 clone_mode=controllable、delivery_profile=expressive、needs_review=true。
-`;
-                        }
-                        // 旧版自定义模板可能只有 clone_mode/profile；补充括号指令与真实正文的分离规则。
-                        if (!finalPrompt.includes('control_instruction')) {
-                            finalPrompt += `
-
-## VoxCPM2 自然语言表演指令（严格遵守）
-- 每个 dialogue 额外输出 \`control_instruction\` 字符串；可控克隆时填写括号内的自然语言表演描述，不要包含外层括号。
-- \`text_content\` 只填写括号外的真实朗读正文，不得把角色头标、参考音频路径或控制指令混入正文。
-- 有 \`control_instruction\` 时使用 clone_mode=controllable；稳定基线且有准确参考文案时使用 clone_mode=ultimate、delivery_profile=baseline，并省略或置空该字段。
-`;
-                        }
-                        // 模板完全未提及 bgImage 时先补充块结构说明。
-                        if (!finalPrompt.includes('bgImage')) {
-                            // 追加而不改写用户原有模板内容。
-                            finalPrompt += `
-
-## 背景图片块 (bgImage)
-- 需要在相邻的台词对象之间插入：\`{"type":"bgImage","image_prompt":"..."}\`
-- \`image_prompt\` 必须为用于生成图片的中文提示词，并且要根据当前小说上下文生成。
-- \`type\` 字段必须严格等于 \`bgImage\`。
-`;
-                        }
-
-                        // 无论模板是否已提到背景图，都追加当前数量和分布硬约束。
-                        finalPrompt += `
-
-## 背景图片块数量约束（严格遵守）
-- 请在整个 JSON 数组中严格插入且仅插入 ${bgImageCount.value} 个 \`type":"bgImage"\` 对象。
-- 第一个 \`bgImage\` 对象必须出现在“第一个 dialogue 对象之前”，用于视频开场背景；允许开头存在 \`bgm\` 控制块。
-- 除开场第一张外，其余 \`bgImage\` 必须按剧情节奏插入在台词之间（至少间隔一个 \`dialogue\`），避免连续出现多个 \`bgImage\`。
-`;
-                    }
-
-                    // 历史自定义模板可能没有 ${sfxSection} 占位符；仍强制注入当前生成计划协议。
+                    // 自定义模板可以自由编写正文规则；缺少关键动态区块时统一插入“输入内容”前。
+                    const insertPromptSectionBeforeInput = (promptText, section) => {
+                        const marker = '# 输入内容';
+                        const markerIndex = promptText.lastIndexOf(marker);
+                        const insertion = `\n\n${section}\n`;
+                        return markerIndex >= 0
+                            ? `${promptText.slice(0, markerIndex)}${insertion}\n${promptText.slice(markerIndex)}`
+                            : `${promptText}${insertion}`;
+                    };
                     if (!templateToUse.includes('${sfxSection}')) {
-                        finalPrompt += `
-
-${sfxSection}
-`;
+                        finalPrompt = insertPromptSectionBeforeInput(finalPrompt, sfxSection);
                     }
-
-                    // 关闭可控克隆时，无论内置还是自定义模板都必须向 LLM 明确追加极致克隆硬约束。
-                    finalPrompt += getCloneModePolicyPromptConstraint(cloneModePolicyAtRequest);
+                    if (!templateToUse.includes('${bgmSection}')) {
+                        finalPrompt = insertPromptSectionBeforeInput(finalPrompt, bgmSection);
+                    }
+                    if (!templateToUse.includes('${clonePlanSection}')) {
+                        finalPrompt = insertPromptSectionBeforeInput(finalPrompt, clonePlanSection);
+                    }
 
                     try {
                         // 固定本次请求使用的当前 LLM 配置引用。
@@ -8659,10 +7765,18 @@ ${sfxSection}
 
                         // 非流式响应按 JSON 解析。
                         const data = await res.json();
-                        // 从 OpenAI choices 结构读取正文，不存在时回退为空串。
-                        const content = data.choices[0]?.message?.content || '';
+                        // 从 OpenAI choices 结构读取正文；推理模型的 reasoning_content 不是最终 JSON，不能当作脚本解析。
+                        const choice = data.choices?.[0];
+                        const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
                         // 原始回复保留给用户查看和问题排查。
                         rawAnalysisResult.value = content;
+                        // 模型只返回思考过程且因长度截断时，给出可操作错误，避免报出无意义的 JSON 解析异常。
+                        if (!content.trim()) {
+                            if (choice?.finish_reason === 'length' && choice?.message?.reasoning_content) {
+                                throw new Error('模型推理超出输出上限，未返回最终 JSON。请缩短原文，或选择非推理模型/降低推理强度后重试。');
+                            }
+                            throw new Error('LLM 未返回最终脚本 JSON，请重试或检查模型配置。');
+                        }
                         // 优先提取回复中第一个外层 JSON 数组，兼容模型附带解释文字。
                         const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
                         // 没匹配到数组时，至少清理常见 Markdown JSON 代码围栏。
@@ -8672,8 +7786,8 @@ ${sfxSection}
                         const parsed = JSON.parse(jsonStr);
                         // 当前协议要求最外层必须是数组。
                         if (Array.isArray(parsed)) {
-                            // 当前实现保留模型全部数组项，资源名称稍后只做温和匹配。
-                            const validParsed = parsed;
+                            // 背景图片控制块已废弃；模型偶尔沿用旧模板输出时直接忽略，其他项稍后再做温和匹配。
+                            const validParsed = parsed.filter(item => item && item.type !== 'bgImage');
 
                             // Set 汇总模型输出中的唯一角色名。
                             const newRoles = new Set();
@@ -8855,13 +7969,6 @@ ${sfxSection}
                                     return '';
                                 };
 
-                                // 默认不应用滤镜。
-                                let matchedFilter = '';
-                                // 模型确实返回 filter 时才在滤镜库匹配。
-                                if (item.filter) {
-                                    matchedFilter = findBestMatch(item.filter, filterLibrary.value);
-                                }
-
                                 // 非 BGM play 块无需资源名称匹配。
                                 let matchedBgmName = '';
                                 if (item.type === 'bgm' && item.action === 'play') {
@@ -8871,8 +7978,8 @@ ${sfxSection}
                                     matchedBgmName = findBestMatch(rawName, bgmLibrary.value) || rawName;
                                 }
 
-                                // 缺失 type 时会按 dialogue 处理，因此克隆计划也必须沿用同一默认值。
-                                const lineType = item.type || 'dialogue';
+                                // 只保留当前 schema 支持的两类块；未标类型或其他历史类型按台词安全回退。
+                                const lineType = item.type === 'bgm' ? 'bgm' : 'dialogue';
                                 // 所有明确声音事件都以 SoundEffect 生成计划保存，不再匹配工程级 SFX 素材库。
                                 const normalizedSfxPlan = lineType === 'dialogue'
                                     ? normalizeSfxPlans(item.sfx_plan)
@@ -8888,12 +7995,12 @@ ${sfxSection}
                                 const planSource = controlInstruction
                                     ? { ...item, control_instruction: controlInstruction }
                                     : item;
-                                // 仅 dialogue 使用的 VoxCPM2 计划在此统一校验；BGM/bgImage 仍保留安全基线字段但不会进入合成。
+                                // 仅 dialogue 使用的 VoxCPM2 计划在此统一校验；BGM 保留安全基线字段但不会进入合成。
                                 const voxcpmPlan = lineType === 'dialogue'
                                     ? getNormalizedVoxCpmPlan(planSource)
                                     : { clone_mode: 'ultimate', delivery_profile: 'baseline', voxcpm_nonverbal_tags: [], needs_review: false };
 
-                                // 返回页面时间轴要求的完整块对象，覆盖三类块的字段超集。
+                                // 返回页面时间轴要求的完整块对象，覆盖 dialogue 与 BGM 的字段超集。
                                 const generatedLine = {
                                     // 每个模型项获得稳定的运行时块 ID。
                                     id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
@@ -8913,8 +8020,6 @@ ${sfxSection}
                                     delivery_profile: voxcpmPlan.delivery_profile,
                                     voxcpm_nonverbal_tags: voxcpmPlan.voxcpm_nonverbal_tags,
                                     needs_review: voxcpmPlan.needs_review,
-                                    // 使用上面匹配出的规范滤镜名。
-                                    filter: matchedFilter,
                                     // SoundEffect 生成计划会在用户点击生成后直接保存 WAV 到计划自身的资产键。
                                     sfx_plan: normalizedSfxPlan,
                                     // 只接受数值型停顿，其他类型回退为 0 秒。
@@ -8933,14 +8038,7 @@ ${sfxSection}
                                     // 新 BGM 控制块默认使用 1 倍块级音量。
                                     volume: 1.0,
                                     // 使用匹配后的资源库 BGM 名称。
-                                    bgmName: matchedBgmName,
-
-                                    // 兼容模型可能采用的四种背景提示词字段名。
-                                    bgImagePrompt: item.image_prompt || item.bgImagePrompt || item.imagePrompt || item.prompt || '',
-                                    // 分析阶段尚未选择本地背景图片，因此持久化键为空。
-                                    bgImageAssetKey: '',
-                                    // 同样没有可预览的运行时图片 URL。
-                                    imageUrl: ''
+                                    bgmName: matchedBgmName
                                 };
                                 // LLM 输出只是候选计划；页面在此按发起请求时的开关做最终收敛。
                                 applyCloneModePolicy(generatedLine, cloneModePolicyAtRequest);
@@ -9408,8 +8506,6 @@ ${sfxSection}
                     activeTab, llmConfigs, currentConfigId,
                     // LLM 编辑表单及其编辑模式状态。
                     form, isEditing,
-                    // 滤镜资源库、表单状态和完整 CRUD 操作。
-                    filterLibrary, filterForm, isEditingFilter, saveFilter, editFilter, deleteFilter, resetFilterForm,
                     // 通用聊天测试的输入、输出、推理、错误与加载状态。
                     prompt, result, reasoning, error, loading,
 
@@ -9469,21 +8565,13 @@ ${sfxSection}
 
                     // 单条试听进度供波形和进度层渲染。
                     playbackProgress,
-                    // 舞台当前背景 URL。
-                    stageBgUrl,
-                    // LLM 脚本分析要求的背景图片块数量。
-                    bgImageCount,
-                    // 隐藏背景图片文件输入框的 DOM ref。
-                    bgImagePickerRef,
-                    // 图片预览弹层当前 URL。
-                    previewImageUrl,
                     // 视频生成锁和界面状态。
                     isGeneratingVideo,
 
                     // 小说原文、规范时间轴、快速拆分、删除、自适应文本框与 AI 分析状态。
                     rawScript, scriptLines, splitScript, removeScriptLine, autoResizeTextarea, analyzeScript, isAnalyzingScript, rawAnalysisResult,
-                    // 三类时间轴块的添加入口和当前编辑选中索引。
-                    addBgmBlock, addDialogueBlock, addBgImageBlock, selectedLineIndex,
+                    // 两类时间轴块的添加入口和当前编辑选中索引。
+                    addBgmBlock, addDialogueBlock, selectedLineIndex,
                     // 波形绘制和裁剪拖拽入口。
                     drawWaveform, startDragTrim,
                     // 批量 TTS 生成状态以及清空全部生成音频的操作。
@@ -9494,8 +8582,6 @@ ${sfxSection}
                     moveLineUp, moveLineDown,
                     // 批量选择状态切换操作。
                     toggleLineSelection,
-                    // 背景图片选择、保存、提示词复制和预览弹层操作。
-                    openBgImagePicker, handleBgImageFileChange, copyBgImagePrompt, openImagePreview, closeImagePreview,
                     // 完整工程导出/导入及文件输入框 ref。
                     exportScriptState, triggerImport, handleImportFile, importFileRef, exportAudio, isExportingAudio,
                     // SRT、TXT 导入导出及 TXT 输入框 ref。

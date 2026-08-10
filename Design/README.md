@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `reference/01-model-config.webp` | 模型配置 | `webUI/src/components/ConfigPanel.vue` |
 | `reference/02-timbre-library.webp` | 音色资源库 | `webUI/src/components/TimbresPanel.vue` |
-| `reference/03-sfx-filters.webp` | 音效与滤波器 | `webUI/src/components/SfxPanel.vue` |
+| `reference/03-sfx-filters.webp` | 音效（历史图含已废弃滤镜） | `webUI/src/components/SfxPanel.vue` |
 | `reference/04-script-production.webp` | 脚本制作 | `webUI/src/components/ScriptPanel.vue` |
 | `reference/05-prompt-management.webp` | Prompt 管理 | `webUI/src/components/PromptPanel.vue` |
 
