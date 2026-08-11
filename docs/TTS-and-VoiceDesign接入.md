@@ -27,6 +27,8 @@ curl http://127.0.0.1:8307/v1/health
 
 WebUI 会为 Qwen3-TTS、VoxCPM2、Ming-omni-tts 和 LongCat-AudioDiT 创建内置 TTS 配置；用户在脚本工作台的 TTS 下拉框中选中的配置决定当前台词请求的 Base URL 与后端模型。历史配置会保留在浏览器中，但只有协议可识别的本地模型才进入当前合成选择器，页面不会把旧端口静默改写为其他模型。
 
+四个本地 TTS 模型成功返回 WAV 后，后端还会将同一份原始音频同步保存到 `TTS-and-VoiceDesign/api/tempAudio/`；这与浏览器 IndexedDB 的工程资产保存相互独立，不会改变页面播放和导出流程。
+
 ## 台词合成中的参考文案与 VoxCPM2 表演计划
 
 1. VoxCPM2 的每条台词保存 `clone_mode`（`ultimate` 或 `controllable`）、`delivery_profile`（`baseline`、`expressive`、`suspense`、`fear`、`urgent`、`restrained`）、`control_instruction`、`voxcpm_nonverbal_tags`（最多一个官方标签）与 `needs_review`。
