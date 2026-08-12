@@ -680,9 +680,27 @@
                                 <span v-if="isAnalyzingScript" class="animate-spin mr-2">⏳</span>
                                 {{ isAnalyzingScript ? '停止分析' : 'AI 深度分析' }}
                             </button>
+                            <select v-model="soundEffectModel"
+                                :disabled="isGeneratingSoundEffects || isAnySoundEffectGenerating"
+                                class="w-full px-3 py-2 border rounded-lg text-sm font-medium focus:ring-2 focus:ring-amber-500 outline-none bg-white disabled:opacity-50 disabled:cursor-wait"
+                                title="选择生成 SoundEffect 音效的模型">
+                                <option v-for="model in soundEffectModelOptions" :key="model.id" :value="model.id">
+                                    {{ model.label }}
+                                </option>
+                            </select>
+                            <p class="text-[10px] leading-relaxed text-slate-500">
+                                {{ selectedSoundEffectModel.promptLanguage === 'en'
+                                    ? 'Stable Audio 3 使用剧本分析生成的英文提示词；适合短、具体的音效。'
+                                    : 'MOSS-SoundEffect v2 使用剧本分析生成的中文提示词。' }}
+                            </p>
                             <button @click="generateAllSoundEffects" :disabled="isGeneratingSoundEffects"
                                 class="w-full px-3 py-2 text-amber-800 bg-amber-100 rounded-lg text-sm font-bold transition-all hover:bg-amber-200 disabled:cursor-wait disabled:opacity-50">
                                 {{ isGeneratingSoundEffects ? soundEffectGenerationStatus : '生成全部 SoundEffect 音效' }}
+                            </button>
+                            <button data-testid="clear-all-sound-effects" @click="clearAllGeneratedSoundEffects"
+                                :disabled="isSequencePlaying || isGeneratingSoundEffects || isAnySoundEffectGenerating"
+                                class="w-full px-3 py-2 text-red-800 bg-red-100 rounded-lg text-sm font-bold transition-all hover:bg-red-200 disabled:cursor-wait disabled:opacity-50">
+                                清空所有音效
                             </button>
                         </div>
 
@@ -1276,7 +1294,7 @@
                 const STEP_AUDIO_EDITX_API_BASE_URL = 'http://127.0.0.1:8300';
                 // project-storage.js 通过 window 暴露兼容层，本页只消费它的公开 API。
                 const projectStorage = window.UnitaleProjectStorage;
-                // SoundEffect 客户端只封装 8311 请求，生成结果仍由本页写入工程资产库。
+                // SoundEffect 客户端封装 MOSS（8311）和 Stable Audio 3（8312）请求；生成结果仍由本页写入工程资产库。
                 const soundEffectClient = window.UnitaleSoundEffectClient;
 
                 // 配套脚本未成功加载时立即终止启动，避免后续以不完整 schema 保存工程。
@@ -1285,6 +1303,10 @@
                 }
                 if (!soundEffectClient) {
                     throw new Error('soundeffect-client.js 未正确加载');
+                }
+                const soundEffectModelOptions = Object.values(soundEffectClient.SOUND_EFFECT_MODELS || {});
+                if (soundEffectModelOptions.length === 0) {
+                    throw new Error('soundeffect-client.js 未提供音效模型配置');
                 }
 
                 // 解构工程协议常量和唯一的数据规范化入口，避免页面复制 schema 转换逻辑。
@@ -2319,10 +2341,19 @@
                 let sequenceAbortController = null;
                 // WAV 与 SRT 导出共用的加载锁。
                 const isExportingAudio = ref(false);
-                // SoundEffect 批量生成按 8311 的单 worker/GPU 锁顺序执行，避免并发占用显存。
+                // 默认保留原 MOSS 行为；切换后“生成全部”与单条生成都会路由到同一选定模型。
+                const soundEffectModel = ref(soundEffectClient.DEFAULT_MODEL || soundEffectModelOptions[0].id);
+                const selectedSoundEffectModel = computed(() => (
+                    soundEffectClient.getSoundEffectModel(soundEffectModel.value)
+                ));
+                // SoundEffect 批量生成按选定模型的一次性 worker/GPU 锁顺序执行，避免并发占用显存。
                 const isGeneratingSoundEffects = ref(false);
                 // 批量生成时展示当前进度；单条生成状态保存在 sfx_plan 项上。
                 const soundEffectGenerationStatus = ref('');
+                // 清空按钮与批量生成互斥；单项生成时也不能删除其正在写入的音频资产。
+                const isAnySoundEffectGenerating = computed(() => scriptLines.value.some(line => (
+                    line && line.type === 'dialogue' && (line.sfx_plan || []).some(plan => plan && plan.isGenerating)
+                )));
                 // 隐藏的工程 JSON 文件输入框。
                 const importFileRef = ref(null);
                 // 隐藏的小说 TXT 文件输入框。
@@ -2744,8 +2775,11 @@ ${voiceReferenceHardConstraints}`;
                 const loadStoredAssetBlob = async (itemOrKey, fallbackPath = '') => {
                     // 新版工程用 assetKey 定位二进制；旧版工程可能只有路径。
                     const storageKey = typeof itemOrKey === 'string' ? itemOrKey : getAssetStorageKey(itemOrKey);
-                    // 显式 fallbackPath 优先，未提供时再从对象字段解析。
-                    const effectivePath = fallbackPath || getAssetPath(itemOrKey);
+                    // 稳定 assetKey 只用于 IndexedDB 查找，不能再被当成 /voice/ 下的静态文件路径。
+                    // 只有 fallbackPath 与稳定键不同，才把它视为旧版文件路径回退。
+                    const legacyFallbackPath = fallbackPath && fallbackPath !== storageKey ? fallbackPath : '';
+                    // 显式旧路径优先，未提供时再从对象字段解析。
+                    const effectivePath = legacyFallbackPath || getAssetPath(itemOrKey);
 
                     // 读取优先级 1：当前会话内存中的 File，速度最快且内容最新。
                     if (storageKey && localFileMap.value.has(storageKey)) {
@@ -2761,7 +2795,7 @@ ${voiceReferenceHardConstraints}`;
                         }
                     }
 
-                    // 读取优先级 3：兼容早期把文件路径直接当数据库键的工程。
+                    // 读取优先级 3：兼容早期把真实文件路径直接当数据库键的工程。
                     if (effectivePath && effectivePath !== storageKey) {
                         // 部分导入流程也会暂时按旧路径登记内存文件。
                         if (localFileMap.value.has(effectivePath)) {
@@ -2775,13 +2809,29 @@ ${voiceReferenceHardConstraints}`;
                         }
                     }
 
-                    // 读取优先级 4：从 data URI、网络 URL 或静态文件目录获取。
+                    // 读取优先级 4：仅对真实路径从 data URI、网络 URL 或静态文件目录获取。
                     if (effectivePath) {
                         return createFileFromBlob(await fetchBlobByPath(effectivePath), effectivePath);
                     }
 
                     // 没有键也没有路径时明确返回 null。
                     return null;
+                };
+
+                /**
+                 * 尝试读取工程素材；单个素材缺失时返回 null，不阻断其他资产恢复。
+                 * @param {Object | string} itemOrKey - 素材对象或存储键
+                 * @param {string} [fallbackPath] - 回退加载路径
+                 * @returns {Promise<Blob | File | null>} 找到的素材或 null
+                 */
+                const tryLoadStoredAssetBlob = async (itemOrKey, fallbackPath = '') => {
+                    try {
+                        return await loadStoredAssetBlob(itemOrKey, fallbackPath);
+                    } catch (error) {
+                        const path = fallbackPath || getAssetPath(itemOrKey) || getAssetStorageKey(itemOrKey);
+                        console.warn(`工程素材不可用，跳过恢复: ${path}`, error);
+                        return null;
+                    }
                 };
 
                 /**
@@ -2825,7 +2875,61 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 /**
-                 * 调用 8311 生成一条计划音效，并将返回的 WAV 直接绑定到该计划的稳定资产键。
+                 * 持久化生成式音频，并同步更新当前会话的本地文件和对象 URL。
+                 *
+                 * 台词与 SoundEffect 都属于“生成后即可试听、刷新后仍可恢复”的工程资产，
+                 * 必须先写入 IndexedDB，再更新运行时 URL，避免页面状态看似成功但数据库没有素材。
+                 * @param {Object} item - 绑定音频的台词或 SoundEffect 计划
+                 * @param {Blob | File} blob - 生成接口返回的音频二进制
+                 * @param {string} storageKey - 稳定的 IndexedDB 素材键
+                 * @param {string} filename - 运行时 File 的回退文件名
+                 * @returns {Promise<void>} 素材写入并绑定 URL 后兑现
+                 */
+                const persistGeneratedAudioAsset = async (item, blob, storageKey, filename) => {
+                    if (!item || !blob || !storageKey) {
+                        throw new Error('生成音频缺少可持久化的素材对象、音频或稳定键。');
+                    }
+
+                    // 先提交二进制；只有 IndexedDB 事务完成后才更新页面上的可播放状态。
+                    await saveAssetToDB(storageKey, blob);
+                    const previousUrl = item.audioUrl;
+                    item.audioAssetKey = storageKey;
+                    registerLocalAsset(item, blob, filename);
+                    if (previousUrl) URL.revokeObjectURL(previousUrl);
+                    item.audioUrl = URL.createObjectURL(blob);
+                    // 重新生成同一稳定键时，旧的解码缓存不能继续复用。
+                    audioBufferCache.delete(storageKey);
+                };
+
+                /**
+                 * 根据音效模型取得可提交的对应语言提示词。
+                 * Stable Audio 不接受旧工程遗留的中文 prompt 回退，避免看似成功却生成错误声音。
+                 * @param {Object} plan - LLM 输出或工程恢复的 sfx_plan 项
+                 * @param {Object} model - soundeffect-client.js 提供的模型配置
+                 * @returns {string} 可直接提交给所选音效模型的提示词
+                 */
+                const getSoundEffectGenerationPrompt = (plan, model) => {
+                    const prompt = typeof plan?.prompt === 'string' ? plan.prompt.trim() : '';
+                    if (model?.promptLanguage !== 'en') {
+                        if (!prompt) throw new Error('MOSS-SoundEffect 音效计划缺少中文 prompt。请重新运行 AI 深度分析后再生成。');
+                        return prompt;
+                    }
+
+                    const promptEn = typeof plan?.prompt_en === 'string' ? plan.prompt_en.trim() : '';
+                    if (!promptEn) {
+                        throw new Error('Stable Audio 3 Small-SFX 需要 sfx_plan.prompt_en 的英文提示词。请重新运行 AI 深度分析后再生成。');
+                    }
+                    if (/[\u3400-\u9fff\uf900-\ufaff]/.test(promptEn)) {
+                        throw new Error('Stable Audio 3 Small-SFX 的 prompt_en 必须为全英文提示词。请重新运行 AI 深度分析后再生成。');
+                    }
+                    if (!/TrackType\s*:\s*SFX\s*$/i.test(promptEn)) {
+                        throw new Error('Stable Audio 3 Small-SFX 的 prompt_en 必须以 “TrackType: SFX” 结尾。请重新运行 AI 深度分析后再生成。');
+                    }
+                    return promptEn;
+                };
+
+                /**
+                 * 调用当前选定的本地模型生成一条计划音效，并将返回的 WAV 直接绑定到该计划的稳定资产键。
                  * @param {Object} line - 所属 dialogue 时间轴块
                  * @param {Object} plan - LLM 输出的 sfx_plan 项
                  * @returns {Promise<void>} 生成、保存和运行时 URL 更新结束后兑现
@@ -2838,20 +2942,27 @@ ${voiceReferenceHardConstraints}`;
                     plan.abortController = controller;
 
                     try {
+                        const selectedModel = soundEffectClient.getSoundEffectModel(soundEffectModel.value);
+                        // MOSS 使用中文 prompt；Stable Audio 只接受同一计划的英文 prompt_en。
+                        const generationPrompt = getSoundEffectGenerationPrompt(plan, selectedModel);
                         const audio = await soundEffectClient.generateSoundEffectAudio({
-                            prompt: plan.prompt,
+                            model: selectedModel.id,
+                            prompt: generationPrompt,
                             seconds: plan.duration_seconds,
                             signal: controller.signal
                         });
                         // 首次生成创建稳定键，重新生成覆盖同一键，避免 IndexedDB 残留多份无引用 WAV。
-                        plan.audioAssetKey = plan.audioAssetKey
+                        const audioAssetKey = plan.audioAssetKey
                             || createAssetKey('soundeffect', `${line.id}_${plan.id || 'plan'}.wav`);
-                        await saveAssetToDB(plan.audioAssetKey, audio);
-                        // 同一计划重新生成会覆盖原 WAV，必须清除同键的旧解码缓存。
-                        audioBufferCache.delete(plan.audioAssetKey);
-                        registerLocalAsset(plan, audio, `${line.id}_${plan.id || 'plan'}.wav`);
-                        if (plan.audioUrl) URL.revokeObjectURL(plan.audioUrl);
-                        plan.audioUrl = URL.createObjectURL(audio);
+                        await persistGeneratedAudioAsset(
+                            plan,
+                            audio,
+                            audioAssetKey,
+                            `${line.id}_${plan.id || 'plan'}.wav`
+                        );
+                        plan.generatedWithModel = selectedModel.id;
+                        // 生成结束后立即提交工程快照，确保用户在防抖保存触发前刷新也能恢复该计划。
+                        await saveProjectToDB();
                     } catch (error) {
                         if (error && error.name === 'AbortError') {
                             plan.generationError = '已取消';
@@ -2883,7 +2994,7 @@ ${voiceReferenceHardConstraints}`;
                     try {
                         for (let index = 0; index < pendingPlans.length; index++) {
                             const { line, plan } = pendingPlans[index];
-                            soundEffectGenerationStatus.value = `生成音效 ${index + 1}/${pendingPlans.length}`;
+                            soundEffectGenerationStatus.value = `${selectedSoundEffectModel.value.label} ${index + 1}/${pendingPlans.length}`;
                             // 后端每次请求占用独立 worker 与共享 GPU 锁，因此前端也保持顺序请求。
                             await generateSoundEffect(line, plan);
                         }
@@ -2891,6 +3002,72 @@ ${voiceReferenceHardConstraints}`;
                         isGeneratingSoundEffects.value = false;
                         soundEffectGenerationStatus.value = '';
                     }
+                };
+
+                /**
+                 * 清理单条 SoundEffect 计划的运行时状态和 IndexedDB 音频资产。
+                 * 音效计划本身保留，用户仍可按原提示词重新生成。
+                 * @param {Object} line - 所属 dialogue 时间轴块
+                 * @param {Object} plan - SoundEffect 生成计划
+                 * @returns {Promise<boolean>} IndexedDB 删除是否成功
+                 */
+                const clearGeneratedSoundEffect = async (line, plan) => {
+                    if (!line || !plan) return true;
+                    const audioUrl = plan.audioUrl;
+                    const audioAssetKey = plan.audioAssetKey || `soundeffect_${line.id}_${plan.id || 'plan'}`;
+
+                    // 先清除页面状态和所有内存引用，避免清空后仍能试听旧音频。
+                    plan.audioUrl = '';
+                    plan.generationError = '';
+                    delete plan.soundEffectAudioBase64;
+                    if (audioUrl) URL.revokeObjectURL(audioUrl);
+                    audioBufferCache.delete(audioAssetKey);
+                    if (audioUrl) audioBufferCache.delete(audioUrl);
+                    removeLocalAsset(plan);
+
+                    try {
+                        await deleteAudioAssetFromDB(audioAssetKey);
+                        return true;
+                    } catch (error) {
+                        console.error(`Failed to delete SoundEffect asset ${audioAssetKey} from DB`, error);
+                        return false;
+                    }
+                };
+
+                /**
+                 * 经用户确认后清除当前脚本全部 SoundEffect 音频缓存和生成记录。
+                 * 只删除 WAV 资产与运行时状态，保留 sfx_plan 的提示词和时间轴计划。
+                 * @returns {Promise<void>} 清理完成后兑现
+                 */
+                const clearAllGeneratedSoundEffects = async () => {
+                    if (isAnySoundEffectGenerating.value) {
+                        return alert('请先等待当前 SoundEffect 生成完成，再清空音效。');
+                    }
+
+                    const soundEffectPlans = scriptLines.value.flatMap(line => (
+                        line && line.type === 'dialogue'
+                            ? (line.sfx_plan || []).map(plan => ({ line, plan })).filter(item => item.plan)
+                            : []
+                    ));
+                    if (soundEffectPlans.length === 0) {
+                        return alert('当前脚本没有 SoundEffect 音效计划可以清除。');
+                    }
+
+                    if (!confirm(`确定要清除当前脚本的 ${soundEffectPlans.length} 项 SoundEffect 音效缓存和记录吗？音效计划会保留，此操作不可撤销。`)) {
+                        return;
+                    }
+
+                    const results = await Promise.all(soundEffectPlans.map(({ line, plan }) => (
+                        clearGeneratedSoundEffect(line, plan)
+                    )));
+                    triggerAutoSave();
+
+                    const failedCount = results.filter(result => !result).length;
+                    if (failedCount > 0) {
+                        alert(`已清除页面中的 SoundEffect 音效，但有 ${failedCount} 项 IndexedDB 资产删除失败，请稍后重试。`);
+                        return;
+                    }
+                    alert('当前脚本的所有 SoundEffect 音效缓存和记录已清除。');
                 };
 
                 /** 试听某个已生成并绑定到计划的 SoundEffect WAV。 */
@@ -3371,7 +3548,7 @@ ${voiceReferenceHardConstraints}`;
                         if (!filePath) continue;
 
                         // 加载器会优先使用 assetKey，再兼容旧路径。
-                        const blob = await loadStoredAssetBlob(item, filePath);
+                        const blob = await tryLoadStoredAssetBlob(item, filePath);
                         if (!blob) continue;
 
                         // 建立当前会话 assetKey -> File 映射。
@@ -3405,7 +3582,7 @@ ${voiceReferenceHardConstraints}`;
 
                             // dialogue 的二进制通过 audioAssetKey 定位，旧数据回退固定命名规则。
                             if (line.type === 'dialogue') {
-                                const blob = await loadStoredAssetBlob(line, line.audioAssetKey || `line_audio_${line.id}`);
+                                const blob = await tryLoadStoredAssetBlob(line, line.audioAssetKey || `line_audio_${line.id}`);
                                 if (blob) {
                                     // 恢复内存 File 映射，供播放、导出或重新上传使用。
                                     registerLocalAsset(line, blob, `${line.id}.wav`);
@@ -3415,7 +3592,7 @@ ${voiceReferenceHardConstraints}`;
                                 // SoundEffect 输出绑定在计划本身，不从工程级 SFX 素材库查找。
                                 for (const plan of line.sfx_plan || []) {
                                     const planKey = plan.audioAssetKey || `soundeffect_${line.id}_${plan.id}`;
-                                    const planBlob = await loadStoredAssetBlob(plan, planKey);
+                                    const planBlob = await tryLoadStoredAssetBlob(plan, planKey);
                                     if (!planBlob) continue;
                                     plan.audioAssetKey = planKey;
                                     registerLocalAsset(plan, planBlob, `${line.id}_${plan.id}.wav`);
@@ -3423,7 +3600,8 @@ ${voiceReferenceHardConstraints}`;
                                 }
                                 // EditX 结果拥有独立资产键；原台词缺失时也应允许它单独恢复试听。
                                 const editKey = line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`;
-                                const editBlob = await loadStoredAssetBlob(editKey);
+                                // 传对象而不是裸字符串，明确告诉加载器 editKey 是 IndexedDB 稳定键，不是文件路径。
+                                const editBlob = await tryLoadStoredAssetBlob({ audioAssetKey: editKey });
                                 if (editBlob) {
                                     line.stepAudioEditXAudioAssetKey = editKey;
                                     registerLocalAsset(editKey, editBlob, `${line.id}_step-audio-editx.wav`);
@@ -5221,19 +5399,13 @@ ${voiceReferenceHardConstraints}`;
                             throw new Error(`TTS 服务未返回音频: ${text.slice(0, 500) || contentType}`);
                         }
                         // 台词稳定键默认由 line.id 派生，重新生成会覆盖同键素材。
-                        line.audioAssetKey = line.audioAssetKey || `line_audio_${line.id}`;
-                        // 先持久化二进制，再登记运行时映射与播放 URL。
-                        // 覆盖该台词稳定键对应的旧生成结果。
-                        await saveAssetToDB(line.audioAssetKey, blob);
-                        // 登记当前页面会话可直接访问的 Blob。
-                        registerLocalAsset(line, blob, `${line.id}.wav`);
-                        // 为浏览器播放控件创建临时对象 URL。
-                        const audioUrl = URL.createObjectURL(blob);
-                        // 把新 URL 绑定回台词响应式对象。
-                        line.audioUrl = audioUrl;
+                        const audioAssetKey = line.audioAssetKey || `line_audio_${line.id}`;
+                        await persistGeneratedAudioAsset(line, blob, audioAssetKey, `${line.id}.wav`);
                         // 新生成音频默认使用完整范围，清除旧音频裁剪比例。
                         line.trimStart = 0;
                         line.trimEnd = 1;
+                        // 与 SoundEffect 一样，生成完成后立即落工程快照，减少刷新时的竞态窗口。
+                        await saveProjectToDB();
 
                     } catch (e) {
                         // Don't show alert for abort errors, just log and re-throw
@@ -6000,9 +6172,9 @@ ${voiceReferenceHardConstraints}`;
                                             console.warn('导出台词音频失败:', line.id, e);
                                         }
                                     }
-                                    const editBlob = await loadStoredAssetBlob(
-                                        line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`
-                                    );
+                                    const editAssetKey = line.stepAudioEditXAudioAssetKey || `line_step_audio_editx_${line.id}`;
+                                    // 编辑音频键只用于 IndexedDB 查找，不能回退到 /voice/<assetKey>。
+                                    const editBlob = await loadStoredAssetBlob({ audioAssetKey: editAssetKey });
                                     if (editBlob) {
                                         try {
                                             line.stepAudioEditXAudioBase64 = await blobToBase64(editBlob);
@@ -7679,8 +7851,8 @@ ${voiceReferenceHardConstraints}`;
                     analysisAbortController.value = new AbortController();
 
                     // 音效不再引用工程素材库；按有声书制作的叙事提示、前景动作、短氛围和转场四层生成可落地计划。
-                    const sfxSection = `# 悬疑恐怖短篇的 SoundEffect 音效设计
-服务对白，用声音确认空间、动作、威胁接近和转折。每个 dialogue 必须输出 sfx_plan：无事件为 []，有事件仅放在承载它的 dialogue。页面只将 prompt 与 duration_seconds 发送给 MOSS-SoundEffect。直接输出 JSON，不要复述、检查或推理。
+                    const sfxSection = `# 悬疑恐怖短篇的 SoundEffect 双语音效设计
+服务对白，用声音确认空间、动作、威胁接近和转折。每个 dialogue 必须输出 sfx_plan：无事件为 []，有事件仅放在承载它的 dialogue。每项必须同时提供 MOSS-SoundEffect v2 使用的中文 prompt 与 Stable Audio 3 Small-SFX 使用的英文 prompt_en。页面选择 MOSS 时只发送 prompt，选择 Stable Audio 时只发送 prompt_en；两项必须描述同一个声音事件。直接输出 JSON，不要复述、检查或推理。
 
 ## 四类可用声音
 1. semantic_cue（叙事提示）：来电铃声、视频来电、拨号/回铃、视频或电话接通、挂断、忙音/信号中断、短信/设备通知、门铃、警报、相机快门等状态信号。“视频通话接通”用短促接通提示音，非来电铃；“电话响了”才用来电铃。
@@ -7695,9 +7867,11 @@ ${voiceReferenceHardConstraints}`;
 
 ## sfx_plan 输出契约
 1. 不输出独立 type="sfx"、素材引用或文件名；音效只能写入 dialogue.sfx_plan。
-2. 每项为 {"id":"全文唯一的简短 snake_case ID","action":"generate","purpose":"semantic_cue|foreground_action|ambience|transition","sound_class":"声音类别","prompt":"中文非语言声音描述","anchor":"dialogue_start|dialogue_end|break_start","offset_ms":0,"duration_seconds":1.2,"mix_preset":"cue_before_dialogue|action_under_dialogue|soft_ambience|transition","required":false}。action 固定为 generate；offset_ms 为 -500 到 5000；duration_seconds 为 0.2 到 30。
+2. 每项为 {"id":"全文唯一的简短 snake_case ID","action":"generate","purpose":"semantic_cue|foreground_action|ambience|transition","sound_class":"声音类别","prompt":"中文非语言声音描述","prompt_en":"English non-speech sound-effect description ending exactly with TrackType: SFX","anchor":"dialogue_start|dialogue_end|break_start","offset_ms":0,"duration_seconds":1.2,"mix_preset":"cue_before_dialogue|action_under_dialogue|soft_ambience|transition","required":false}。action 固定为 generate；offset_ms 为 -500 到 5000；duration_seconds 为 0.2 到 30。
 3. semantic_cue 用 dialogue_start + cue_before_dialogue；仅需台词前提示时 offset_ms 为 -40 到 -120。foreground_action 用 dialogue_start + action_under_dialogue 且 offset_ms 非负；句末/转场用 dialogue_end 或 break_start + transition；ambience 用 soft_ambience。purpose 必须匹配 mix_preset。
-4. prompt 是 MOSS-SoundEffect 唯一接收的文字，依次写声源、动作/节奏、原文可确定材质/质感、空间/距离、自然收尾；不确定材质用中性描述，不得编造。人体非语言 SFX 写“无可辨认说话声”。required 仅在缺声影响剧情理解时为 true。`;
+4. prompt 是 MOSS-SoundEffect 接收的中文文字，依次写声源、动作/节奏、原文可确定材质/质感、空间/距离、自然收尾；不确定材质用中性描述，不得编造。人体非语言 SFX 写“无可辨认说话声”。
+5. prompt_en 是 Stable Audio 3 Small-SFX 接收的全英文文字。用一条简短、具体的英文声学描述写清声源、动作/节奏、可确定材质/质感、空间/距离和自然收尾；不写中文、角色名、台词、可辨认语言、音乐、配乐、情绪解释、镜头或视觉描述。人体非语言声音明确写 \`no intelligible speech or voices\`；绝不把中文 prompt 原样复制到 prompt_en，也不要用字段名、项目符号或负面提示词列表代替自然英文描述。每条 prompt_en 必须且只能在最后追加 \`TrackType: SFX\`。
+6. 双语字段是同一声音事件的两种生成描述，不得一边写开门、另一边写脚步。示例：\`"prompt":"近距离收音，木门缓慢推开，铰链短促吱呀后停止，无可辨认说话声","prompt_en":"Close-miked wooden door slowly opens; a brief hinge creak, then silence. No intelligible speech or voices. TrackType: SFX"\`。required 仅在缺声影响剧情理解时为 true。`;
 
                     // BGM 与音效区独立，按需输出控制块，绝不把音乐当成固定背景。
                     let bgmSection = "";
@@ -7768,21 +7942,25 @@ ${voiceReferenceHardConstraints}`;
                         // 允许用户填写服务根地址或完整 OpenAI 兼容端点。
                         if (!url.endsWith('/chat/completions')) url += '/chat/completions';
 
-                        // 脚本分析使用非流式响应，便于一次性提取并解析完整 JSON 数组。
-                        let body = { model: cfg.model, messages: [{ role: 'user', content: finalPrompt }], stream: false };
-
-                        // 配置中的 params 是可选 JSON，可覆盖或扩展标准请求字段。
+                        // 配置中的 params 是可选 JSON，可补充 temperature、max_tokens 等兼容参数。
+                        let extraParams = {};
                         if (cfg.params) {
                             try {
                                 // 把用户文本参数解析为普通对象。
-                                const extraParams = JSON.parse(cfg.params);
-                                // 额外参数后展开，因此同名字段以用户配置为准。
-                                body = { ...body, ...extraParams };
+                                extraParams = JSON.parse(cfg.params);
                             } catch (e) {
                                 // 参数 JSON 无效时保留基础请求继续分析。
                                 console.warn('解析额外参数失败:', e);
                             }
                         }
+                        // 用户参数可以扩展生成设置，但模型、完整 Prompt 和非流式解析协议不可覆盖。
+                        // 这样 textarea 经过变量替换后的 sfxSection 一定进入 DeepSeek 的 messages[0].content。
+                        const body = {
+                            ...extraParams,
+                            model: cfg.model,
+                            messages: [{ role: 'user', content: finalPrompt }],
+                            stream: false
+                        };
 
                         // 向 OpenAI 兼容聊天接口发送脚本分析请求。
                         const res = await fetch(url, {
@@ -7927,6 +8105,9 @@ ${voiceReferenceHardConstraints}`;
                                         ? source.prompt.trim()
                                         : '';
                                     if (!prompt) return plans;
+                                    const promptEn = source && typeof source.prompt_en === 'string'
+                                        ? source.prompt_en.trim()
+                                        : '';
 
                                     const purpose = allowedPurposes.has(source.purpose)
                                         ? source.purpose
@@ -7947,6 +8128,8 @@ ${voiceReferenceHardConstraints}`;
                                         sound_class: soundClass,
                                         // 限制提示词长度，防止异常模型回复膨胀工程与界面。
                                         prompt: prompt.slice(0, 1000),
+                                        // Stable Audio 3 Small-SFX 以英文描述训练；旧工程缺字段时会在生成处安全回退。
+                                        prompt_en: promptEn.slice(0, 1000),
                                         anchor: allowedAnchors.has(source.anchor) ? source.anchor : 'dialogue_start',
                                         offset_ms: Number.isFinite(rawOffset)
                                             ? Math.max(-500, Math.min(5000, Math.round(rawOffset)))
@@ -8577,8 +8760,10 @@ ${voiceReferenceHardConstraints}`;
                     saveEmotion, editEmotion, deleteEmotion, resetEmotionForm, resetEmotionsToDefault,
                     isSystemEmotion,
 
-                    // SoundEffect 计划音效生成、批量生成与试听入口。
-                    generateSoundEffect, generateAllSoundEffects, isGeneratingSoundEffects,
+                    // SoundEffect 模型选择、计划音效生成、批量生成与试听入口。
+                    soundEffectModel, soundEffectModelOptions, selectedSoundEffectModel,
+                    generateSoundEffect, generateAllSoundEffects, isGeneratingSoundEffects, isAnySoundEffectGenerating,
+                    clearAllGeneratedSoundEffects,
                     soundEffectGenerationStatus, playGeneratedSoundEffect,
 
                     // BGM 资源库、表单、编辑状态及其 CRUD/上传入口。

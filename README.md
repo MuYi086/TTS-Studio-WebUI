@@ -8,7 +8,7 @@
 
 ## 主要能力
 
-- 用 OpenAI 兼容的 LLM（大语言模型）把小说或剧本拆为 `dialogue`、`bgm` 两类脚本块；默认分析提示词按自然语义和一口气拆分长文本，中文旁白以 25–45 个汉字为软目标，并可为段间换气设置约 0.1–0.2 秒静音。原文明确的非语言事件写入台词内 `sfx_plan`，并由 MOSS-SoundEffect 生成对应 WAV。
+- 用 OpenAI 兼容的 LLM（大语言模型）把小说或剧本拆为 `dialogue`、`bgm` 两类脚本块；默认分析提示词按自然语义和一口气拆分长文本，中文旁白以 25–45 个汉字为软目标，并可为段间换气设置约 0.1–0.2 秒静音。原文明确的非语言事件写入台词内 `sfx_plan`，每项同时保存 MOSS-SoundEffect 的中文 `prompt` 与 Stable Audio 3 Small-SFX 的英文 `prompt_en`，再按选定模型生成对应 WAV。
 - “配音与播放”提供可控克隆选择，默认“关闭可控克隆”：LLM（大语言模型）剧本分析会使用极致克隆提示词，把全部台词收敛为 `ultimate`；显式选择“开启可控克隆”后才使用可控克隆提示词，按需规划 `ultimate` / `controllable` 和表演档位。非语言标签只在原文明示可听见的对应发声时输出，不能由标点或情绪猜测。详见 [VoxCPM2 合成音频最佳实践](VoxCpm2合成音频最佳实践.md)。
 - 为角色绑定本地参考音频，或以 Qwen / MiMo 生成参考音色和可编辑的参考文案。
 - 在音色与 BGM 资源库中显示波形、试听进度和可视化裁剪范围；SoundEffect 音效则在对应台词计划上生成和试听。
@@ -63,7 +63,7 @@ Step-Audio-EditX 编辑按钮第一次使用当前行已生成的原始音频作
 
 本机默认提供 Qwen3-TTS（`8305`）、VoxCPM2（`8306`）、Ming-omni-tts（`8306`）和 LongCat-AudioDiT-3.5B（`8307`）内置配置；用户选择的模型会直接决定台词合成服务。旧配置仍保留在浏览器中，但不会被静默改写或调用。
 
-> 后端 `8311` 的 MOSS-SoundEffect 服务负责全部非语言音效。LLM 分析将明确事件写入 `sfx_plan`；在台词卡片点击“生成音效”或点击“生成全部 SoundEffect 音效”后，WebUI 会调用 `POST /v1/generate`，将返回 WAV 绑定到计划并保存到浏览器本地工程。页面不提供 SFX 素材库或本地音效导入回退路径。
+> SoundEffect 下拉框提供 MOSS-SoundEffect v2（`8311`）和 Stable Audio 3 Small-SFX（`8312`）。LLM 分析会为每个明确事件写入双语 `sfx_plan`：选择 MOSS 时，WebUI 向 `8311/v1/generate` 发送中文 `prompt`；选择 Stable Audio 时，向 `8312/v1/generate` 发送全英文且以 `TrackType: SFX` 结尾的 `prompt_en`。旧工程缺少 `prompt_en` 时仍可用 MOSS；Stable Audio 会提示重新运行 AI 深度分析，而不会把中文提示词发送给英文模型。生成的 WAV 会立即保存到浏览器 IndexedDB（浏览器本地数据库）工程资产，刷新页面后按 `audioAssetKey` 自动恢复。页面不提供 SFX 素材库或本地音效导入回退路径。
 
 ## 推荐流程
 
@@ -71,7 +71,7 @@ Step-Audio-EditX 编辑按钮第一次使用当前行已生成的原始音频作
 2. 导入参考音频与 BGM，维护情绪预设。
 3. 在“脚本制作”粘贴原文；默认“关闭可控克隆”，如需 LLM 按台词规划可控克隆，先选择“开启可控克隆”，再运行“LLM 深度分析”。检查角色和脚本块；长旁白应优先在自然语义停顿处分段，不要按固定字数硬切。
 4. 分析角色音色，生成或编辑参考文案，再通过 Qwen / MiMo / VoxCPM2 生成并绑定参考音色；台词合成时可在模型下拉框选择 LongCat-AudioDiT。
-5. 在台词卡片生成并试听 `sfx_plan` 的 SoundEffect 音效，再调整停顿、音量与裁剪范围；需要强化情绪时，先生成单行原音频，再点击“使用Step-Audio-EditX”试听编辑结果。若要叠加效果，可连续点击该按钮；清除编辑结果即可回到原始音频基线。
+5. 在台词卡片生成并试听 `sfx_plan` 的 SoundEffect 音效，再调整停顿、音量与裁剪范围；需要重新生成前可点击“清空所有音效”删除当前脚本的音效缓存和生成记录（保留音效计划）；需要强化情绪时，先生成单行原音频，再点击“使用Step-Audio-EditX”试听编辑结果。若要叠加效果，可连续点击该按钮；清除编辑结果即可回到原始音频基线。
 6. 定期导出完整工程；最终导出 `SRT`、`WAV` 或 `MP4`。
 
 ## 本地数据与备份
@@ -79,6 +79,7 @@ Step-Audio-EditX 编辑按钮第一次使用当前行已生成的原始音频作
 - 配置和 Prompt（提示词）保存在浏览器 `localStorage`。
 - 每日背景使用独立键 `storyforge_bing_daily_background_date` 与 `storyforge_bing_daily_background_url`；该展示缓存不进入工程文件、`UnitaleDB` 或导出内容。
 - 工程与音频资产保存在 IndexedDB（浏览器本地数据库）的 `UnitaleDB`。
+- 生成的台词、Step-Audio-EditX 与 SoundEffect 音频按稳定 `audioAssetKey` 从 `UnitaleDB.assets` 恢复；稳定键不是 `/voice/` 静态文件路径，只有旧版真实文件名/路径才会执行静态文件回退。
 - 清理站点数据、更换浏览器或使用无痕窗口前，请先导出完整工程；不要提交包含 API Key 的浏览器数据或截图。
 
 ## 文档导航

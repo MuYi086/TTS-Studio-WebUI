@@ -1,0 +1,1 @@
+在index.html中，点击按钮"生成全部 SoundEffect 音效"和@click="generateSoundEffect(line, plan)"后是有音效音频，也可以播放的，但是刷新页面后就没有的，应该要做成和@click.stop="generateLineAudio(line)"一样是可以记住临时文件的，这样我刷新页面后已经生成的音频也还在,帮我对应调整`index.html`的逻辑，如果后端逻辑也要对应调整的，你也要对`~/github/TTS-and-VoiceDesign`的/api和/soundEffect做对应优化

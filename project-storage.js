@@ -109,7 +109,7 @@
             const purpose = purposes.has(item.purpose) ? item.purpose : 'foreground_action';
             const duration = toNumber(item.duration_seconds, 1.0);
             const planId = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `sfx_plan_${index + 1}`;
-            plans.push({
+            const normalizedPlan = {
                 ...item,
                 id: planId,
                 action: 'generate',
@@ -130,7 +130,10 @@
                 audioUrl: '',
                 isGenerating: false,
                 generationError: ''
-            });
+            };
+            // 取消控制器属于当前页面运行时对象，不能随工程快照跨会话序列化。
+            delete normalizedPlan.abortController;
+            plans.push(normalizedPlan);
             return plans;
         }, []);
     }
@@ -421,6 +424,15 @@
                     delete safe.isStepAudioEditXEditing;
                     delete safe.abortController;
                     delete safe.stepAudioEditXAbortController;
+                    // SoundEffect 计划也可能在生成中挂载取消控制器，逐项清理运行时字段。
+                    safe.sfx_plan = ensureArray(safe.sfx_plan).map((plan) => {
+                        const safePlan = cloneData(plan) || {};
+                        delete safePlan.audioUrl;
+                        delete safePlan.isGenerating;
+                        delete safePlan.generationError;
+                        delete safePlan.abortController;
+                        return safePlan;
+                    });
                     return safe;
                 })
             }
