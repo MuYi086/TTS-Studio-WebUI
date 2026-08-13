@@ -264,7 +264,7 @@
             // 缺少 emotion 时回退到 Step-Audio-EditX 官方情绪词表中的中性近似标签。
             emotion: source.emotion || 'coldness',
             intensity: source.intensity || '中等',
-            // VoxCPM2 表演计划独立于 IndexTTS2 的 emotion / intensity，不能混用两者的语义。
+            // VoxCPM2 表演计划独立于通用 emotion / intensity 字段，不能混用两者的语义。
             clone_mode: cloneMode,
             delivery_profile: resolvedDeliveryProfile,
             // 括号内的自然语言表演指令与 text 分开保存，兼容可控克隆的逐句控制。

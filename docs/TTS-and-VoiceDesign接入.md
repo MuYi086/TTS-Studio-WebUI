@@ -28,7 +28,7 @@ curl http://127.0.0.1:8313/v1/health
 | VoxCPM2 | `8306` | `voxcpm2` | `audio_path`、`text`、`backend="voxcpm2"`、`clone_mode`，再按模式二选一传 `prompt_text` 或 `control_instruction`，以及 `nonverbal_tags`；`cfg_value` 由后端 `VOXCPM2_CFG_VALUE` 统一控制 |
 | LongCat-AudioDiT-3.5B-bf16 | `8307` | `longcat-audiodit` | `audio_path`、`text`、准确的 `prompt_text`；worker 按官方接口拼接参考文本与目标文本，并使用 24 kHz 单声道参考音频 |
 
-WebUI 会为 Qwen3-TTS、VoxCPM2、Ming-omni-tts 和 LongCat-AudioDiT 创建内置 TTS 配置；用户在脚本工作台的 TTS 下拉框中选中的配置决定当前台词请求的 Base URL 与后端模型。历史配置会保留在浏览器中，但只有协议可识别的本地模型才进入当前合成选择器，页面不会把旧端口静默改写为其他模型。
+WebUI 会为 Qwen3-TTS、VoxCPM2 和 LongCat-AudioDiT 创建内置 TTS 配置；用户在脚本工作台的 TTS 下拉框中选中的配置决定当前台词请求的 Base URL 与后端模型。历史配置会保留在浏览器中，但只有协议可识别的本地模型才进入当前合成选择器，页面不会把旧端口静默改写为其他模型。
 
 四个本地 TTS 模型成功返回 WAV 后，后端还会将同一份原始音频同步保存到 `TTS-and-VoiceDesign/api/tempAudio/`；这与浏览器 IndexedDB 的工程资产保存相互独立，不会改变页面播放和导出流程。
 

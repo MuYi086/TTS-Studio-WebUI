@@ -15,15 +15,6 @@ window.voiceDesigns = [
         environment: 'moss-voiceGenerator',
         url: 'http://127.0.0.1:8300/v1/moss/design'
     },
-    // 设计音色效果差，废弃
-    // {
-    //     id: 'ming-omni-tts',
-    //     name: 'Ming-omni-tts 0.5B',
-    //     provider: 'ming',
-    //     type: 'local_model',
-    //     environment: 'Ming-omni-tts-0.5B',
-    //     url: 'http://127.0.0.1:8300/v1/Ming/design'
-    // },
     {
         id: 'mimo-voicedesign',
         name: 'MiMo VoiceDesign',

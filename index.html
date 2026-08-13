@@ -232,7 +232,7 @@
                                 {{ ttsModelLabel(option) }}
                             </option>
                         </select>
-                        <p class="mt-1 text-[10px] text-slate-400">8305 使用 Qwen3-TTS；8306 根据选择的模型分发到 VoxCPM2 或 Ming；8307 使用 LongCat-AudioDiT-3.5B。</p>
+                        <p class="mt-1 text-[10px] text-slate-400">8305 使用 Qwen3-TTS；8306 使用 VoxCPM2；8307 使用 LongCat-AudioDiT-3.5B。</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -883,7 +883,7 @@
                                         </select>
                                     </div>
 
-                                    <!-- VoxCPM2 克隆与表演计划：独立于 IndexTTS2 情绪向量，供逐句切换极致/可控克隆。 -->
+                                    <!-- VoxCPM2 克隆与表演计划：供逐句切换极致/可控克隆。 -->
                                     <div class="w-40 flex-shrink-0 space-y-1 flex flex-col justify-center">
                                         <select v-model="line.clone_mode" @change="updateCloneMode(line)"
                                             class="w-full px-2 py-1.5 text-xs border rounded bg-indigo-50 focus:ring-1 focus:ring-indigo-500 outline-none text-indigo-700 font-bold"
@@ -1703,13 +1703,11 @@
                 const isEditing = ref(false);
 
                 // TTS 配置状态
-                // 本地服务按模型能力分组；8306 同时承载 VoxCPM2 与 Ming，8307 独立承载 LongCat。
+                // 本地服务按模型能力分组；8306 承载 VoxCPM2，8307 独立承载 LongCat。
                 const TTS_PROTOCOLS = {
-                    indextts2: 'indextts2',
                     referenceTextClone: 'reference-text-clone',
                     qwen3Tts: 'qwen3-tts',
                     voxcpm2: 'voxcpm2',
-                    ming: 'ming-omni-tts',
                     longcatAudioDit: 'longcat-audiodit',
                     dotsTtsSoar: 'dots-tts-soar'
                 };
@@ -1731,14 +1729,6 @@
                         environment: 'voxcpm2'
                     },
                     {
-                        id: 'ming-omni-tts',
-                        name: 'Ming-omni-tts 0.5B',
-                        backend: 'ming',
-                        protocol: TTS_PROTOCOLS.ming,
-                        baseUrl: 'http://127.0.0.1:8306',
-                        environment: 'Ming-omni-tts-0.5B'
-                    },
-                    {
                         id: 'longcat-audiodit-3.5b-bf16',
                         name: 'LongCat-AudioDiT 3.5B',
                         backend: 'longcat-audiodit',
@@ -1755,7 +1745,7 @@
                         environment: 'dots_tts_soar'
                     }
                 ]);
-                // 端口可推断 Qwen/Vox/LongCat；8306 的 Ming 必须由 modelId/backend 明确指定。
+                // 端口可推断 Qwen/Vox/LongCat。
                 const TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT = Object.freeze({
                     '8305': TTS_PROTOCOLS.qwen3Tts,
                     '8306': TTS_PROTOCOLS.voxcpm2,
@@ -1792,19 +1782,21 @@
                     // 先纠正当前后端的默认端口配置；未知端口才使用用户保存的协议。
                     const inferredProtocol = inferTtsProtocolFromBaseUrl(baseUrl);
                     if (inferredProtocol) return inferredProtocol;
-                    return Object.values(TTS_PROTOCOLS).includes(value) ? value : TTS_PROTOCOLS.indextts2;
+                    return Object.values(TTS_PROTOCOLS).includes(value) ? value : TTS_PROTOCOLS.referenceTextClone;
                 };
                 const getTtsBackend = (config) => {
                     const explicit = String(config?.backend || '').trim().toLowerCase();
-                    if (explicit === 'ming' || explicit.includes('ming') || explicit.includes('omni')) return 'ming';
                     if (explicit.includes('longcat') || explicit.includes('audiodit')) return 'longcat-audiodit';
                     if (explicit === 'qwen3-tts' || explicit.includes('qwen')) return 'qwen3-tts';
                     if (explicit.includes('dots')) return 'dots-tts-soar';
+                    // 未知的显式后端保持为历史配置，不能仅凭端口回退到 VoxCPM2。
+                    if (explicit) return '';
                     const modelId = String(config?.modelId || '').toLowerCase();
-                    if (modelId.includes('ming') || modelId.includes('omni')) return 'ming';
                     if (modelId.includes('longcat') || modelId.includes('audiodit')) return 'longcat-audiodit';
                     if (modelId.includes('qwen')) return 'qwen3-tts';
                     if (modelId.includes('dots')) return 'dots-tts-soar';
+                    // 未知模型标识保持为历史配置，避免错误调用当前端口的模型。
+                    if (modelId) return '';
                     if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.qwen3Tts) return 'qwen3-tts';
                     if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.voxcpm2) return 'voxcpm2';
                     if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.longcatAudioDit) return 'longcat-audiodit';
@@ -1815,7 +1807,6 @@
                 const TTS_MODEL_LABELS = Object.freeze({
                     'qwen3-tts': 'Qwen3-TTS',
                     voxcpm2: 'VoxCPM2',
-                    ming: 'Ming-omni-tts-0.5B',
                     'longcat-audiodit': 'LongCat-AudioDiT 3.5B',
                     'dots-tts-soar': 'dots.tts-soar'
                 });
@@ -1824,7 +1815,7 @@
                     if (TTS_MODEL_LABELS[backend]) return TTS_MODEL_LABELS[backend];
                     return String(config?.name || config?.modelId || 'TTS').trim().replace(/\s+/g, '-');
                 };
-                const isSupportedTts = (config) => ['qwen3-tts', 'voxcpm2', 'ming', 'longcat-audiodit', 'dots-tts-soar'].includes(getTtsBackend(config));
+                const isSupportedTts = (config) => ['qwen3-tts', 'voxcpm2', 'longcat-audiodit', 'dots-tts-soar'].includes(getTtsBackend(config));
                 /** 判断当前 TTS 配置是否为支持逐句表演计划的 VoxCPM2 服务。 */
                 const usesVoxCpm2 = (config) =>
                     getTtsBackend(config) === 'voxcpm2';
@@ -2021,15 +2012,14 @@
                     const source = config && typeof config === 'object' ? { ...config } : {};
                     const sourceName = String(source.name || '').toLowerCase();
                     const inferredModel = source.modelId
-                        || (sourceName.includes('ming') ? 'ming-omni-tts' : '')
                         || (sourceName.includes('longcat') || sourceName.includes('audiodit') ? 'longcat-audiodit-3.5b-bf16' : '')
                         || (sourceName.includes('dots') ? 'dots-tts-soar' : '');
                     const option = TTS_MODEL_OPTIONS.find(item => item.id === inferredModel)
                         || TTS_MODEL_OPTIONS.find(item => item.backend === source.backend)
                         || (String(source.baseUrl || '').includes(':8305') ? TTS_MODEL_OPTIONS[0] : null)
                         || (String(source.baseUrl || '').includes(':8306') ? TTS_MODEL_OPTIONS[1] : null)
-                        || (String(source.baseUrl || '').includes(':8307') ? TTS_MODEL_OPTIONS[3] : null)
-                        || (String(source.baseUrl || '').includes(':8308') ? TTS_MODEL_OPTIONS[4] : null);
+                        || (String(source.baseUrl || '').includes(':8307') ? TTS_MODEL_OPTIONS[2] : null)
+                        || (String(source.baseUrl || '').includes(':8308') ? TTS_MODEL_OPTIONS[3] : null);
                     const modelId = option?.id || source.modelId || '';
                     const backend = source.backend || option?.backend || '';
                     return {
@@ -2049,8 +2039,6 @@
                     { name: 'Qwen3-TTS VoiceDesign', provider: 'qwen', type: 'local_model', environment: 'qwen3-voiceDesign', url: 'http://127.0.0.1:8300/v1/qwen/design' },
                     // 默认 MOSS 音色设计端点。
                     { name: 'MOSS VoiceGenerator', provider: 'moss', type: 'local_model', environment: 'moss-voiceGenerator', url: 'http://127.0.0.1:8300/v1/moss/design' },
-                    // 默认 Ming 音色设计端点。
-                    { name: 'Ming-omni-tts 0.5B', provider: 'ming', type: 'local_model', environment: 'Ming-omni-tts-0.5B', url: 'http://127.0.0.1:8300/v1/Ming/design' },
                     // 默认 MiMo 音色设计端点。
                     { name: 'MiMo TTS VoiceDesign', provider: 'mimo', type: 'cloud_api', url: 'http://127.0.0.1:8300/v1/mimo/design' },
                     // VoxCPM2 使用独立的音色设计端点，不与 Qwen 混用。
@@ -2071,7 +2059,6 @@
                     const hint = `${design?.provider || ''} ${design?.name || ''} ${design?.environment || ''}`.toLowerCase();
                     if (hint.includes('qwen')) return 'Qwen3-VoiceDesign';
                     if (hint.includes('moss')) return 'MOSS-VoiceGenerator';
-                    if (hint.includes('ming')) return 'Ming-omni-tts-0.5B';
                     if (hint.includes('mimo')) return 'MiMo-VoiceDesign';
                     if (hint.includes('voxcpm')) return 'VoxCPM2-VoiceDesign';
                     return String(design?.name || design?.environment || 'VoiceDesign').trim().replace(/\s+/g, '-');
@@ -2102,7 +2089,7 @@
                 // 情绪预设状态
                 // 情绪库同时包含八个系统单位向量和用户自定义向量。
                 const emotionPresets = ref([]);
-                // IndexTTS2 使用固定八维向量，因此表单初始值必须保持八个元素。
+                // 情绪编辑协议使用固定八维向量，因此表单初始值必须保持八个元素。
                 const emotionForm = ref({ id: '', name: '', vector: [0, 0, 0, 0, 0, 0, 0, 0] });
                 // 控制情绪表单提交时新增还是覆盖自定义预设。
                 const isEditingEmotion = ref(false);
@@ -2142,21 +2129,6 @@
                 watch(selectedVoiceDesignUrl, (newUrl) => {
                     if (newUrl) localStorage.setItem('storyforge_voice_design_url', newUrl);
                 });
-
-                // 以下状态只服务旧版单段 TTS 测试工具，不属于脚本工作台的角色音色链路。
-                const ttsRefFile = ref(null);
-                // 上传到后端后的逻辑路径，同时作为 check/audio 和 synthesize 的 audio_path。
-                const ttsRefPath = ref('uploaded/ref.wav'); // 默认路径示例
-                // 旧版测试工具将自然语言情绪放入 emo_text。
-                const ttsEmoText = ref('中立');
-                // 合成成功后保存临时 blob URL 供 audio 标签播放。
-                const audioUrl = ref('');
-                // 控制旧版 TTS 测试按钮的加载状态。
-                const ttsLoading = ref(false);
-                // 保存旧版 TTS 测试的用户可见错误。
-                const ttsError = ref('');
-                // 旧版 TTS 测试请求的取消控制器。
-                const ttsAbortController = ref(null);
 
                 // 脚本制作状态
                 // 当前脚本的小说原文工作副本。
@@ -3959,7 +3931,7 @@ ${voiceReferenceHardConstraints}`;
                     ttsForm.value = {
                         ...conf,
                         protocol: normalizeTtsProtocol(conf.protocol, conf.baseUrl, conf.modelId),
-                        modelId: conf.modelId || (getTtsBackend(conf) === 'ming' ? 'ming-omni-tts' : getTtsBackend(conf))
+                        modelId: conf.modelId || getTtsBackend(conf)
                     };
                     isEditingTts.value = true;
                 };
@@ -5284,7 +5256,7 @@ ${voiceReferenceHardConstraints}`;
                         const payload = {
                             text: line.text,
                             audio_path: synthesisReference.audioPath,
-                            // 8306 通过 backend 字段在 VoxCPM2 与 Ming worker 之间路由；8307/8308 为独立服务。
+                            // 8307/8308 为独立服务；8306 只承载 VoxCPM2。
                             backend
                         };
                         if (backend === 'voxcpm2') {
@@ -5304,7 +5276,7 @@ ${voiceReferenceHardConstraints}`;
                                 payload.prompt_text = promptText;
                             }
                         } else {
-                            // Qwen/Ming/LongCat/dots 等克隆协议沿用 prompt_text；dots 允许省略它。
+                            // Qwen/LongCat/dots 等克隆协议沿用 prompt_text；dots 允许省略它。
                             if (promptText) payload.prompt_text = promptText;
                         }
 
@@ -5368,7 +5340,7 @@ ${voiceReferenceHardConstraints}`;
                             }
                         }
 
-                        // 调用统一 TTS 合成端点。
+                        // 调用当前模型对应的统一 TTS 合成端点。
                         const synthRes = await fetch(`${baseUrl}/v2/synthesize`, {
                             // 合成使用 JSON POST。
                             method: 'POST',
@@ -8458,160 +8430,6 @@ ${voiceReferenceHardConstraints}`;
                     }
                 };
 
-                // --- TTS 逻辑 (SonicVale 协议) ---
-
-                /**
-                 * 接收旧版 TTS 测试工具的参考音频文件。
-                 * @param {Event} event - 文件输入框 change 事件
-                 * @returns {void}
-                 */
-                const handleFileUpload = (event) => {
-                    // 旧测试工具只处理文件列表中的第一份参考音频。
-                    const file = event.target.files[0];
-                    if (file) {
-                        // 保存原始 File，合成前可按需上传到 TTS 服务端。
-                        ttsRefFile.value = file;
-                        // 用户未自定义路径或仍用默认占位路径时，根据文件名自动更新。
-                        if (!ttsRefPath.value || ttsRefPath.value === 'uploaded/ref.wav') {
-                            // uploaded/ 与当前 TTS 后端约定的上传目标路径保持一致。
-                            ttsRefPath.value = `uploaded/${file.name}`;
-                        }
-                    }
-                };
-
-                /** 取消旧版 TTS 测试工具的合成请求。 */
-                const stopTtsGeneration = () => {
-                    // 只有上传或合成请求仍活动时才需要取消。
-                    if (ttsAbortController.value) {
-                        // 同一个信号覆盖 check、upload 和 synthesize 三个请求阶段。
-                        ttsAbortController.value.abort();
-                        // 清空控制器，避免重复点击操作已取消请求。
-                        ttsAbortController.value = null;
-                        // 立即恢复旧测试工具按钮状态。
-                        ttsLoading.value = false;
-                    }
-                };
-
-                /**
-                 * 使用当前 IndexTTS2 配置执行旧版单段文本合成测试。
-                 * @returns {Promise<void>} 上传和合成流程结束后兑现
-                 */
-                const synthesizeAudio = async () => {
-                    // 当前版本停用旧版单段测试入口：它没有 VoxCPM2 必需的克隆模式与表演计划，不能再调用任何旧协议。
-                    alert('旧版单段 TTS 测试已停用。请在“剧本工作台”中使用已绑定音色的 VoxCPM2 台词生成。');
-                    return;
-                    // 旧单段测试首先要求有效的 TTS 后端配置。
-                    if (!currentTtsConfig.value) return alert('请选择 TTS 配置');
-                    // 优先合成上一轮 LLM 回复，没有回复时使用输入提示词。
-                    const textToSpeak = result.value || prompt.value;
-                    // 两个来源都为空时没有合成内容。
-                    if (!textToSpeak) return alert('没有可合成的文本 (请先对话或输入提示词)');
-                    // IndexTTS2 请求必须引用服务端可识别的参考音频路径。
-                    if (!ttsRefPath.value) return alert('请指定参考音频路径 ID');
-
-                    // 初始化旧 TTS 测试工具的请求状态和输出。
-                    ttsLoading.value = true;
-                    ttsError.value = '';
-                    audioUrl.value = '';
-
-                    // 创建覆盖完整检查、上传、合成流程的取消控制器。
-                    ttsAbortController.value = new AbortController();
-
-                    // 固定本次调用的配置引用。
-                    const cfg = currentTtsConfig.value;
-                    // 标准化服务根地址并去掉末尾斜杠。
-                    let baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '');
-                    // 允许配置填到 /v1；后续端点会自行追加版本路径。
-                    if (baseUrl.endsWith('/v1')) baseUrl = baseUrl.slice(0, -3);
-
-                    try {
-                        // URL 编码参考路径，向后端确认对应音频是否已经存在。
-                        const checkUrl = `${baseUrl}/v1/check/audio?file_name=${encodeURIComponent(ttsRefPath.value)}`;
-                        // 检查请求同样响应停止按钮的 AbortSignal。
-                        const checkRes = await fetch(checkUrl, { signal: ttsAbortController.value.signal });
-                        // 非成功状态直接停止后续上传/合成链路。
-                        if (!checkRes.ok) throw new Error(`Check failed: ${checkRes.status}`);
-                        // exists 字段用于无本地文件时决定能否直接合成。
-                        const checkData = await checkRes.json();
-
-                        // 选了本地文件就强制上传覆盖，避免同路径的服务端文件内容陈旧或损坏。
-                        if (ttsRefFile.value) {
-                            // multipart/form-data 同时携带二进制与目标完整路径。
-                            const formData = new FormData();
-                            formData.append('audio', ttsRefFile.value);
-                            formData.append('full_path', ttsRefPath.value);
-
-                            // 上传接口由浏览器自动生成 multipart Content-Type boundary。
-                            const uploadRes = await fetch(`${baseUrl}/v1/upload_audio`, {
-                                // 上传使用 POST。
-                                method: 'POST',
-                                // 发送参考音频与 full_path。
-                                body: formData,
-                                // 允许停止按钮取消上传。
-                                signal: ttsAbortController.value.signal
-                            });
-
-                            // 上传失败时不继续使用可能不存在或损坏的参考音频。
-                            if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
-                        // 没选本地文件时只能复用后端已经存在的对应路径。
-                        } else if (!checkData.exists) {
-                            throw new Error(`服务端未找到音频 "${ttsRefPath.value}"，且未选择本地文件进行上传。`);
-                        }
-
-                        // 旧测试表单没有参考文案或 VoxCPM2 模式选择，因此不支持这些克隆协议。
-                        if (usesReferenceText(cfg)) {
-                            throw new Error('参考文本克隆与 VoxCPM2 双模式克隆请在脚本工作台中使用已绑定的音色；此测试工具未提供参考文案或表演档位。');
-                        }
-
-                        // 构造 IndexTTS2 v2 合成协议所需的文本、音频路径与情绪文本。
-                        const synthPayload = {
-                            text: textToSpeak,
-                            audio_path: ttsRefPath.value,
-                            // 用户未输入情绪描述时使用中立作为安全默认值。
-                            emo_text: ttsEmoText.value || '中立'
-                        };
-
-                        // 请求后端执行单段音频合成。
-                        const synthRes = await fetch(`${baseUrl}/v2/synthesize`, {
-                            // 合成使用 POST。
-                            method: 'POST',
-                            headers: {
-                                // 请求体按 JSON 编码。
-                                'Content-Type': 'application/json'
-                            },
-                            // 将合成参数序列化为 JSON 请求体。
-                            body: JSON.stringify(synthPayload),
-                            // 合成阶段继续使用同一个取消信号。
-                            signal: ttsAbortController.value.signal
-                        });
-
-                        // 后端错误正文通常包含模型或素材问题，读取后拼入异常。
-                        if (!synthRes.ok) {
-                            const errText = await synthRes.text();
-                            throw new Error(`Synthesis failed: ${errText}`);
-                        }
-
-                        // 成功响应是二进制音频，将其读取为 Blob。
-                        const blob = await synthRes.blob();
-                        // 创建运行时对象 URL，绑定到页面 audio 控件试听。
-                        audioUrl.value = URL.createObjectURL(blob);
-
-                    } catch (e) {
-                        // 主动停止不写入错误信息。
-                        if (e.name === 'AbortError') {
-                        } else {
-                            // 其他失败记录控制台堆栈并显示在测试工具中。
-                            console.error(e);
-                            ttsError.value = e.message;
-                        }
-                    } finally {
-                        // 任一终态都关闭生成中标志。
-                        ttsLoading.value = false;
-                        // 清空已失效控制器引用。
-                        ttsAbortController.value = null;
-                    }
-                };
-
                 /** 保存脚本分析与音色分析 Prompt 及其启用状态。 */
                 const savePrompt = () => {
                     // 保存前同步清理已移除的旧规则块，避免旧内容再次出现在刷新后的页面。
@@ -8729,14 +8547,9 @@ ${voiceReferenceHardConstraints}`;
                     prompt, result, reasoning, error, loading,
 
                     // 当前可用的本地 TTS 配置及全部配置；历史项不会进入合成。
-                    currentTtsConfigId, ttsConfigs, activeTtsConfigs, activeVoxCpmTtsConfigs, usesVoxCpm2, getTtsBackend, ttsModelLabel, ttsModelOptions: TTS_MODEL_OPTIONS, ttsRefPath, ttsEmoText,
-                    // 旧测试工具生成结果、请求状态和错误信息。
-                    audioUrl, ttsLoading, ttsError,
+                    currentTtsConfigId, ttsConfigs, activeTtsConfigs, activeVoxCpmTtsConfigs, usesVoxCpm2, getTtsBackend, ttsModelLabel, ttsModelOptions: TTS_MODEL_OPTIONS,
                     // 根据当前协议计算的界面显示名称。
                     ttsProtocolLabel,
-
-                    // 旧单段 TTS 测试工具的文件、生成与停止入口。
-                    handleFileUpload, synthesizeAudio, stopTtsGeneration,
 
                     // LLM 配置的保存、编辑、删除和表单复位入口。
                     saveConfig, editConfig, deleteConfig, resetForm,
