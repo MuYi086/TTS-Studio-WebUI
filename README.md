@@ -8,7 +8,7 @@
 
 ## 主要能力
 
-- 用 OpenAI 兼容的 LLM（大语言模型）把小说或剧本拆为 `dialogue`、`bgm` 两类脚本块；默认分析提示词按自然语义和一口气拆分长文本，中文旁白以 25–45 个汉字为软目标，并可为段间换气设置约 0.1–0.2 秒静音。原文明确的非语言事件写入台词内 `sfx_plan`，每项同时保存 MOSS-SoundEffect 的中文 `prompt` 与 Stable Audio 3 Small-SFX / Medium 共用的英文 `prompt_en`，再按选定模型生成对应 WAV。
+- 用 OpenAI 兼容的 LLM（大语言模型）把小说或剧本拆为 `dialogue`、`bgm` 两类脚本块；默认分析提示词按自然语义和一口气拆分长文本，中文旁白以 25–45 个汉字为软目标，并可为段间换气设置约 0.1–0.2 秒静音。原文明确的非语言事件写入台词内 `sfx_plan`，每项同时保存 MOSS-SoundEffect 的中文 `prompt` 与 Stable Audio 3 Medium 使用的英文 `prompt_en`，再按选定模型生成对应 WAV。
 - “配音与播放”提供可控克隆选择，默认“关闭可控克隆”：LLM（大语言模型）剧本分析会使用极致克隆提示词，把全部台词收敛为 `ultimate`；显式选择“开启可控克隆”后才使用可控克隆提示词，按需规划 `ultimate` / `controllable` 和表演档位。非语言标签只在原文明示可听见的对应发声时输出，不能由标点或情绪猜测。详见 [VoxCPM2 合成音频最佳实践](VoxCpm2合成音频最佳实践.md)。
 - 为角色绑定本地参考音频，或以 Qwen / MiMo 生成参考音色和可编辑的参考文案。
 - 在音色与 BGM 资源库中显示波形、试听进度和可视化裁剪范围；SoundEffect 音效则在对应台词计划上生成和试听。
@@ -63,7 +63,7 @@ Step-Audio-EditX 编辑按钮第一次使用当前行已生成的原始音频作
 
 本机默认提供 Qwen3-TTS（`8305`）、VoxCPM2（`8306`）、Ming-omni-tts（`8306`）和 LongCat-AudioDiT-3.5B（`8307`）内置配置；用户选择的模型会直接决定台词合成服务。旧配置仍保留在浏览器中，但不会被静默改写或调用。
 
-> SoundEffect 下拉框提供 MOSS-SoundEffect v2（`8311`）、Stable Audio 3 Small-SFX（`8312`）和 Stable Audio 3 Medium（`8313`）。LLM 分析会为每个明确事件写入双语 `sfx_plan`：选择 MOSS 时，WebUI 向 `8311/v1/generate` 发送中文 `prompt`；选择任一 Stable Audio 模型时，分别向 `8312/v1/generate` 或 `8313/v1/generate` 发送全英文且以 `TrackType: SFX` 结尾的 `prompt_en`。旧工程缺少 `prompt_en` 时仍可用 MOSS；Stable Audio 会提示重新运行 AI 深度分析，而不会把中文提示词发送给英文模型。生成的 WAV 会立即保存到浏览器 IndexedDB（浏览器本地数据库）工程资产，刷新页面后按 `audioAssetKey` 自动恢复。页面不提供 SFX 素材库或本地音效导入回退路径。
+> SoundEffect 下拉框提供 MOSS-SoundEffect v2（`8311`）和默认的 Stable Audio 3 Medium（`8313`）。LLM 分析会为每个明确事件写入双语 `sfx_plan`：选择 MOSS 时，WebUI 向 `8311/v1/generate` 发送中文 `prompt`；选择 Medium 时，WebUI 向 `8313/v1/generate` 发送全英文且以 `TrackType: SFX` 结尾的 `prompt_en`。旧工程缺少 `prompt_en` 时仍可用 MOSS；Medium 会提示重新运行 AI 深度分析，而不会把中文提示词发送给英文模型。生成的 WAV 会立即保存到浏览器 IndexedDB（浏览器本地数据库）工程资产，刷新页面后按 `audioAssetKey` 自动恢复。页面不提供 SFX 素材库或本地音效导入回退路径。
 
 ## 推荐流程
 

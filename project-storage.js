@@ -119,7 +119,7 @@
                     ? item.sound_class.trim()
                     : '未分类声音',
                 prompt: prompt.slice(0, 1000),
-                // Stable Audio 3 Small-SFX 读取该字段；旧工程缺失时保留空串，仍可继续使用 MOSS。
+                // Stable Audio 3 Medium 读取该字段；旧工程缺失时保留空串，仍可继续使用 MOSS。
                 prompt_en: promptEn.slice(0, 1000),
                 anchor: anchors.has(item.anchor) ? item.anchor : 'dialogue_start',
                 offset_ms: clamp(Math.round(toNumber(item.offset_ms, 0)), -500, 5000),

@@ -1,0 +1,1 @@
+已经确认了stable-audio-3-medium模型效果很好，生成的音效还原度比较高，也遵循提示词。现在决定用它作为音效合成的默认模型。另外stable_audio_3_small_sfx_api模型效果比较差，我打算将它相关功能和代码都移除。你检查`~/github/TTS-Studio-WebUI`和`~/github/TTS-and-VoiceDesign`和`~/github/scoring-for-TTS`这三个项目，包括它对应的conda环境也一并移除。注意，不要影响到stable-audio-3-medium模型的使用

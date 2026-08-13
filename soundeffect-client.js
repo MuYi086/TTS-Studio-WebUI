@@ -11,13 +11,6 @@
             maxSeconds: 30,
             promptLanguage: 'zh-CN'
         }),
-        'stable-audio-3-small-sfx': Object.freeze({
-            id: 'stable-audio-3-small-sfx',
-            label: 'Stable Audio 3 Small-SFX',
-            endpoint: 'http://127.0.0.1:8312/v1/generate',
-            maxSeconds: 120,
-            promptLanguage: 'en'
-        }),
         'stable-audio-3-medium': Object.freeze({
             id: 'stable-audio-3-medium',
             label: 'Stable Audio 3 Medium',
@@ -26,11 +19,11 @@
             promptLanguage: 'en'
         })
     });
-    const DEFAULT_MODEL = 'moss-soundEffect-v2';
+    const DEFAULT_MODEL = 'stable-audio-3-medium';
     const DEFAULT_ENDPOINT = SOUND_EFFECT_MODELS[DEFAULT_MODEL].endpoint;
 
     /**
-     * 获取已注册的音效模型，未知值降级到 MOSS 以保持旧调用方兼容。
+     * 获取已注册的音效模型，未知值降级到默认 Medium 以兼容已移除的旧模型标识。
      * @param {string} model 模型标识
      * @returns {Object} 模型请求配置
      */
