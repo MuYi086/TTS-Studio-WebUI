@@ -83,7 +83,7 @@ VoxCPM2 使用独立的 `/v1/voxcpm2/design` 路由，不与 Qwen 音色设计�
 
 ## `8311` / `8313` SoundEffect
 
-后端 `8311` 提供 MOSS-SoundEffect v2.0，`8313` 提供默认的 Stable Audio 3 Medium，均使用 `POST /v1/generate`，请求结束后释放对应 worker 的模型与显存。WebUI 通过 `soundeffect-client.js` 按下拉框选择调用接口；LLM 深度分析会把原文明确的非语言事件写入台词内 `sfx_plan`，每项同时保存 MOSS 使用的中文 `prompt` 和 Medium 使用的英文 `prompt_en`。选择 MOSS 时请求 `8311` 并发送 `prompt`；选择 Medium 时请求 `8313` 并发送全英文、以 `TrackType: SFX` 结尾的 `prompt_en`。两种请求都传递 `seconds`。旧工程缺少 `prompt_en` 时可继续使用 MOSS；选择 Medium 会在请求前提示重新分析，绝不会把中文提示词回退发送给英文模型。返回的 WAV 以计划的 `audioAssetKey` 保存到浏览器 IndexedDB，并在生成完成后立即提交工程快照；刷新页面时会遍历所有脚本计划，按该键恢复临时播放 URL。脚本制作区的“清空所有音效”会删除当前脚本各计划的 IndexedDB WAV、对象 URL、内存映射和解码缓存，但保留 `sfx_plan` 提示词与时间轴计划，便于重新生成。`audioAssetKey` 只用于 IndexedDB 查找，不会被拼接成 `/voice/<assetKey>` 请求；只有旧版真实文件名或路径才执行静态文件回退。生成音频可用于实时试听、离线 WAV/MP4 混音以及完整工程导入导出。页面没有 SFX 素材库、文件导入或名称匹配回退路径。
+后端 `8311` 提供 MOSS-SoundEffect v2.0，`8313` 提供默认的 Stable Audio 3 Medium，均使用 `POST /v1/generate`，请求结束后释放对应 worker 的模型与显存。WebUI 通过 `js/soundeffect-client.js` 按下拉框选择调用接口；LLM 深度分析会把原文明确的非语言事件写入台词内 `sfx_plan`，每项同时保存 MOSS 使用的中文 `prompt` 和 Medium 使用的英文 `prompt_en`。选择 MOSS 时请求 `8311` 并发送 `prompt`；选择 Medium 时请求 `8313` 并发送全英文、以 `TrackType: SFX` 结尾的 `prompt_en`。两种请求都传递 `seconds`。旧工程缺少 `prompt_en` 时可继续使用 MOSS；选择 Medium 会在请求前提示重新分析，绝不会把中文提示词回退发送给英文模型。返回的 WAV 以计划的 `audioAssetKey` 保存到浏览器 IndexedDB，并在生成完成后立即提交工程快照；刷新页面时会遍历所有脚本计划，按该键恢复临时播放 URL。脚本制作区的“清空所有音效”会删除当前脚本各计划的 IndexedDB WAV、对象 URL、内存映射和解码缓存，但保留 `sfx_plan` 提示词与时间轴计划，便于重新生成。`audioAssetKey` 只用于 IndexedDB 查找，不会被拼接成 `/voice/<assetKey>` 请求；只有旧版真实文件名或路径才执行静态文件回退。生成音频可用于实时试听、离线 WAV/MP4 混音以及完整工程导入导出。页面没有 SFX 素材库、文件导入或名称匹配回退路径。
 
 ```json
 {

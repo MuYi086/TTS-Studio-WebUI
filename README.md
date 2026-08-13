@@ -4,7 +4,7 @@
 
 面向多角色有声书制作的浏览器端工作台：将原文分析、角色与参考音色、台词合成、音效与背景音乐编排，以及 `SRT`、`WAV`、`MP4` 导出串为一条本地创作流程。
 
-当前开发入口是根目录的 `index.html`，由 Vue 3 CDN 运行时驱动；`project-storage.js`、`voice-design.js` 和 `soundeffect-client.js` 分别提供工程兼容、音色设计目录和 SoundEffect 请求封装。`webUI/` 已废弃，不再作为功能开发入口。
+当前开发入口是根目录的 `index.html`，由 Vue 3 CDN 运行时驱动；`js/project-storage.js`、`js/voice-design.js` 和 `js/soundeffect-client.js` 分别提供工程兼容、音色设计目录和 SoundEffect 请求封装。`webUI/` 已废弃，不再作为功能开发入口。
 
 ## 主要能力
 

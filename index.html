@@ -1248,9 +1248,9 @@
         </div>
     </div>
 
-    <script src="./project-storage.js"></script>
-    <script src="./voice-design.js"></script>
-    <script src="./soundeffect-client.js"></script>
+    <script src="./js/project-storage.js"></script>
+    <script src="./js/voice-design.js"></script>
+    <script src="./js/soundeffect-client.js"></script>
     <script src="./editConfig/emotion.js"></script>
     <script src="./editConfig/paralinguistic.js"></script>
     <script src="./editConfig/speakingStyle.js"></script>
@@ -1292,21 +1292,21 @@
                 const isSystemEmotion = (name) => SYSTEM_EMOTIONS.some(e => e.key === name || e.name === name);
                 // Step-Audio-EditX 编辑 API 固定由主服务提供；当前行的 prompt 音频会先上传至该服务。
                 const STEP_AUDIO_EDITX_API_BASE_URL = 'http://127.0.0.1:8300';
-                // project-storage.js 通过 window 暴露兼容层，本页只消费它的公开 API。
+                // js/project-storage.js 通过 window 暴露兼容层，本页只消费它的公开 API。
                 const projectStorage = window.UnitaleProjectStorage;
                 // SoundEffect 客户端封装 MOSS（8311）和 Stable Audio 3 Medium（8313）请求；生成结果仍由本页写入工程资产库。
                 const soundEffectClient = window.UnitaleSoundEffectClient;
 
                 // 配套脚本未成功加载时立即终止启动，避免后续以不完整 schema 保存工程。
                 if (!projectStorage) {
-                    throw new Error('project-storage.js 未正确加载');
+                    throw new Error('js/project-storage.js 未正确加载');
                 }
                 if (!soundEffectClient) {
-                    throw new Error('soundeffect-client.js 未正确加载');
+                    throw new Error('js/soundeffect-client.js 未正确加载');
                 }
                 const soundEffectModelOptions = Object.values(soundEffectClient.SOUND_EFFECT_MODELS || {});
                 if (soundEffectModelOptions.length === 0) {
-                    throw new Error('soundeffect-client.js 未提供音效模型配置');
+                    throw new Error('js/soundeffect-client.js 未提供音效模型配置');
                 }
 
                 // 解构工程协议常量和唯一的数据规范化入口，避免页面复制 schema 转换逻辑。
@@ -2043,7 +2043,7 @@
                         environment: source.environment || option?.environment || ''
                     };
                 };
-                // voice-design.js 未加载或未提供配置时使用的本地后端默认端点。
+                // js/voice-design.js 未加载或未提供配置时使用的本地后端默认端点。
                 const fallbackVoiceDesigns = [
                     // 默认 Qwen 音色设计端点。
                     { name: 'Qwen3-TTS VoiceDesign', provider: 'qwen', type: 'local_model', environment: 'qwen3-voiceDesign', url: 'http://127.0.0.1:8300/v1/qwen/design' },
@@ -2056,7 +2056,7 @@
                     // VoxCPM2 使用独立的音色设计端点，不与 Qwen 混用。
                     { name: 'VoxCPM2 VoiceDesign', provider: 'voxcpm2', type: 'local_model', environment: 'voxcpm2', url: 'http://127.0.0.1:8300/v1/voxcpm2/design' }
                 ];
-                // 优先采用外部脚本注入的目录，使用户可只改 voice-design.js 扩展模型。
+                // 优先采用外部脚本注入的目录，使用户可只改 js/voice-design.js 扩展模型。
                 const voiceDesigns = ref(
                     // 同时验证全局值是数组且至少有一项。
                     Array.isArray(window.voiceDesigns) && window.voiceDesigns.length > 0
@@ -2905,7 +2905,7 @@ ${voiceReferenceHardConstraints}`;
                  * 根据音效模型取得可提交的对应语言提示词。
                  * Stable Audio 不接受旧工程遗留的中文 prompt 回退，避免看似成功却生成错误声音。
                  * @param {Object} plan - LLM 输出或工程恢复的 sfx_plan 项
-                 * @param {Object} model - soundeffect-client.js 提供的模型配置
+                 * @param {Object} model - js/soundeffect-client.js 提供的模型配置
                  * @returns {string} 可直接提交给所选音效模型的提示词
                  */
                 const getSoundEffectGenerationPrompt = (plan, model) => {
@@ -3494,7 +3494,7 @@ ${voiceReferenceHardConstraints}`;
 
                     // BGM 旧记录可能没有 volume，恢复页面当前默认 0.3。
                     bgmLibrary.value = (libraries.bgm || []).map(item => ({ ...item, volume: item.volume ?? 0.3 }));
-                    // 音色的字段规范化已经由 project-storage.js 完成，可直接接管列表。
+                    // 音色的字段规范化已经由 js/project-storage.js 完成，可直接接管列表。
                     timbres.value = libraries.timbres || [];
                     // 情绪需要额外保护系统向量，因此走专用合并函数。
                     applyEmotionLibrary(libraries.emotions);

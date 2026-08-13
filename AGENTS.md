@@ -3,7 +3,7 @@
 ## 项目结构与职责
 
 - 根目录 [`index.html`](index.html) 是当前唯一开发入口：Vue 3 通过 CDN 加载，页面、状态和主要业务逻辑集中在一个单文件中。
-- [`project-storage.js`](project-storage.js) 负责工程与 IndexedDB（浏览器本地数据库）兼容；[`voice-design.js`](voice-design.js) 管理音色设计目录；[`soundeffect-client.js`](soundeffect-client.js) 封装音效请求。
+- [`js/project-storage.js`](js/project-storage.js) 负责工程与 IndexedDB（浏览器本地数据库）兼容；[`js/voice-design.js`](js/voice-design.js) 管理音色设计目录；[`js/soundeffect-client.js`](js/soundeffect-client.js) 封装音效请求。
 - [`editConfig/`](editConfig/) 保存 Step-Audio-EditX 的情绪、拟声和表达风格配置；[`Design/`](Design/) 保存界面参考图；[`docs/`](docs/) 保存本地开发、回归和后端接入说明。
 - `webUI/` 已废弃，不要向其中新增或恢复功能。本仓库没有 `package.json`、构建脚本或独立测试目录。
 
@@ -29,7 +29,7 @@ node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');
 
 ## 兼容性与数据安全
 
-不得破坏 `UnitaleDB`、旧 `localStorage` 键、工程 schema、资产键，以及 `dialogue`、`bgm`、`bgImage` 的时间轴语义。工程导入导出优先复用 `project-storage.js`。修改前运行 `git status --short`，不得覆盖无关改动；不要提交 API Key、浏览器数据或生成音频。
+不得破坏 `UnitaleDB`、旧 `localStorage` 键、工程 schema、资产键，以及 `dialogue`、`bgm`、`bgImage` 的时间轴语义。工程导入导出优先复用 `js/project-storage.js`。修改前运行 `git status --short`，不得覆盖无关改动；不要提交 API Key、浏览器数据或生成音频。
 
 ## 提交与 Pull Request
 
