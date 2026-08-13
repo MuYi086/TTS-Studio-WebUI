@@ -86,7 +86,7 @@
     }
 
     /**
-     * 规范化由 MOSS-SoundEffect 生成的音效计划及其绑定 WAV 资产键。
+     * 规范化双模型 SoundEffect 音效计划及其绑定 WAV 资产键。
      * @param {unknown} value 原始 sfx_plan 字段
      * @returns {Array<Object>} 最多两条可持久化计划
      */
@@ -105,6 +105,7 @@
             if (!item || typeof item !== 'object') return plans;
             const prompt = typeof item.prompt === 'string' ? item.prompt.trim() : '';
             if (!prompt) return plans;
+            const promptEn = typeof item.prompt_en === 'string' ? item.prompt_en.trim() : '';
 
             const purpose = purposes.has(item.purpose) ? item.purpose : 'foreground_action';
             const duration = toNumber(item.duration_seconds, 1.0);
@@ -118,6 +119,8 @@
                     ? item.sound_class.trim()
                     : '未分类声音',
                 prompt: prompt.slice(0, 1000),
+                // Stable Audio 3 Small-SFX 读取该字段；旧工程缺失时保留空串，仍可继续使用 MOSS。
+                prompt_en: promptEn.slice(0, 1000),
                 anchor: anchors.has(item.anchor) ? item.anchor : 'dialogue_start',
                 offset_ms: clamp(Math.round(toNumber(item.offset_ms, 0)), -500, 5000),
                 duration_seconds: clamp(duration > 0 ? duration : 1.0, 0.2, 30),
