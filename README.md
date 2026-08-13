@@ -31,6 +31,8 @@ python3 -m http.server 5173
 node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');for(const match of html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}"
 ```
 
+如果使用 VS Code Live Server，仓库已将端口配置为 `5502`，并限制自动刷新监听范围为根目录 `index.html`。修改 Markdown、音频、配置或其他工程文件不会刷新已打开的页面；修改 `.vscode/settings.json` 后请停止并重新启动 Live Server 使配置生效。
+
 ## 连接 TTS-and-VoiceDesign
 
 默认本地后端是 [TTS-and-VoiceDesign](https://github.com/MuYi086/TTS-and-VoiceDesign)。在后端仓库根目录启动：

@@ -1,3 +1,0 @@
-现在index.html中音效下拉选择框支持moss-soundEffect-v2和stable-audio-3-small-sfx和stable-audio-3-medium选择，选择了对应音效模型后调用对应的接口生成音效。
-但是stable-audio-3-medium支持的是英文提示词，我期望在剧本生成时能够让大模型将sfx_plan对象也返回stable-audio-3-medium需要的英文信息，这样选择的时moss-soundEffect-v2时依然使用sfx_plan中的中文提示词调用接口，选择stable-audio-3-medium时使用sfx_plan中的英文提示词调用接口。
-你检查"textarea v-model="customPromptTemplate"完整提交给deepseek的真实参数后帮我优化提示词关于音效的部分
