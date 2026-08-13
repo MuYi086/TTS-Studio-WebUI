@@ -12,6 +12,9 @@ curl http://127.0.0.1:8300/v1/health
 curl http://127.0.0.1:8305/v1/health
 curl http://127.0.0.1:8306/v1/health
 curl http://127.0.0.1:8307/v1/health
+curl http://127.0.0.1:8311/v1/health
+curl http://127.0.0.1:8312/v1/health
+curl http://127.0.0.1:8313/v1/health
 ```
 
 接入 TTS 时，服务需要兼容：
@@ -78,9 +81,9 @@ VoxCPM2 使用独立的 `/v1/voxcpm2/design` 路由，不与 Qwen 音色设计�
 
 参考音频必须已获得说话人授权、清晰且仅含一位说话人；参考文案应与实际语音逐字一致，不能写入未朗读的舞台说明、音频标签或 SSML（语音合成标记语言）。生成的参考音频和文案保存在浏览器本地音色库，并作为后续克隆的对应材料。
 
-## `8311` / `8312` SoundEffect
+## `8311` / `8312` / `8313` SoundEffect
 
-后端 `8311` 提供 MOSS-SoundEffect v2.0、`8312` 提供 Stable Audio 3 Small-SFX，均使用 `POST /v1/generate`，请求结束后释放对应 worker 的模型与显存。WebUI 通过 `soundeffect-client.js` 按下拉框选择调用接口；LLM 深度分析会把原文明确的非语言事件写入台词内 `sfx_plan`，每项同时保存 MOSS 使用的中文 `prompt` 和 Stable Audio 使用的英文 `prompt_en`。选择 MOSS 时请求 `8311` 并发送 `prompt`；选择 Stable Audio 时请求 `8312` 并发送 `prompt_en`，该字段必须为全英文并以 `TrackType: SFX` 结尾。两种请求都传递 `seconds`。旧工程缺少 `prompt_en` 时可继续使用 MOSS；选择 Stable Audio 会在请求前提示重新分析，绝不会把中文提示词回退发送给英文模型。返回的 WAV 以计划的 `audioAssetKey` 保存到浏览器 IndexedDB，并在生成完成后立即提交工程快照；刷新页面时会遍历所有脚本计划，按该键恢复临时播放 URL。脚本制作区的“清空所有音效”会删除当前脚本各计划的 IndexedDB WAV、对象 URL、内存映射和解码缓存，但保留 `sfx_plan` 提示词与时间轴计划，便于重新生成。`audioAssetKey` 只用于 IndexedDB 查找，不会被拼接成 `/voice/<assetKey>` 请求；只有旧版真实文件名或路径才执行静态文件回退。生成音频可用于实时试听、离线 WAV/MP4 混音以及完整工程导入导出。页面没有 SFX 素材库、文件导入或名称匹配回退路径。
+后端 `8311` 提供 MOSS-SoundEffect v2.0、`8312` 提供 Stable Audio 3 Small-SFX、`8313` 提供 Stable Audio 3 Medium，均使用 `POST /v1/generate`，请求结束后释放对应 worker 的模型与显存。WebUI 通过 `soundeffect-client.js` 按下拉框选择调用接口；LLM 深度分析会把原文明确的非语言事件写入台词内 `sfx_plan`，每项同时保存 MOSS 使用的中文 `prompt` 和 Stable Audio 使用的英文 `prompt_en`。选择 MOSS 时请求 `8311` 并发送 `prompt`；选择 Small-SFX 时请求 `8312`，选择 Medium 时请求 `8313`，两者都发送全英文的 `prompt_en`，并以 `TrackType: SFX` 结尾。三种请求都传递 `seconds`。旧工程缺少 `prompt_en` 时可继续使用 MOSS；选择任一 Stable Audio 会在请求前提示重新分析，绝不会把中文提示词回退发送给英文模型。返回的 WAV 以计划的 `audioAssetKey` 保存到浏览器 IndexedDB，并在生成完成后立即提交工程快照；刷新页面时会遍历所有脚本计划，按该键恢复临时播放 URL。脚本制作区的“清空所有音效”会删除当前脚本各计划的 IndexedDB WAV、对象 URL、内存映射和解码缓存，但保留 `sfx_plan` 提示词与时间轴计划，便于重新生成。`audioAssetKey` 只用于 IndexedDB 查找，不会被拼接成 `/voice/<assetKey>` 请求；只有旧版真实文件名或路径才执行静态文件回退。生成音频可用于实时试听、离线 WAV/MP4 混音以及完整工程导入导出。页面没有 SFX 素材库、文件导入或名称匹配回退路径。
 
 ```json
 {

@@ -1294,7 +1294,7 @@
                 const STEP_AUDIO_EDITX_API_BASE_URL = 'http://127.0.0.1:8300';
                 // project-storage.js 通过 window 暴露兼容层，本页只消费它的公开 API。
                 const projectStorage = window.UnitaleProjectStorage;
-                // SoundEffect 客户端封装 MOSS（8311）和 Stable Audio 3（8312）请求；生成结果仍由本页写入工程资产库。
+                // SoundEffect 客户端封装 MOSS（8311）和 Stable Audio 3（8312/8313）请求；生成结果仍由本页写入工程资产库。
                 const soundEffectClient = window.UnitaleSoundEffectClient;
 
                 // 配套脚本未成功加载时立即终止启动，避免后续以不完整 schema 保存工程。
@@ -2917,13 +2917,14 @@ ${voiceReferenceHardConstraints}`;
 
                     const promptEn = typeof plan?.prompt_en === 'string' ? plan.prompt_en.trim() : '';
                     if (!promptEn) {
-                        throw new Error('Stable Audio 3 Small-SFX 需要 sfx_plan.prompt_en 的英文提示词。请重新运行 AI 深度分析后再生成。');
+                        throw new Error(`${model?.label || 'Stable Audio 3'} 需要 sfx_plan.prompt_en 的英文提示词。请重新运行 AI 深度分析后再生成。`);
                     }
                     if (/[\u3400-\u9fff\uf900-\ufaff]/.test(promptEn)) {
-                        throw new Error('Stable Audio 3 Small-SFX 的 prompt_en 必须为全英文提示词。请重新运行 AI 深度分析后再生成。');
+                        throw new Error(`${model?.label || 'Stable Audio 3'} 的 prompt_en 必须为全英文提示词。请重新运行 AI 深度分析后再生成。`);
                     }
-                    if (!/TrackType\s*:\s*SFX\s*$/i.test(promptEn)) {
-                        throw new Error('Stable Audio 3 Small-SFX 的 prompt_en 必须以 “TrackType: SFX” 结尾。请重新运行 AI 深度分析后再生成。');
+                    const trackTypeMarkers = promptEn.match(/\bTrackType\s*:\s*SFX\b/gi) || [];
+                    if (trackTypeMarkers.length !== 1 || !/TrackType: SFX$/i.test(promptEn)) {
+                        throw new Error(`${model?.label || 'Stable Audio 3'} 的 prompt_en 只能在末尾出现一次 “TrackType: SFX”。请重新运行 AI 深度分析后再生成。`);
                     }
                     return promptEn;
                 };
@@ -7852,7 +7853,7 @@ ${voiceReferenceHardConstraints}`;
 
                     // 音效不再引用工程素材库；按有声书制作的叙事提示、前景动作、短氛围和转场四层生成可落地计划。
                     const sfxSection = `# 悬疑恐怖短篇的 SoundEffect 双语音效设计
-服务对白，用声音确认空间、动作、威胁接近和转折。每个 dialogue 必须输出 sfx_plan：无事件为 []，有事件仅放在承载它的 dialogue。每项必须同时提供 MOSS-SoundEffect v2 使用的中文 prompt 与 Stable Audio 3 Small-SFX 使用的英文 prompt_en。页面选择 MOSS 时只发送 prompt，选择 Stable Audio 时只发送 prompt_en；两项必须描述同一个声音事件。直接输出 JSON，不要复述、检查或推理。
+服务对白，用声音确认空间、动作、威胁接近和转折。每个 dialogue 必须输出 sfx_plan：无事件为 []，有事件仅放在承载它的 dialogue。每项必须同时提供 MOSS-SoundEffect v2 使用的中文 prompt 与 Stable Audio 3 Small-SFX / Medium 使用的英文 prompt_en。页面选择 MOSS 时只把 prompt 原样发送到 MOSS；选择任一 Stable Audio 模型时只把 prompt_en 原样发送到英文模型。两个字段必须是同一个事件的两种可直接生成的声学描述，不是概要、翻译说明或给人阅读的注释。直接输出 JSON，不要复述、检查或推理。
 
 ## 四类可用声音
 1. semantic_cue（叙事提示）：来电铃声、视频来电、拨号/回铃、视频或电话接通、挂断、忙音/信号中断、短信/设备通知、门铃、警报、相机快门等状态信号。“视频通话接通”用短促接通提示音，非来电铃；“电话响了”才用来电铃。
@@ -7870,8 +7871,8 @@ ${voiceReferenceHardConstraints}`;
 2. 每项为 {"id":"全文唯一的简短 snake_case ID","action":"generate","purpose":"semantic_cue|foreground_action|ambience|transition","sound_class":"声音类别","prompt":"中文非语言声音描述","prompt_en":"English non-speech sound-effect description ending exactly with TrackType: SFX","anchor":"dialogue_start|dialogue_end|break_start","offset_ms":0,"duration_seconds":1.2,"mix_preset":"cue_before_dialogue|action_under_dialogue|soft_ambience|transition","required":false}。action 固定为 generate；offset_ms 为 -500 到 5000；duration_seconds 为 0.2 到 30。
 3. semantic_cue 用 dialogue_start + cue_before_dialogue；仅需台词前提示时 offset_ms 为 -40 到 -120。foreground_action 用 dialogue_start + action_under_dialogue 且 offset_ms 非负；句末/转场用 dialogue_end 或 break_start + transition；ambience 用 soft_ambience。purpose 必须匹配 mix_preset。
 4. prompt 是 MOSS-SoundEffect 接收的中文文字，依次写声源、动作/节奏、原文可确定材质/质感、空间/距离、自然收尾；不确定材质用中性描述，不得编造。人体非语言 SFX 写“无可辨认说话声”。
-5. prompt_en 是 Stable Audio 3 Small-SFX 接收的全英文文字。用一条简短、具体的英文声学描述写清声源、动作/节奏、可确定材质/质感、空间/距离和自然收尾；不写中文、角色名、台词、可辨认语言、音乐、配乐、情绪解释、镜头或视觉描述。人体非语言声音明确写 \`no intelligible speech or voices\`；绝不把中文 prompt 原样复制到 prompt_en，也不要用字段名、项目符号或负面提示词列表代替自然英文描述。每条 prompt_en 必须且只能在最后追加 \`TrackType: SFX\`。
-6. 双语字段是同一声音事件的两种生成描述，不得一边写开门、另一边写脚步。示例：\`"prompt":"近距离收音，木门缓慢推开，铰链短促吱呀后停止，无可辨认说话声","prompt_en":"Close-miked wooden door slowly opens; a brief hinge creak, then silence. No intelligible speech or voices. TrackType: SFX"\`。required 仅在缺声影响剧情理解时为 true。`;
+5. prompt_en 是 Stable Audio 3 Small-SFX / Medium 接收的全英文文字。重写为 8–40 个英文词的自然、具体、单一声学描述：先写声源和动作，再补充节奏、材质、空间/距离或自然收尾；用句号或分号组织短句。不得出现中文、角色名、台词、可辨认语言、音乐/配乐、情绪解释、镜头/视觉描述、字段名、项目符号、生成参数或负面提示词列表；也不得把中文 prompt 的语序或文字原样搬入。人体非语言声音明确写 \`no intelligible speech or voices\`，物体或环境声不要无意义地附加这句话。每条 prompt_en 只能出现一次 \`TrackType: SFX\`，必须作为最后一个 ASCII 文本片段，后面不再添加任何标点、解释或换行。
+6. 输出前逐项自检：prompt 与 prompt_en 都非空、描述同一声源和同一动作；不得一边写开门、另一边写脚步；duration_seconds 足够覆盖该动作但不靠拉长时长制造氛围；required 仅在缺声会影响剧情理解时为 true。示例：\`"prompt":"近距离收音，木门缓慢推开，铰链短促吱呀后停止，无可辨认说话声","prompt_en":"Close-miked wooden door slowly opens; a brief hinge creak, then silence. No intelligible speech or voices. TrackType: SFX"\`。`;
 
                     // BGM 与音效区独立，按需输出控制块，绝不把音乐当成固定背景。
                     let bgmSection = "";
@@ -8128,7 +8129,7 @@ ${voiceReferenceHardConstraints}`;
                                         sound_class: soundClass,
                                         // 限制提示词长度，防止异常模型回复膨胀工程与界面。
                                         prompt: prompt.slice(0, 1000),
-                                        // Stable Audio 3 Small-SFX 以英文描述训练；旧工程缺字段时会在生成处安全回退。
+                                        // Stable Audio 3 Small-SFX / Medium 以英文描述训练；旧工程缺字段时会在生成处安全回退。
                                         prompt_en: promptEn.slice(0, 1000),
                                         anchor: allowedAnchors.has(source.anchor) ? source.anchor : 'dialogue_start',
                                         offset_ms: Number.isFinite(rawOffset)

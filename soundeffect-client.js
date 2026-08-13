@@ -17,6 +17,13 @@
             endpoint: 'http://127.0.0.1:8312/v1/generate',
             maxSeconds: 120,
             promptLanguage: 'en'
+        }),
+        'stable-audio-3-medium': Object.freeze({
+            id: 'stable-audio-3-medium',
+            label: 'Stable Audio 3 Medium',
+            endpoint: 'http://127.0.0.1:8313/v1/generate',
+            maxSeconds: 380,
+            promptLanguage: 'en'
         })
     });
     const DEFAULT_MODEL = 'moss-soundEffect-v2';
