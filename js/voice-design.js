@@ -12,8 +12,8 @@ window.voiceDesigns = [
         name: 'MOSS VoiceGenerator',
         provider: 'moss',
         type: 'local_model',
-        environment: 'moss-voiceGenerator',
-        url: 'http://127.0.0.1:8300/v1/moss/design'
+        environment: 'moss_voiceGenerator',
+        url: 'http://127.0.0.1:8315/v1/moss/design'
     },
     {
         id: 'mimo-voicedesign',

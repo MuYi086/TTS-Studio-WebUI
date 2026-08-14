@@ -2038,7 +2038,7 @@
                     // Qwen VoiceDesign 已迁移到独立 uv 服务 8314；8300 仅保留后端兼容回退。
                     { name: 'Qwen3-TTS VoiceDesign', provider: 'qwen', type: 'local_model', environment: 'qwen3_voiceDesign', url: 'http://127.0.0.1:8314/v1/qwen/design' },
                     // 默认 MOSS 音色设计端点。
-                    { name: 'MOSS VoiceGenerator', provider: 'moss', type: 'local_model', environment: 'moss-voiceGenerator', url: 'http://127.0.0.1:8300/v1/moss/design' },
+                    { name: 'MOSS VoiceGenerator', provider: 'moss', type: 'local_model', environment: 'moss_voiceGenerator', url: 'http://127.0.0.1:8315/v1/moss/design' },
                     // 默认 MiMo 音色设计端点。
                     { name: 'MiMo TTS VoiceDesign', provider: 'mimo', type: 'cloud_api', url: 'http://127.0.0.1:8300/v1/mimo/design' },
                     // VoxCPM2 使用独立的音色设计端点，不与 Qwen 混用。
