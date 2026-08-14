@@ -49,12 +49,18 @@ bash start.sh
 | VoxCPM2 | `http://127.0.0.1:8306` | `VoxCPM2（极致 / 可控克隆）` |
 | LongCat-AudioDiT-3.5B-bf16 | `http://127.0.0.1:8307` | `LongCat（参考文本声音克隆）` |
 
-`8300` 还提供：
+`8314` 提供迁移后的 Qwen3-TTS VoiceDesign：
+
+- `POST /v1/qwen/design`
+
+`8300` 还提供迁移期间的兼容/回退接口：
 
 - `POST /v1/qwen/design`
 - `POST /v1/mimo/design`
 - `POST /v1/voxcpm2/design`
 - `POST /v1/step-audio-editx/edit`
+
+WebUI 默认将 Qwen 音色设计请求发送到 `http://127.0.0.1:8314/v1/qwen/design`；`8300/v1/qwen/design` 仅保留用于迁移回退。
 
 `/v1/voxcpm2/design` 是独立的 VoxCPM2 音色设计接口，不与 Qwen 的 `/v1/qwen/design` 混用。它按 VoxCPM2 官方格式生成无参考音频音色，`cfg_value` 与克隆请求统一由后端顶部的 `VOXCPM2_CFG_VALUE` 控制（官方 Demo 默认 `2.0`），`inference_timesteps=10`。项目默认不固定随机种子，只有复现实验时才显式传非负 `seed`；官方示例中的 `seed=42` 也只用于固定随机结果，不代表固定音质提升。
 

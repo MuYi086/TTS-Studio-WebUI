@@ -13,8 +13,8 @@ curl http://127.0.0.1:8305/v1/health
 curl http://127.0.0.1:8306/v1/health
 curl http://127.0.0.1:8307/v1/health
 curl http://127.0.0.1:8311/v1/health
-curl http://127.0.0.1:8312/v1/health
 curl http://127.0.0.1:8313/v1/health
+curl http://127.0.0.1:8314/v1/health
 ```
 
 接入 TTS 时，服务需要兼容：
@@ -71,11 +71,13 @@ WebUI 将 Step-Audio-EditX 作为原始台词生成后的独立编辑步骤，�
 
 | 名称 | 接口 | 请求体 |
 | --- | --- | --- |
-| Qwen | `POST http://127.0.0.1:8300/v1/qwen/design` | `text`、`voice_description` |
+| Qwen | `POST http://127.0.0.1:8314/v1/qwen/design` | `text`、`voice_description` |
 | MiMo | `POST http://127.0.0.1:8300/v1/mimo/design` | `text`、`voice_description` |
 | VoxCPM2 | `POST http://127.0.0.1:8300/v1/voxcpm2/design` | `text`、`voice_description` |
 
 VoxCPM2 使用独立的 `/v1/voxcpm2/design` 路由，不与 Qwen 音色设计接口混用。后端由专用模块和 worker 将请求转换为官方格式 `(音色描述)正文`，不需要参考音频；`cfg_value` 与克隆请求一样统一读取后端顶部的 `VOXCPM2_CFG_VALUE`，官方 Demo 默认是 `2.0`，`inference_timesteps` 默认是 `10`。项目默认不固定随机种子；官方文档示例写死 `seed=42` 只是为了复现实验结果，并不表示该值具有特殊音质增益，需要对比或复现单次样本时才显式传入非负 `seed`。
+
+Qwen VoiceDesign 使用独立的 uv 服务 `8314`；主 API 的 `8300/v1/qwen/design` 仅作为迁移期间的旧 Conda 回退入口保留，不应作为 WebUI 默认地址。
 
 角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：用户可以检查或编辑参考文案，再点击“生成音色”。生成音色不会再次调用 LLM，只把确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen、MiMo 或 VoxCPM2。
 

@@ -4,8 +4,8 @@ window.voiceDesigns = [
         name: 'Qwen3 VoiceDesign',
         provider: 'qwen',
         type: 'local_model',
-        environment: 'qwen3-voiceDesign',
-        url: 'http://127.0.0.1:8300/v1/qwen/design'
+        environment: 'qwen3_voiceDesign',
+        url: 'http://127.0.0.1:8314/v1/qwen/design'
     },
     {
         id: 'moss-voicegenerator',

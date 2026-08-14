@@ -562,7 +562,7 @@
                             </option>
                         </select>
                         <p v-if="selectedVoiceDesign" class="mt-1 text-[10px] text-slate-400 leading-relaxed">
-                            {{ selectedVoiceDesign.type === 'cloud_api' ? '云端接口' : '本地 Conda worker' }} · {{ selectedVoiceDesign.provider || selectedVoiceDesign.name }}
+                            {{ selectedVoiceDesign.type === 'cloud_api' ? '云端接口' : '本地 worker' }} · {{ selectedVoiceDesign.provider || selectedVoiceDesign.name }}
                         </p>
                     </div>
                     <h3 class="text-sm font-bold text-slate-700 mb-3 flex justify-between items-center">
@@ -1249,7 +1249,7 @@
     </div>
 
     <script src="./js/project-storage.js"></script>
-    <script src="./js/voice-design.js"></script>
+    <script src="./js/voice-design.js?v=20260814-8314"></script>
     <script src="./js/soundeffect-client.js"></script>
     <script src="./editConfig/emotion.js"></script>
     <script src="./editConfig/paralinguistic.js"></script>
@@ -2035,8 +2035,8 @@
                 };
                 // js/voice-design.js 未加载或未提供配置时使用的本地后端默认端点。
                 const fallbackVoiceDesigns = [
-                    // 默认 Qwen 音色设计端点。
-                    { name: 'Qwen3-TTS VoiceDesign', provider: 'qwen', type: 'local_model', environment: 'qwen3-voiceDesign', url: 'http://127.0.0.1:8300/v1/qwen/design' },
+                    // Qwen VoiceDesign 已迁移到独立 uv 服务 8314；8300 仅保留后端兼容回退。
+                    { name: 'Qwen3-TTS VoiceDesign', provider: 'qwen', type: 'local_model', environment: 'qwen3_voiceDesign', url: 'http://127.0.0.1:8314/v1/qwen/design' },
                     // 默认 MOSS 音色设计端点。
                     { name: 'MOSS VoiceGenerator', provider: 'moss', type: 'local_model', environment: 'moss-voiceGenerator', url: 'http://127.0.0.1:8300/v1/moss/design' },
                     // 默认 MiMo 音色设计端点。
@@ -4170,6 +4170,107 @@ ${voiceReferenceHardConstraints}`;
                     // 空结果属于业务错误，上层会显示具体输出类型。
                     if (!text) throw new Error(`LLM 没有返回有效的${outputLabel}`);
                     return text;
+                };
+
+                /**
+                 * 提取 OpenAI 兼容响应中的最终文本；兼容字符串、内容片段数组和结构化 JSON。
+                 * reasoning_content 只属于模型思考过程，不能由此函数读取或拼接。
+                 * @param {unknown} content - choices[0].message.content
+                 * @returns {string} 最终回答文本
+                */
+                const getLlmResponseText = (content) => {
+                    if (typeof content === 'string') return content.trim();
+                    if (Array.isArray(content)) {
+                        return content.map(part => {
+                            if (typeof part === 'string') return part;
+                            if (part && typeof part.text === 'string') return part.text;
+                            return '';
+                        }).join('').trim();
+                    }
+                    if (content && typeof content === 'object') {
+                        if (typeof content.text === 'string') return content.text.trim();
+                        try {
+                            return JSON.stringify(content);
+                        } catch {
+                            return '';
+                        }
+                    }
+                    return '';
+                };
+
+                /**
+                 * 从模型回答中提取完整的脚本 JSON 数组。
+                 * 不使用贪婪正则跨越多个数组，避免解释文字或截断内容破坏 JSON 边界。
+                 * @param {unknown} content - LLM 最终回答
+                 * @returns {Array<Object>} 解析后的脚本候选数组
+                 * @throws {Error} 未找到有效 JSON 数组
+                */
+                const parseLlmScriptResponse = (content) => {
+                    const text = getLlmResponseText(content)
+                        .replace(/^\s*```(?:json)?\s*/i, '')
+                        .replace(/\s*```\s*$/i, '')
+                        .trim();
+                    if (!text) throw new Error('LLM 返回内容为空');
+
+                    // 防止截断的外层数组把已闭合的 sfx_plan / 标签数组误当成脚本时间轴。
+                    const isScriptArray = (value) => Array.isArray(value) && (
+                        value.length === 0
+                        || value.some(item => item && typeof item === 'object' && (
+                            item.type === 'dialogue'
+                            || item.type === 'bgm'
+                            || item.role_name
+                            || item.role
+                            || item.text_content
+                            || item.text
+                            || item.content
+                        ))
+                    );
+
+                    // 优先解析完整正文；这是严格 JSON 输出的正常路径。
+                    try {
+                        const parsed = JSON.parse(text);
+                        if (isScriptArray(parsed)) return parsed;
+                    } catch {
+                        // 回答可能带有简短说明，继续扫描其中的 JSON 数组。
+                    }
+
+                    // 扫描每一个可能的数组起点，并按字符串状态匹配方括号，避免正则误判嵌套内容。
+                    for (let start = text.indexOf('['); start >= 0; start = text.indexOf('[', start + 1)) {
+                        let depth = 0;
+                        let inString = false;
+                        let escaped = false;
+                        for (let index = start; index < text.length; index += 1) {
+                            const char = text[index];
+                            if (inString) {
+                                if (escaped) {
+                                    escaped = false;
+                                } else if (char === '\\') {
+                                    escaped = true;
+                                } else if (char === '"') {
+                                    inString = false;
+                                }
+                                continue;
+                            }
+                            if (char === '"') {
+                                inString = true;
+                            } else if (char === '[') {
+                                depth += 1;
+                            } else if (char === ']') {
+                                depth -= 1;
+                                if (depth === 0) {
+                                    try {
+                                        const parsed = JSON.parse(text.slice(start, index + 1));
+                                        if (isScriptArray(parsed)) return parsed;
+                                    } catch {
+                                        // 当前候选不是完整 JSON，继续寻找下一个数组起点。
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    throw new Error('LLM 返回的内容不是完整 JSON 数组');
                 };
 
                 /**
@@ -7935,6 +8036,17 @@ ${voiceReferenceHardConstraints}`;
                             stream: false
                         };
 
+                        // DeepSeek V4 Flash/Pro 默认开启思考；脚本分析要求最终正文是严格 JSON，
+                        // 若让推理过程先吃完整个输出预算，响应会只剩 reasoning_content，content 为空。
+                        // 用户在“额外参数”中明确填写 thinking 时保留其选择，否则默认关闭思考模式。
+                        const isDeepSeekV4 = /^deepseek-v4-(?:flash|pro)$/i.test(String(cfg.model || '').trim());
+                        if (isDeepSeekV4 && !Object.prototype.hasOwnProperty.call(extraParams, 'thinking')) {
+                            body.thinking = { type: 'disabled' };
+                        }
+                        // 为大段剧本和逐句 sfx_plan 预留足够输出空间；用户显式设置任一兼容字段时尊重用户配置。
+                        const hasExplicitTokenLimit = body.max_tokens !== undefined || body.max_completion_tokens !== undefined;
+                        if (isDeepSeekV4 && !hasExplicitTokenLimit) body.max_tokens = 32768;
+
                         // 向 OpenAI 兼容聊天接口发送脚本分析请求。
                         const res = await fetch(url, {
                             method: 'POST',
@@ -7951,25 +8063,28 @@ ${voiceReferenceHardConstraints}`;
 
                         // 非流式响应按 JSON 解析。
                         const data = await res.json();
-                        // 从 OpenAI choices 结构读取正文；推理模型的 reasoning_content 不是最终 JSON，不能当作脚本解析。
+                        // 从 OpenAI choices 结构读取最终正文；推理模型的 reasoning_content 不是脚本，不能拼接解析。
                         const choice = data.choices?.[0];
-                        const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
+                        const content = getLlmResponseText(choice?.message?.content);
                         // 原始回复保留给用户查看和问题排查。
                         rawAnalysisResult.value = content;
                         // 模型只返回思考过程且因长度截断时，给出可操作错误，避免报出无意义的 JSON 解析异常。
                         if (!content.trim()) {
-                            if (choice?.finish_reason === 'length' && choice?.message?.reasoning_content) {
-                                throw new Error('模型推理超出输出上限，未返回最终 JSON。请缩短原文，或选择非推理模型/降低推理强度后重试。');
+                            if (choice?.message?.reasoning_content || choice?.finish_reason === 'length') {
+                                throw new Error('模型没有返回最终脚本 JSON；本次响应被思考过程或输出上限耗尽。请使用非思考模式，或在额外参数中设置更大的 max_tokens 后重试。');
                             }
                             throw new Error('LLM 未返回最终脚本 JSON，请重试或检查模型配置。');
                         }
-                        // 优先提取回复中第一个外层 JSON 数组，兼容模型附带解释文字。
-                        const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
-                        // 没匹配到数组时，至少清理常见 Markdown JSON 代码围栏。
-                        const jsonStr = jsonMatch ? jsonMatch[0] : content.replace(/```json/g, '').replace(/```/g, '').trim();
-
-                        // 把模型输出解析成实际时间轴候选对象。
-                        const parsed = JSON.parse(jsonStr);
+                        // 把模型输出解析成实际时间轴候选对象；解析失败时结合 finish_reason 给出截断提示。
+                        let parsed;
+                        try {
+                            parsed = parseLlmScriptResponse(content);
+                        } catch (parseError) {
+                            if (choice?.finish_reason === 'length') {
+                                throw new Error('模型输出因 max_tokens 被截断，未形成完整脚本 JSON。请关闭思考模式、缩短原文或提高 max_tokens 后重试。');
+                            }
+                            throw new Error(`LLM 脚本 JSON 解析失败：${parseError.message}`);
+                        }
                         // 当前协议要求最外层必须是数组。
                         if (Array.isArray(parsed)) {
                             // 背景图片控制块已废弃；模型偶尔沿用旧模板输出时直接忽略，其他项稍后再做温和匹配。
