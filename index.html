@@ -1788,12 +1788,15 @@
                     const explicit = String(config?.backend || '').trim().toLowerCase();
                     if (explicit.includes('longcat') || explicit.includes('audiodit')) return 'longcat-audiodit';
                     if (explicit === 'qwen3-tts' || explicit.includes('qwen')) return 'qwen3-tts';
+                    // 内置配置和旧版保存项都可能直接使用 backend/modelId=voxcpm2，必须先归一化再进入未知后端保护分支。
+                    if (explicit === 'voxcpm2' || explicit.includes('voxcpm')) return 'voxcpm2';
                     if (explicit.includes('dots')) return 'dots-tts-soar';
                     // 未知的显式后端保持为历史配置，不能仅凭端口回退到 VoxCPM2。
                     if (explicit) return '';
                     const modelId = String(config?.modelId || '').toLowerCase();
                     if (modelId.includes('longcat') || modelId.includes('audiodit')) return 'longcat-audiodit';
                     if (modelId.includes('qwen')) return 'qwen3-tts';
+                    if (modelId === 'voxcpm2' || modelId.includes('voxcpm')) return 'voxcpm2';
                     if (modelId.includes('dots')) return 'dots-tts-soar';
                     // 未知模型标识保持为历史配置，避免错误调用当前端口的模型。
                     if (modelId) return '';
@@ -2032,6 +2035,38 @@
                         protocol: normalizeTtsProtocol(source.protocol, source.baseUrl, modelId),
                         environment: source.environment || option?.environment || ''
                     };
+                };
+                /**
+                 * 生成 TTS 配置的稳定去重键。
+                 * 同一后端和服务地址只保留一项，兼容旧版本重复写入的 builtin 配置；
+                 * 不同地址的同一模型仍允许并存，避免误删用户的自定义服务。
+                 * @param {Object} config - 已归一化的 TTS 配置
+                 * @returns {string} 配置去重键
+                 */
+                const getTtsConfigIdentity = (config) => {
+                    const backend = getTtsBackend(config);
+                    const baseUrl = String(config?.baseUrl || '')
+                        .trim()
+                        .replace(/\/+$/, '')
+                        .replace(/\/v1$/i, '')
+                        .toLowerCase();
+                    if (backend && baseUrl) return `endpoint:${backend}:${baseUrl}`;
+                    if (backend) return `backend:${backend}`;
+                    return `id:${String(config?.id || '')}`;
+                };
+                /**
+                 * 清理历史配置重复项，首项优先，保持内置模型和用户配置的原有顺序。
+                 * @param {Array<Object>} configs - TTS 配置列表
+                 * @returns {Array<Object>} 去重后的配置列表
+                 */
+                const dedupeTtsConfigs = (configs) => {
+                    const seen = new Set();
+                    return configs.filter((config) => {
+                        const identity = getTtsConfigIdentity(config);
+                        if (seen.has(identity)) return false;
+                        seen.add(identity);
+                        return true;
+                    });
                 };
                 // js/voice-design.js 未加载或未提供配置时使用的本地后端默认端点。
                 const fallbackVoiceDesigns = [
@@ -3634,10 +3669,10 @@ ${voiceReferenceHardConstraints}`;
                          }
                      }
                      const configuredBackends = new Set(parsedTtsConfigs.map(config => getTtsBackend(config)));
-                     ttsConfigs.value = [
+                     ttsConfigs.value = dedupeTtsConfigs([
                          ...createDefaultTtsConfigs().filter(config => !configuredBackends.has(config.backend)),
                          ...parsedTtsConfigs
-                     ];
+                     ]);
                      localStorage.setItem('storyforge_tts_configs', JSON.stringify(ttsConfigs.value));
  
                      // 恢复仍可执行的本地模型选择；历史配置不会进入当前调用路径。
@@ -3879,6 +3914,7 @@ ${voiceReferenceHardConstraints}`;
                 /** 将 TTS 配置列表保存到兼容的 localStorage 键。 */
                 const saveTtsConfigsToLocal = () => {
                     // TTS 配置只含本地服务地址与协议，同样独立于可分享工程。
+                    ttsConfigs.value = dedupeTtsConfigs(ttsConfigs.value);
                     localStorage.setItem('storyforge_tts_configs', JSON.stringify(ttsConfigs.value));
                 };
 
