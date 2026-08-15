@@ -28,6 +28,6 @@ window.voiceDesigns = [
     //     provider: 'voxcpm2',
     //     type: 'local_model',
     //     environment: 'voxcpm2',
-    //     url: 'http://127.0.0.1:8300/v1/voxcpm2/design'
+    //     url: 'http://127.0.0.1:8306/v1/voxcpm2/design'
     // }
 ];

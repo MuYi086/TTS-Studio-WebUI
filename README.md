@@ -53,16 +53,15 @@ bash start.sh
 
 - `POST /v1/qwen/design`
 
-`8300` 还提供迁移期间的兼容/回退接口：
+`8300` 还提供主 API 的兼容接口：
 
 - `POST /v1/qwen/design`
 - `POST /v1/mimo/design`
-- `POST /v1/voxcpm2/design`
 - `POST /v1/step-audio-editx/edit`
 
 WebUI 默认将 Qwen 音色设计请求发送到 `http://127.0.0.1:8314/v1/qwen/design`；`8300/v1/qwen/design` 仅保留用于迁移回退。
 
-`/v1/voxcpm2/design` 是独立的 VoxCPM2 音色设计接口，不与 Qwen 的 `/v1/qwen/design` 混用。它按 VoxCPM2 官方格式生成无参考音频音色，`cfg_value` 与克隆请求统一由后端顶部的 `VOXCPM2_CFG_VALUE` 控制（官方 Demo 默认 `2.0`），`inference_timesteps=10`。项目默认不固定随机种子，只有复现实验时才显式传非负 `seed`；官方示例中的 `seed=42` 也只用于固定随机结果，不代表固定音质提升。
+`8306/v1/voxcpm2/design` 是独立的 VoxCPM2 音色设计接口，不与 Qwen 的 `/v1/qwen/design` 混用。它按 VoxCPM2 官方格式生成无参考音频音色，`cfg_value` 与克隆请求统一由后端顶部的 `VOXCPM2_CFG_VALUE` 控制（官方 Demo 默认 `2.0`），`inference_timesteps=10`。项目默认不固定随机种子，只有复现实验时才显式传非负 `seed`；官方示例中的 `seed=42` 也只用于固定随机结果，不代表固定音质提升。
 
 当前 WebUI 的台词合成会根据“配音与播放”中的模型选择调用 Qwen3-TTS、VoxCPM2 或 LongCat 的固定 `POST /v2/synthesize` 接口。后端每次本地 TTS 合成成功后还会把原始 WAV 同步保存到 `TTS-and-VoiceDesign/api/tempAudio/`，便于直接试听和排查；该归档不改变浏览器 IndexedDB 中的工程音频。VoxCPM2 每条 `dialogue` 保存 `clone_mode`、`delivery_profile`、`control_instruction`、`voxcpm_nonverbal_tags` 与 `needs_review`；LongCat 使用同一角色参考音频和准确的 `prompt_text`，不发送 VoxCPM2 表演字段。脚本制作页默认“关闭可控克隆”，此时 VoxCPM2 仍统一使用 `ultimate`；只有选择“开启可控克隆”才保留逐句路由。LongCat-AudioDiT-3.5B 运行在 `8307`，官方克隆路径要求 CUDA、24 kHz 单声道参考音频和逐字准确的参考文本，默认 16 步 APG，并受模型的最大总时长限制。参考音频同步按 Blob 内容 `sha256` 校验，同名文件内容更新后会重新上传。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
 

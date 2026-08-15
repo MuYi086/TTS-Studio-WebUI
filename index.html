@@ -2076,8 +2076,8 @@
                     { name: 'MOSS VoiceGenerator', provider: 'moss', type: 'local_model', environment: 'moss_voiceGenerator', url: 'http://127.0.0.1:8315/v1/moss/design' },
                     // 默认 MiMo 音色设计端点。
                     { name: 'MiMo TTS VoiceDesign', provider: 'mimo', type: 'cloud_api', url: 'http://127.0.0.1:8300/v1/mimo/design' },
-                    // VoxCPM2 使用独立的音色设计端点，不与 Qwen 混用。
-                    { name: 'VoxCPM2 VoiceDesign', provider: 'voxcpm2', type: 'local_model', environment: 'voxcpm2', url: 'http://127.0.0.1:8300/v1/voxcpm2/design' }
+                    // VoxCPM2 克隆与音色设计均由独立 uv 服务提供。
+                    { name: 'VoxCPM2 VoiceDesign', provider: 'voxcpm2', type: 'local_model', environment: 'voxcpm2', url: 'http://127.0.0.1:8306/v1/voxcpm2/design' }
                 ];
                 // 优先采用外部脚本注入的目录，使用户可只改 js/voice-design.js 扩展模型。
                 const voiceDesigns = ref(
