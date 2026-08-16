@@ -1,103 +1,161 @@
 # TTS Studio WebUI
 
-## 单文件 WebUI
+面向多角色有声书制作的浏览器端工作台。它把原文拆分、角色与参考音色管理、台词合成、BGM 与上下文音效编排、试听和工程备份放在一个本地 WebUI 中。
 
-面向多角色有声书制作的浏览器端工作台：将原文分析、角色与参考音色、台词合成、音效与背景音乐编排，以及 `SRT`、`WAV`、`MP4` 导出串为一条本地创作流程。
+当前产品形态是“单文件静态 WebUI”：根目录 [`index.html`](index.html) 由 Vue 3、Tailwind CSS 和 `mp4-muxer` CDN 运行，不需要构建。页面通过浏览器直接访问本地或用户配置的兼容服务；模型权重、GPU 推理和后端文件不包含在本仓库中。
 
-当前开发入口是根目录的 `index.html`，由 Vue 3 CDN 运行时驱动；`js/project-storage.js`、`js/voice-design.js` 和 `js/soundeffect-client.js` 分别提供工程兼容、音色设计目录和 SoundEffect 请求封装。`webUI/` 已废弃，不再作为功能开发入口。
+## 当前能力
 
-## 主要能力
+- 模型配置：维护 OpenAI 兼容 LLM（大语言模型）配置，以及 Qwen3-TTS、VoxCPM2、LongCat-AudioDiT 3.5B、dots.tts-soar 本地 TTS 配置。
+- 音色资源库：保存参考音频、准确参考文案和音色描述；角色可以绑定库内音色，也可以调用 Qwen、MOSS 或 MiMo VoiceDesign 生成新的参考音色。
+- 脚本制作：支持多个脚本标签、TXT 导入、快速拆分、LLM 深度分析、角色识别、台词与 BGM 时间轴、上下移动、批量生成、顺序播放和停止播放。
+- 台词处理：支持角色音量、台词音量、播放速度、波形裁剪、停顿、原始 TTS 音频试听和清除。VoxCPM2 另有极致/可控克隆、表演档位、自然语言控制指令和非语言标签。
+- Step-Audio-EditX：以当前行原始音频为首次输入，已有编辑结果时支持继续叠加；编辑结果独立保存，可单独试听、删除、导出和恢复，不替换原始台词音频。
+- 上下文音效：LLM 只为原文明确的非语言事件生成 `dialogue.sfx_plan`；每行最多两项，选择 MOSS 或 Stable Audio 生成 WAV 后直接绑定到计划，不经过工程级 SFX 素材库。
+- BGM：导入本地音频、剪辑和设置默认音量，在脚本中插入播放/停止控制块；BGM 与台词、音效一起参与实时预览和 WAV 混音。
+- 导出：完整工程 JSON、TXT、SRT 字幕和混音 WAV。MP4 使用 WebCodecs 生成与脚本时长对应的纯黑视频轨道；当前 MP4 只包含视频轨道，不是带 WAV 音轨的最终有声视频。
+- Prompt 管理：可编辑脚本分析 Prompt、角色音色分析 Prompt、动态参考文本 Prompt 和固定参考文本策略。默认脚本 Prompt 要求 `emotion` 从 [`editConfig/emotion.js`](editConfig/emotion.js) 的官方标签中选择。
 
-- 用 OpenAI 兼容的 LLM（大语言模型）把小说或剧本拆为 `dialogue`、`bgm` 两类脚本块；默认分析提示词按自然语义和一口气拆分长文本，中文旁白以 25–45 个汉字为软目标，并可为段间换气设置约 0.1–0.2 秒静音。原文明确的非语言事件写入台词内 `sfx_plan`，每项同时保存 MOSS-SoundEffect 的中文 `prompt` 与 Stable Audio 3 Medium 使用的英文 `prompt_en`，再按选定模型生成对应 WAV。
-- “配音与播放”提供可控克隆选择，默认“关闭可控克隆”：LLM（大语言模型）剧本分析会使用极致克隆提示词，把全部台词收敛为 `ultimate`；显式选择“开启可控克隆”后才使用可控克隆提示词，按需规划 `ultimate` / `controllable` 和表演档位。非语言标签只在原文明示可听见的对应发声时输出，不能由标点或情绪猜测。详见 [VoxCPM2 合成音频最佳实践](VoxCpm2合成音频最佳实践.md)。
-- 为角色绑定本地参考音频，或以 Qwen / MiMo 生成参考音色和可编辑的参考文案。
-- 在音色与 BGM 资源库中显示波形、试听进度和可视化裁剪范围；SoundEffect 音效则在对应台词计划上生成和试听。
-- 单行或批量调用本地 TTS（文本转语音）服务；合成前会校验并上传参考音频。
-- 剧本的 `emotion` 默认使用 Step-Audio-EditX 官方情绪标签；可将已生成的单行音频按该标签再次编辑，并保留原始与编辑结果供分别试听、删除和工程恢复。
-- 在浏览器内混入 SoundEffect 生成的音效与 BGM，顺序预览并导出 `SRT`、`WAV`、`MP4`。
-- 将工程结构和资产一起导出为 JSON 工程文件，用于备份和恢复。
+## 界面与代码结构
+
+| 路径 | 职责 |
+| --- | --- |
+| [`index.html`](index.html) | 唯一开发入口；页面、状态、Prompt、请求、播放、时间轴和导出逻辑 |
+| [`js/project-storage.js`](js/project-storage.js) | `unitale-project` schema 4 的工程规范化、迁移和运行时字段清理 |
+| [`js/voice-design.js`](js/voice-design.js) | 音色设计服务目录；当前默认 Qwen `8301`、MOSS `8302`、MiMo `8303` |
+| [`js/soundeffect-client.js`](js/soundeffect-client.js) | MOSS-SoundEffect 与 Stable Audio 的请求封装 |
+| [`editConfig/`](editConfig/) | Step-Audio-EditX 的 emotion、paralinguistic、speaking style 词表 |
+| [`docs/`](docs/) | 本地开发、回归、后端接入和模型实践说明 |
+| [`Design/`](Design/) | 视觉参考图，不参与运行时加载 |
+
+`webUI/` 已废弃且不再是源码目录。`task*.md`、`docs/重构顺序计划.md` 等内容属于任务记录或规划，不能替代当前代码和工程协议。
 
 ## 快速开始
 
-在仓库根目录启动静态文件服务器：
+需要 Python 3 用于静态文件服务；Node.js 只用于可选的语法检查。仓库没有安装依赖步骤。
 
 ```bash
 python3 -m http.server 5173
 ```
 
-访问 `http://127.0.0.1:5173/index.html`。修改后可用 Node.js 执行内联脚本语法检查：
+然后访问 `http://127.0.0.1:5173/index.html`。也可以使用 VS Code Live Server，仓库配置的端口是 `5502`。
+
+修改后执行内联脚本和外部脚本语法检查：
 
 ```bash
-node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');for(const match of html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}"
+node -e "const fs=require('fs');const files=['index.html','js/project-storage.js','js/voice-design.js','js/soundeffect-client.js','editConfig/emotion.js','editConfig/paralinguistic.js','editConfig/speakingStyle.js'];for(const file of files){const source=fs.readFileSync(file,'utf8');if(file==='index.html'){for(const match of source.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}}else new Function(source);console.log('syntax ok:',file)}"
 ```
 
-如果使用 VS Code Live Server，仓库已将端口配置为 `5502`，并限制自动刷新监听范围为根目录 `index.html`。修改 Markdown、音频、配置或其他工程文件不会刷新已打开的页面；修改 `.vscode/settings.json` 后请停止并重新启动 Live Server 使配置生效。
+没有自动化测试框架；改动页面、存储、播放、音效或导出后应按 [`docs/本地开发与回归.md`](docs/本地开发与回归.md) 在浏览器手动验证。在线模型链路需要真实后端和模型权重，不能用静态检查替代。
 
-## 连接 TTS-and-VoiceDesign
+## 后端服务
 
-默认本地后端是 [TTS-and-VoiceDesign](https://github.com/MuYi086/TTS-and-VoiceDesign)。在后端仓库根目录启动：
+默认后端是 [TTS-and-VoiceDesign](https://github.com/MuYi086/TTS-and-VoiceDesign)。在后端仓库根目录启动：
 
 ```bash
 bash start.sh
 ```
 
-然后在“模型配置”中保存并选中 LLM 与 TTS 配置。
+WebUI 会自动使用或调用以下本地端点；端口只是当前项目的默认值，用户也可以在页面中保存自定义配置。
 
-| 当前 WebUI 台词合成服务 | Base URL | 协议 |
-| --- | --- | --- |
-| Qwen3-TTS Base | `http://127.0.0.1:8305` | `Qwen3-TTS（参考文本克隆）` |
-| VoxCPM2 | `http://127.0.0.1:8306` | `VoxCPM2（极致 / 可控克隆）` |
-| LongCat-AudioDiT-3.5B-bf16 | `http://127.0.0.1:8307` | `LongCat（参考文本声音克隆）` |
+| 用途 | 默认端口 | 接口 |
+| --- | ---: | --- |
+| Qwen3-TTS | `8321` | `POST /v1/qwen/clone`；配套 `/v1/check/audio`、`/v1/upload_audio` |
+| VoxCPM2 | `8322` | `POST /v1/voxcpm2/clone`；支持极致/可控克隆字段 |
+| LongCat-AudioDiT 3.5B | `8323` | `POST /v1/longCat/clone`；要求参考音频和准确 `prompt_text` |
+| dots.tts-soar | `8324` | `POST /v2/dotsTTS/clone`；允许省略 `prompt_text` 的音频克隆协议 |
+| 控制面 / 共享工具 | `8300` | `/v1/control`、`/v1/upload_audio`、`/v1/check/audio` |
+| Qwen VoiceDesign | `8301` | `POST /v1/qwen/timbre` |
+| MOSS VoiceGenerator | `8302` | `POST /v1/moss/timbre` |
+| MiMo VoiceDesign | `8303` | `POST /v1/mimo/timbre` |
+| MOSS-SoundEffect v2 | `8312` | `POST /v1/moss/soundEffect`，发送中文 `prompt` |
+| Stable Audio 3 Medium | `8311` | `POST /v1/stableAudio/soundEffect`，发送英文 `prompt_en` |
+| Step-Audio-EditX | `8331` | `POST /v1/stepAudioEditx/edit` |
 
-`8314` 提供迁移后的 Qwen3-TTS VoiceDesign：
+当前台词合成流程如下：
 
-- `POST /v1/qwen/design`
+1. 角色必须绑定参考音频路径；Qwen3-TTS、VoxCPM2、LongCat 等参考文本协议还要求绑定音频中实际说出的准确文案。
+2. 浏览器用 `GET /v1/check/audio` 检查服务端文件；新版服务会比较音频 `sha256`，同名文件内容变化时重新上传。
+3. 浏览器按选定模型向 `/v1/qwen/clone`、`/v1/voxcpm2/clone`、`/v1/longCat/clone` 或 `/v2/dotsTTS/clone` 发送 JSON，成功响应必须是非空音频二进制；原始 WAV 同时保存到浏览器 IndexedDB 工程资产。
+4. VoxCPM2 的可控克隆只发送 `control_instruction` 和 `nonverbal_tags`，极致克隆发送 `prompt_text`；LongCat 不使用 VoxCPM2 的表演字段。
 
-`8300` 还提供主 API 的兼容接口：
+LLM 使用用户配置的 OpenAI 兼容 `/chat/completions`。脚本分析是非流式请求，返回严格 JSON 数组；角色分析和参考文案生成也是浏览器直连 LLM，因此云端服务需要允许 CORS，API Key 仅保存在当前浏览器的 `localStorage` 中。
 
-- `POST /v1/qwen/design`
-- `POST /v1/mimo/design`
-- `POST /v1/step-audio-editx/edit`
+## 音色设计与 Step-Audio-EditX
 
-WebUI 默认将 Qwen 音色设计请求发送到 `http://127.0.0.1:8314/v1/qwen/design`；`8300/v1/qwen/design` 仅保留用于迁移回退。
+音色设计目录由 [`js/voice-design.js`](js/voice-design.js) 注入，页面提交：
 
-`8306/v1/voxcpm2/design` 是独立的 VoxCPM2 音色设计接口，不与 Qwen 的 `/v1/qwen/design` 混用。它按 VoxCPM2 官方格式生成无参考音频音色，`cfg_value` 与克隆请求统一由后端顶部的 `VOXCPM2_CFG_VALUE` 控制（官方 Demo 默认 `2.0`），`inference_timesteps=10`。项目默认不固定随机种子，只有复现实验时才显式传非负 `seed`；官方示例中的 `seed=42` 也只用于固定随机结果，不代表固定音质提升。
+```json
+{
+  "voice_description": "用户确认的稳定声线描述",
+  "text": "用户确认的参考文案"
+}
+```
 
-当前 WebUI 的台词合成会根据“配音与播放”中的模型选择调用 Qwen3-TTS、VoxCPM2 或 LongCat 的固定 `POST /v2/synthesize` 接口。后端每次本地 TTS 合成成功后还会把原始 WAV 同步保存到 `TTS-and-VoiceDesign/api/tempAudio/`，便于直接试听和排查；该归档不改变浏览器 IndexedDB 中的工程音频。VoxCPM2 每条 `dialogue` 保存 `clone_mode`、`delivery_profile`、`control_instruction`、`voxcpm_nonverbal_tags` 与 `needs_review`；LongCat 使用同一角色参考音频和准确的 `prompt_text`，不发送 VoxCPM2 表演字段。脚本制作页默认“关闭可控克隆”，此时 VoxCPM2 仍统一使用 `ultimate`；只有选择“开启可控克隆”才保留逐句路由。LongCat-AudioDiT-3.5B 运行在 `8307`，官方克隆路径要求 CUDA、24 kHz 单声道参考音频和逐字准确的参考文本，默认 16 步 APG，并受模型的最大总时长限制。参考音频同步按 Blob 内容 `sha256` 校验，同名文件内容更新后会重新上传。完整接口契约和排查顺序见 [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)。
+生成的 WAV 会进入本地音色库；随后台词合成仍需要角色绑定这份音色和参考文案。音色设计服务列表可以按目录扩展，不要在 `index.html` 中复制同一份模型清单。
 
-Step-Audio-EditX 编辑按钮第一次使用当前行已生成的原始音频作为 `prompt_audio`；如果该行已有编辑结果，则后续点击优先使用最近一次编辑结果作为新的 `prompt_audio`，支持二次、三次及连续叠加编辑。每次点击都会先上传当前 prompt 音频，并生成唯一的 `step-audio-editx/<line-id>_<timestamp>_<nonce>.wav` 路径，避免后端按相同路径复用旧文件。请求仍使用当前行文本作为 `prompt_text` 和 `generated_text`，并发送 `edit_type="emotion"`、`edit_info=line.emotion`。首次点击前必须先生成原始台词，且 `emotion` 必须是 [`editConfig/emotion.js`](editConfig/emotion.js) 中的官方标签。编辑结果以独立资产键保存，不会替换原始台词音频；清除编辑结果后，下一次点击会重新从原始台词开始。
+Step-Audio-EditX 使用独立的 8331 服务：
 
-本机默认提供 Qwen3-TTS（`8305`）、VoxCPM2（`8306`）和 LongCat-AudioDiT-3.5B（`8307`）内置配置；用户选择的模型会直接决定台词合成服务。旧配置仍保留在浏览器中，但不会被静默改写或调用。
+```text
+POST http://127.0.0.1:8331/v1/upload_audio
+POST http://127.0.0.1:8331/v1/stepAudioEditx/edit
+```
 
-> SoundEffect 下拉框提供 MOSS-SoundEffect v2（`8311`）和默认的 Stable Audio 3 Medium（`8313`）。LLM 分析会为每个明确事件写入双语 `sfx_plan`：选择 MOSS 时，WebUI 向 `8311/v1/generate` 发送中文 `prompt`；选择 Medium 时，WebUI 向 `8313/v1/generate` 发送全英文且以 `TrackType: SFX` 结尾的 `prompt_en`。旧工程缺少 `prompt_en` 时仍可用 MOSS；Medium 会提示重新运行 AI 深度分析，而不会把中文提示词发送给英文模型。生成的 WAV 会立即保存到浏览器 IndexedDB（浏览器本地数据库）工程资产，刷新页面后按 `audioAssetKey` 自动恢复。页面不提供 SFX 素材库或本地音效导入回退路径。
+前端先上传当前行的原始音频（已有编辑结果时上传上一份编辑结果），再发送 `prompt_text`、`prompt_audio`、`generated_text`、`edit_type: "emotion"` 和当前行的官方 `emotion` 标签。编辑结果使用独立 `stepAudioEditXAudioAssetKey` 保存；删除它不会删除原始 `audioAssetKey`。后端模型、tokenizer、源码和 CUDA 环境的配置与检查方式见 [`docs/TTS-and-VoiceDesign接入.md`](docs/TTS-and-VoiceDesign接入.md)。
 
-## 推荐流程
+## SoundEffect 音效计划
 
-1. 配置并选中 LLM 与 TTS 服务。
-2. 导入参考音频与 BGM，维护情绪预设。
-3. 在“脚本制作”粘贴原文；默认“关闭可控克隆”，如需 LLM 按台词规划可控克隆，先选择“开启可控克隆”，再运行“LLM 深度分析”。检查角色和脚本块；长旁白应优先在自然语义停顿处分段，不要按固定字数硬切。
-4. 分析角色音色，生成或编辑参考文案，再通过 Qwen / MiMo / VoxCPM2 生成并绑定参考音色；台词合成时可在模型下拉框选择 LongCat-AudioDiT。
-5. 在台词卡片生成并试听 `sfx_plan` 的 SoundEffect 音效，再调整停顿、音量与裁剪范围；需要重新生成前可点击“清空所有音效”删除当前脚本的音效缓存和生成记录（保留音效计划）；需要强化情绪时，先生成单行原音频，再点击“使用Step-Audio-EditX”试听编辑结果。若要叠加效果，可连续点击该按钮；清除编辑结果即可回到原始音频基线。
-6. 定期导出完整工程；最终导出 `SRT`、`WAV` 或 `MP4`。
+LLM 不生成独立的 `type: "sfx"` 时间轴块，而是在承载事件的 `dialogue` 中写入：
 
-## 本地数据与备份
+```json
+{
+  "id": "door_knock_01",
+  "purpose": "foreground_action",
+  "prompt": "近距离收音，木门被敲击三次，声音短促清晰",
+  "prompt_en": "Close-miked wooden door knocked three times, short and crisp. TrackType: SFX",
+  "anchor": "dialogue_start",
+  "offset_ms": 0,
+  "duration_seconds": 1.2,
+  "mix_preset": "action_under_dialogue"
+}
+```
 
-- 配置和 Prompt（提示词）保存在浏览器 `localStorage`。
-- 每日背景使用独立键 `storyforge_bing_daily_background_date` 与 `storyforge_bing_daily_background_url`；该展示缓存不进入工程文件、`UnitaleDB` 或导出内容。
-- 工程与音频资产保存在 IndexedDB（浏览器本地数据库）的 `UnitaleDB`。
-- 生成的台词、Step-Audio-EditX 与 SoundEffect 音频按稳定 `audioAssetKey` 从 `UnitaleDB.assets` 恢复；稳定键不是 `/voice/` 静态文件路径，只有旧版真实文件名/路径才会执行静态文件回退。
-- 清理站点数据、更换浏览器或使用无痕窗口前，请先导出完整工程；不要提交包含 API Key 的浏览器数据或截图。
+当前工程将计划时长限制为 `0.2–30` 秒。MOSS 使用中文 `prompt`，Stable Audio 只接受同一事件的全英文 `prompt_en`，且 `TrackType: SFX` 必须只在末尾出现一次。返回 WAV 直接写入该计划的 `audioAssetKey`；清空音效会删除生成资产但保留计划，便于重新生成。详细规则见 [`docs/MOSS-SoundEffect自动生成上下文音效.md`](docs/MOSS-SoundEffect自动生成上下文音效.md)。
+
+## 工程数据、备份与兼容性
+
+- 工程元数据和二进制资产保存在浏览器 IndexedDB 的 `UnitaleDB` 中，固定使用 `project.currentState` 和 `assets` 两个对象仓库。
+- 当前工程信封为 `kind: "unitale-project"`、`schemaVersion: 4`、`version: "4.0"`。导出 JSON 会嵌入 BGM、音色、台词原音频、EditX 编辑音频和 SoundEffect 音频，导入时自动迁移旧结构。
+- 工程导入会覆盖工程资源库和脚本，但不会覆盖 LLM/TTS 模型配置。清理站点数据、更换浏览器或使用无痕窗口前，先导出完整工程。
+- `audioUrl`、对象 URL 和取消控制器是运行时字段，不应写入工程；`audioAssetKey` 只是本地资产键，不是静态文件路径。
+- 旧 `bgImage`、独立 `sfx` 和 `filter` 字段不属于当前时间轴协议。当前只有 `dialogue` 与 `bgm` 两类块；`break_duration` 仍表示对白后的时间轴停顿。
+- Prompt、模型配置、BGM 和界面选择等设置分散保存在旧版兼容 `localStorage` 键中；这些键不能随意重命名或清理。每日 Bing 背景的缓存键只服务于页面展示，不进入工程导出。
+
+## 推荐工作流
+
+1. 启动静态服务，先在“模型配置”中保存 LLM 和 TTS；再确认后端端口和 CORS 可用。
+2. 在“音色资源库”导入参考音频，填写逐字准确的参考文案；需要时分析角色声线、生成参考文案并调用 VoiceDesign。
+3. 在“脚本制作”导入 TXT 或粘贴原文，先快速拆分或运行 LLM 深度分析。检查角色、`emotion`、BGM 控制块、`sfx_plan` 和 VoxCPM2 表演字段。
+4. 选择 TTS 模型，单行或批量生成台词；生成后试听、调整裁剪、速度、音量和停顿。需要情绪编辑时，再为已有原始音频调用 Step-Audio-EditX。
+5. 选择 SoundEffect 模型，逐项或批量生成计划音效；确认音效落点、时长和混音预设，再顺序试听脚本。
+6. 定期导出完整工程。交付音频使用 WAV；字幕使用 SRT；MP4 当前是纯黑视频轨道，若需要有声视频须在外部后期工具中合成 WAV 音轨。
+
+## 当前限制
+
+- 本地模型、模型权重、GPU、CUDA、后端 CORS 和服务端临时音频目录不属于本仓库；在线链路必须按实际运行环境验证。
+- 浏览器直连云端 LLM 可能被 CORS 或浏览器安全策略阻断；不要把 API Key 写进代码或提交到 Git。
+- WAV 混音和 MP4 生成依赖 Web Audio API、WebCodecs 以及 CDN 中的 `mp4-muxer` 运行时；MP4 需要支持 `VideoEncoder` 的新版浏览器。
+- MP4 当前只生成纯黑画面的视频轨道，不读取旧背景图，也不编码音频轨道。
+- 长时间运行的音效、TTS、音色设计和大工程 Base64 导入导出会受到浏览器内存、模型显存和本地服务队列限制。
 
 ## 文档导航
 
 - [本地开发与回归](docs/本地开发与回归.md)
 - [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)
+- [MOSS-SoundEffect 上下文音效](docs/MOSS-SoundEffect自动生成上下文音效.md)
+- [VoxCPM2 合成音频最佳实践](docs/VoxCpm2合成音频最佳实践.md)
+- [克隆音频响度分析](docs/克隆音频响度分析.md)
 - [Agent 协作说明](AGENTS.md)
-
-## 当前限制
-
-- `MP4` 导出依赖浏览器的 WebCodecs 和固定加载的 `mp4-muxer@5.2.1` 运行时；音轨优先使用 AAC，不支持时回退为 Opus，不能保证所有浏览器均可编码或播放。
-- 固定工程的离线端到端回归已记录；LLM、音色设计和 TTS 在线链路仍需连接实际后端服务、模型权重和本机运行环境验证。
 
 ## 许可证
 

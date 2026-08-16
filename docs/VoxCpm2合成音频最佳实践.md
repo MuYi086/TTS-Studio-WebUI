@@ -1,6 +1,6 @@
 # VoxCPM2 合成音频最佳实践
 
-本文依据 `dsShare.html`、`qwen3_情感剧本生成.json` 中关于 VoxCPM2 的讨论，并严格对齐现有后端 `POST http://127.0.0.1:8306/v2/synthesize` 的请求契约整理。核心原则是：括号内是给 VoxCPM2 的自然语言表演指令，括号外才是角色真正要合成的正文。
+本文依据 `dsShare.html`、`qwen3_情感剧本生成.json` 中关于 VoxCPM2 的讨论，并严格对齐现有后端 `POST http://127.0.0.1:8322/v1/voxcpm2/clone` 的请求契约整理。核心原则是：括号内是给 VoxCPM2 的自然语言表演指令，括号外才是角色真正要合成的正文。
 
 ## 1. 两层剧本表达
 
@@ -43,7 +43,7 @@
 }
 ```
 
-`control_instruction` 保存括号内的自然语言，不要在字段值外再包一层括号；`text_content` 只保存括号外的真实正文。当前 WebUI 合成时将它们映射到固定的 `/v2/synthesize` 请求：可控克隆发送 `text`、`audio_path`、`backend: "voxcpm2"`、`clone_mode: "controllable"`、`control_instruction` 和 `nonverbal_tags`，明确省略 `prompt_text`；后端再组装为 `(control_instruction)[tag]正文`。为了兼容模型偶尔直接输出人类格式，页面也会识别 `text_content` 开头的单个英文或中文括号，并把它拆到 `control_instruction`。
+`control_instruction` 保存括号内的自然语言，不要在字段值外再包一层括号；`text_content` 只保存括号外的真实正文。当前 WebUI 合成时将它们映射到固定的 `/v1/voxcpm2/clone` 请求：可控克隆发送 `text`、`audio_path`、`backend: "voxcpm2"`、`clone_mode: "controllable"`、`control_instruction` 和 `nonverbal_tags`，明确省略 `prompt_text`；后端再组装为 `(control_instruction)[tag]正文`。为了兼容模型偶尔直接输出人类格式，页面也会识别 `text_content` 开头的单个英文或中文括号，并把它拆到 `control_instruction`。
 
 角色参考音频由当前 WebUI 的角色绑定管理，不需要在每个 `dialogue` 中重复输出 `ref_audio`。`[参考音频: ...]` 可以保留在人类剧本或导演工作稿中，但不要让它进入 `text_content`。
 

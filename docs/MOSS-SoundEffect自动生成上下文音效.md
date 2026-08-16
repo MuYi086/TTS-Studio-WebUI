@@ -2,9 +2,9 @@
 
 ## 结论
 
-可做，但应分两期。`~/github/TTS-and-VoiceDesign` 已在端口 `8311` 提供可直接返回 WAV 的 MOSS-SoundEffect v2.0 服务：`POST /v1/generate`，`prompt` 为非语言声效描述，`seconds` 可控且范围为 `(0, 30]`。它适合解决“素材库固定、短动作音效时长不合适”的问题。
+可做，但应分两期。`~/github/TTS-and-VoiceDesign` 已在端口 `8312` 提供可直接返回 WAV 的 MOSS-SoundEffect v2.0 服务：`POST /v1/moss/soundEffect`，`prompt` 为非语言声效描述，`seconds` 可控且范围为 `(0, 30]`。它适合解决“素材库固定、短动作音效时长不合适”的问题。
 
-不能直接声称它已与当前 WebUI 自动融合：根目录前端尚未调用 `8311`，当前 `sfx` 只有“音效库名称 + 相对于单条对白时长的 position”，没有跨多条台词的持续环境声时间跨度。第一期只做可验证的单句前景音效；连续环境声、跨台词氛围和自动混音属于第二期，必须先扩充时间轴表达并复核导出语义。
+当前 WebUI 已通过 `js/soundeffect-client.js` 调用 `8312/v1/moss/soundEffect`；当前 `sfx_plan` 以承载事件的对白为锚点，没有跨多条台词的持续环境声时间跨度。第一期只做可验证的单句前景音效；连续环境声、跨台词氛围和自动混音属于第二期，必须先扩充时间轴表达并复核导出语义。
 
 本文件仅设计，不请求服务、不生成音效、不修改任何代码或项目数据。
 
@@ -13,7 +13,7 @@
 后端接口的有效请求形态为：
 
 ```http
-POST http://127.0.0.1:8311/v1/generate
+POST http://127.0.0.1:8312/v1/moss/soundEffect
 Content-Type: application/json
 
 {
@@ -39,7 +39,7 @@ Content-Type: application/json
 - 播放与离线导出都按该相对位置调度，音效与台词音量按既有乘法关系混合。
 - SFX、BGM 和台词二进制均由 `UnitaleDB` 资产键恢复，工程导出还须携带可恢复的资产关系。
 
-这决定了第一期音效必须被写回现有 SFX 库，再由现有 `line.sfx` 引用；不能把临时 `8311` URL、裸 Blob URL 或“模型提示词”直接当作可播放素材。
+这决定了第一期音效必须写入对白计划的 `audioAssetKey`；不能把临时 `8312` URL、裸 Blob URL 或“模型提示词”直接当作可播放素材。
 
 ## 两期方案
 
@@ -54,7 +54,7 @@ Content-Type: application/json
   → 生成全部或选中的 TTS 台词，取得实际时长
   → LLM 仅规划可听事件（不生成音频、不可编造已有素材名）
   → 用户审核/编辑音效 prompt、落点和时长
-  → 单队列调用 8311
+  → 单队列调用 8312
   → WAV 存入 UnitaleDB，并新建 SFX 库记录
   → 以现有 {name, position} 写回关联 dialogue
   → 统一试听、裁剪、导出
@@ -130,7 +130,7 @@ Content-Type: application/json
 
 ## 调度、交互和失败处理
 
-1. 增加独立 SoundEffect 服务配置（默认 `http://127.0.0.1:8311`）及健康检查；不能混入现有 TTS 配置并按 `/v2/synthesize` 误调用。
+1. 增加独立 SoundEffect 服务配置（默认 `http://127.0.0.1:8312/v1/moss/soundEffect`）及健康检查；不能混入现有 TTS 配置并按克隆接口误调用。
 2. 生成按钮只处理用户勾选的计划项，展示队列位置、当前项目、请求参数、预计时长未知提示和取消状态。服务端 worker 即使浏览器取消也可能继续运行，因此“已停止等待”与“已停止后端计算”必须分开显示。
 3. 所有请求串行，且默认不与 TTS 批量生成并发；这是后端共享 GPU 锁的实际要求。
 4. 以 `prompt + seconds + 采样参数 + 模型版本` 的哈希识别同一计划，询问用户是否复用已有资产。更换任一输入后必须生成新版本，不能悄悄覆盖。
@@ -148,7 +148,7 @@ Content-Type: application/json
 
 ### 接口与资产
 
-- 用 mock（模拟）8311 和真实本地服务分别验证：请求字段、WAV 返回、超时、500、空音频、取消和连续队列。
+- 用 mock（模拟）8312 和真实本地服务分别验证：请求字段、WAV 返回、超时、500、空音频、取消和连续队列。
 - 验证每个成功 WAV 均以稳定 `assetKey` 写入 `UnitaleDB`，刷新、工程导出和工程导入后仍可试听。
 - 确认旧工程、旧本地素材和无 `generated` 字段的 SFX 不受影响；不改旧 localStorage 键。
 

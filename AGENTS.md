@@ -1,36 +1,55 @@
 # Repository Guidelines
 
-## 项目结构与职责
+## 项目定位
 
-- 根目录 [`index.html`](index.html) 是当前唯一开发入口：Vue 3 通过 CDN 加载，页面、状态和主要业务逻辑集中在一个单文件中。
-- [`js/project-storage.js`](js/project-storage.js) 负责工程与 IndexedDB（浏览器本地数据库）兼容；[`js/voice-design.js`](js/voice-design.js) 管理音色设计目录；[`js/soundeffect-client.js`](js/soundeffect-client.js) 封装音效请求。
-- [`editConfig/`](editConfig/) 保存 Step-Audio-EditX 的情绪、拟声和表达风格配置；[`Design/`](Design/) 保存界面参考图；[`docs/`](docs/) 保存本地开发、回归和后端接入说明。
-- `webUI/` 已废弃，不要向其中新增或恢复功能。本仓库没有 `package.json`、构建脚本或独立测试目录。
+- 这是一个无构建步骤的静态 WebUI，根目录 [`index.html`](index.html) 是唯一运行入口。Vue 3、Tailwind CSS 和 `mp4-muxer` 通过 CDN 加载，页面模板、状态、请求、播放和导出逻辑仍集中在这个单文件中。
+- `webUI/` 已废弃；不要向其中新增、恢复或引用功能。仓库没有 `package.json`、npm 脚本、覆盖率门槛或独立测试目录。
+- 代码和文档优先使用中文；代码标识符、接口字段、端口和第三方命令保留原文。
 
-## 开发、构建与验证
+## 目录职责
 
-仓库是静态 WebUI，无需构建。根目录启动本地服务：
+- [`index.html`](index.html)：Vue 应用、页面模板、Prompt、LLM/TTS/音色设计调用、Web Audio 播放、SoundEffect 编排、工程导入导出和 WAV/SRT/MP4 导出。
+- [`js/project-storage.js`](js/project-storage.js)：工程协议规范化与旧数据迁移；当前 `PROJECT_KIND` 为 `unitale-project`，`PROJECT_SCHEMA_VERSION` 为 `4`。
+- [`js/voice-design.js`](js/voice-design.js)：音色设计服务目录。当前默认目录是 Qwen `8301`、MOSS `8302`、MiMo `8303`；不要把目录索引写死到业务逻辑。
+- [`js/soundeffect-client.js`](js/soundeffect-client.js)：MOSS-SoundEffect `8312` 和 Stable Audio 3 Medium `8311` 的请求封装，只处理模型路由和 WAV 响应校验。
+- [`editConfig/`](editConfig/)：Step-Audio-EditX 的 emotion、paralinguistic、speaking style 词表。目前台词 `emotion` 与 EditX 编辑流程实际使用 emotion 词表；其他词表是独立配置，不要未经实现就宣称已有页面入口。
+- [`docs/`](docs/)：本地开发、回归、后端接入和模型实践说明；模型接口变更时优先同步对应文档。
+- [`Design/`](Design/)：视觉参考图，不是运行时资源。
+
+## 运行与验证
+
+在仓库根目录启动静态服务：
 
 ```bash
 python3 -m http.server 5173
 ```
 
-然后访问 `http://127.0.0.1:5173/index.html`。修改 `index.html` 后至少运行内联脚本语法检查：
+访问 `http://127.0.0.1:5173/index.html`。也可以使用仓库现有的 VS Code Live Server 配置，端口为 `5502`；修改 `.vscode/settings.json` 后需重启 Live Server。
+
+修改 `index.html`、外部脚本或配置脚本后，至少执行语法检查；模型接口变更还要核对 `8300/8301/8302/8303/8311/8312/8321/8322/8323/8324/8331` 与后端 `start.sh` 一致：
 
 ```bash
-node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');for(const match of html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}"
+node -e "const fs=require('fs');const files=['index.html','js/project-storage.js','js/voice-design.js','js/soundeffect-client.js','editConfig/emotion.js','editConfig/paralinguistic.js','editConfig/speakingStyle.js'];for(const file of files){const source=fs.readFileSync(file,'utf8');if(file==='index.html'){for(const match of source.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}}else new Function(source);console.log('syntax ok:',file)}"
 ```
 
-当前没有 npm test、覆盖率门槛或自动化测试框架；涉及页面、存储、播放或导出的改动须在浏览器手动回归。后端在线链路需按 [`docs/TTS-and-VoiceDesign接入.md`](docs/TTS-and-VoiceDesign接入.md) 使用本地服务验证，不能把未实际调用的后端能力写成前端现状。
+涉及页面、IndexedDB、播放、音效、导入导出或后端请求的改动，还必须启动浏览器手动回归；需要在线模型的场景按 [`docs/TTS-and-VoiceDesign接入.md`](docs/TTS-and-VoiceDesign接入.md) 连接真实本地服务验证，不能把未实际调用的后端能力写成前端现状。
 
-## 编码与命名约定
+## 数据与兼容性红线
 
-使用现有 JavaScript 风格：4 空格缩进、分号、`camelCase` 变量/函数名、`UPPER_SNAKE_CASE` 常量；保持 Vue 模板、`setup` 逻辑和现有分区注释的组织方式。没有统一 formatter 或 linter，避免无关格式化。新增转换逻辑应集中复用，按“配置与 Prompt、存储兼容、模型调用、播放导出、页面展示”归类维护。
+- 不得更换 `UnitaleDB`、`project.currentState`、`assets`、旧 `localStorage` 键或工程 schema。运行时 `audioUrl`、对象 URL、AbortController 等字段不能写入工程快照。
+- 工程导入导出优先复用 `UnitaleProjectStorage`。完整工程 JSON 会内嵌 BGM、音色、台词原音频、Step-Audio-EditX 音频和 SoundEffect WAV；模型配置不随工程导入覆盖。
+- 稳定 `audioAssetKey` 只用于 IndexedDB 查找，不得拼成 `/voice/<assetKey>`。新生成或替换音频应覆盖对应稳定键，并正确回收对象 URL 和解码缓存。
+- 当前时间轴只允许 `dialogue` 与 `bgm`。旧 `bgImage` 块导入时忽略，旧 `sfx` / `filter` 字段不应恢复；音效计划只能写在 `dialogue.sfx_plan` 中，最多保留两项并各自绑定音频资产。
+- 保持 `dialogue` 的 `trimStart`、`trimEnd`、`speed`、`break_duration`、`dialogueVolume`、`sfxVolume` 语义。`break_duration` 是台词后的时间轴停顿，不是音效时长。
+- VoxCPM2 的 `clone_mode`、`delivery_profile`、`control_instruction`、`voxcpm_nonverbal_tags` 与通用 `emotion` / `intensity` 是不同语义，不能混用。Step-Audio-EditX 编辑结果必须与原始台词音频分开保存。
+- 不要提交 API Key、浏览器导出的工程数据、生成音频或本机模型产物。修改前先运行 `git status --short`，保留无关改动。
 
-## 兼容性与数据安全
+## 编码约定
 
-不得破坏 `UnitaleDB`、旧 `localStorage` 键、工程 schema、资产键，以及 `dialogue`、`bgm`、`bgImage` 的时间轴语义。工程导入导出优先复用 `js/project-storage.js`。修改前运行 `git status --short`，不得覆盖无关改动；不要提交 API Key、浏览器数据或生成音频。
+保持现有 JavaScript 风格：4 空格缩进、分号、`camelCase`、`UPPER_SNAKE_CASE` 常量；避免无关格式化。新增逻辑按“配置与 Prompt、存储兼容、模型调用、播放导出、页面展示”归类，转换与迁移逻辑集中放在已有规范化入口，不在模板中复制一套 schema。
 
-## 提交与 Pull Request
+修改 Prompt 时同时检查默认模板、变量替换、旧自定义模板迁移和 LLM 返回解析；修改模型接口时同时检查 URL、请求体、响应 MIME、取消逻辑、错误提示和在线接入文档。
 
-Git 历史主要采用 `feat:`、`fix:` 等 Conventional Commits（约定式提交）前缀，例如 `feat: 增加longCat模型`。提交应保持单一目的，首行用中文简述。PR 应说明改动范围、兼容性影响和已执行的验证命令；UI 改动附截图，依赖本地后端的改动注明端口、接口和未覆盖的在线条件，并同步更新相关 `README.md` 或 `docs/`。
+## 提交与交接
+
+Git 提交沿用 `feat:`、`fix:` 等 Conventional Commits 前缀，首行用中文简述并保持单一目的。PR 或交接说明应包含：改动范围、兼容性影响、已执行的语法检查和手动回归；UI 改动附截图，依赖本地后端的改动注明端口、接口、模型权重和未覆盖的在线条件。

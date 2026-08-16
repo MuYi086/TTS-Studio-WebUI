@@ -7,14 +7,14 @@
         'moss-soundEffect-v2': Object.freeze({
             id: 'moss-soundEffect-v2',
             label: 'MOSS-SoundEffect v2',
-            endpoint: 'http://127.0.0.1:8311/v1/generate',
+            endpoint: 'http://127.0.0.1:8312/v1/moss/soundEffect',
             maxSeconds: 30,
             promptLanguage: 'zh-CN'
         }),
         'stable-audio-3-medium': Object.freeze({
             id: 'stable-audio-3-medium',
             label: 'Stable Audio 3 Medium',
-            endpoint: 'http://127.0.0.1:8313/v1/generate',
+            endpoint: 'http://127.0.0.1:8311/v1/stableAudio/soundEffect',
             maxSeconds: 380,
             promptLanguage: 'en'
         })
