@@ -12,6 +12,7 @@
 - [`js/project-storage.js`](js/project-storage.js)：工程协议规范化与旧数据迁移；当前 `PROJECT_KIND` 为 `unitale-project`，`PROJECT_SCHEMA_VERSION` 为 `4`。
 - [`js/voice-design.js`](js/voice-design.js)：音色设计服务目录。当前默认目录是 Qwen `8301`、MOSS `8302`、MiMo `8303`；不要把目录索引写死到业务逻辑。
 - [`js/soundeffect-client.js`](js/soundeffect-client.js)：MOSS-SoundEffect `8312` 和 Stable Audio 3 Medium `8311` 的请求封装，只处理模型路由和 WAV 响应校验。
+- [`js/bgm-client.js`](js/bgm-client.js)：ACE-Step 1.5 `8313` 的 BGM 请求封装；生成的 Blob 由 `index.html` 写入既有 `bgmLibrary` 和 IndexedDB。
 - [`editConfig/`](editConfig/)：Step-Audio-EditX 的 emotion、paralinguistic、speaking style 词表。目前台词 `emotion` 与 EditX 编辑流程实际使用 emotion 词表；其他词表是独立配置，不要未经实现就宣称已有页面入口。
 - [`docs/`](docs/)：本地开发、回归、后端接入和模型实践说明；模型接口变更时优先同步对应文档。
 - [`Design/`](Design/)：视觉参考图，不是运行时资源。
@@ -26,10 +27,10 @@ python3 -m http.server 5173
 
 访问 `http://127.0.0.1:5173/index.html`。也可以使用仓库现有的 VS Code Live Server 配置，端口为 `5502`；修改 `.vscode/settings.json` 后需重启 Live Server。
 
-修改 `index.html`、外部脚本或配置脚本后，至少执行语法检查；模型接口变更还要核对 `8300/8301/8302/8303/8311/8312/8321/8322/8323/8324/8331` 与后端 `start.sh` 一致：
+修改 `index.html`、外部脚本或配置脚本后，至少执行语法检查；模型接口变更还要核对 `8300/8301/8302/8303/8311/8312/8313/8321/8322/8323/8324/8331` 与后端 `start.sh` 一致：
 
 ```bash
-node -e "const fs=require('fs');const files=['index.html','js/project-storage.js','js/voice-design.js','js/soundeffect-client.js','editConfig/emotion.js','editConfig/paralinguistic.js','editConfig/speakingStyle.js'];for(const file of files){const source=fs.readFileSync(file,'utf8');if(file==='index.html'){for(const match of source.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}}else new Function(source);console.log('syntax ok:',file)}"
+node -e "const fs=require('fs');const files=['index.html','js/project-storage.js','js/voice-design.js','js/soundeffect-client.js','js/bgm-client.js','editConfig/emotion.js','editConfig/paralinguistic.js','editConfig/speakingStyle.js'];for(const file of files){const source=fs.readFileSync(file,'utf8');if(file==='index.html'){for(const match of source.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}}else new Function(source);console.log('syntax ok:',file)}"
 ```
 
 涉及页面、IndexedDB、播放、音效、导入导出或后端请求的改动，还必须启动浏览器手动回归；需要在线模型的场景按 [`docs/TTS-and-VoiceDesign接入.md`](docs/TTS-and-VoiceDesign接入.md) 连接真实本地服务验证，不能把未实际调用的后端能力写成前端现状。
@@ -38,7 +39,7 @@ node -e "const fs=require('fs');const files=['index.html','js/project-storage.js
 
 - 不得更换 `UnitaleDB`、`project.currentState`、`assets`、旧 `localStorage` 键或工程 schema。运行时 `audioUrl`、对象 URL、AbortController 等字段不能写入工程快照。
 - 工程导入导出优先复用 `UnitaleProjectStorage`。完整工程 JSON 会内嵌 BGM、音色、台词原音频、Step-Audio-EditX 音频和 SoundEffect WAV；模型配置不随工程导入覆盖。
-- 稳定 `audioAssetKey` 只用于 IndexedDB 查找，不得拼成 `/voice/<assetKey>`。新生成或替换音频应覆盖对应稳定键，并正确回收对象 URL 和解码缓存。
+- 稳定 `audioAssetKey` 只用于 IndexedDB 查找，不得拼成 `/voice/<assetKey>`。新生成或替换音频应覆盖对应稳定键，并正确回收对象 URL 和解码缓存；BGM 时间轴块可用 `audioAssetKey` 直接绑定生成音频，播放/导出应优先按键解析、名称仅作旧工程回退。
 - 当前时间轴只允许 `dialogue` 与 `bgm`。旧 `bgImage` 块导入时忽略，旧 `sfx` / `filter` 字段不应恢复；音效计划只能写在 `dialogue.sfx_plan` 中，最多保留两项并各自绑定音频资产。
 - 保持 `dialogue` 的 `trimStart`、`trimEnd`、`speed`、`break_duration`、`dialogueVolume`、`sfxVolume` 语义。`break_duration` 是台词后的时间轴停顿，不是音效时长。
 - VoxCPM2 的 `clone_mode`、`delivery_profile`、`control_instruction`、`voxcpm_nonverbal_tags` 与通用 `emotion` / `intensity` 是不同语义，不能混用。Step-Audio-EditX 编辑结果必须与原始台词音频分开保存。

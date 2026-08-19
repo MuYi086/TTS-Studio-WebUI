@@ -303,7 +303,9 @@
             type: 'bgm',
             action: source.action || 'play',
             volume: toNumber(source.volume, 1.0),
-            bgmName: source.bgmName || source.name || ''
+            bgmName: source.bgmName || source.name || '',
+            // 生成式 BGM 控制块可直接绑定 IndexedDB 资产，名称仅作为人类可读回退。
+            audioAssetKey: typeof source.audioAssetKey === 'string' ? source.audioAssetKey : ''
         };
     }
 

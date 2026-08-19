@@ -14,6 +14,7 @@ curl http://127.0.0.1:8302/v1/health
 curl http://127.0.0.1:8303/v1/health
 curl http://127.0.0.1:8311/v1/health
 curl http://127.0.0.1:8312/v1/health
+curl http://127.0.0.1:8313/v1/health
 curl http://127.0.0.1:8321/v1/health
 curl http://127.0.0.1:8322/v1/health
 curl http://127.0.0.1:8323/v1/health
@@ -110,3 +111,26 @@ Stable Audio 使用同一事件的英文请求体：
 ```
 
 请求中的 `prompt` 必须是可直接用于生成的非语言声音描述；它在 MOSS 请求中来自 `sfx_plan.prompt`，在 Stable Audio 请求中来自 `sfx_plan.prompt_en`。`seconds` 由计划的 `duration_seconds` 提供，前端限制为大于 `0` 且不超过 `30` 秒。
+
+## `8313` ACE-Step BGM
+
+ACE-Step 1.5 XL Turbo 是有声小说 BGM/OST 的独立服务，不注册到
+`js/soundeffect-client.js`。页面通过 [`js/bgm-client.js`](../js/bgm-client.js) 调用：
+
+```text
+POST http://127.0.0.1:8313/v1/aceStep/bgm
+Content-Type: application/json
+```
+
+请求字段为 `prompt`（1–2000 字符）、`seconds`（10–600，默认 60）、`steps`（1–20，
+默认 8）、可选 `bpm`（30–240）、`keyscale`、`timesignature` 和 `seed`（默认 -1）。
+后端固定 `lyrics=""` 与 `task_type="text2music"`，使用 BF16、CPU offload、VAE tiling、
+GPU 锁和一次性 worker；成功响应是 48 kHz 双声道 `audio/wav`，并返回实际 Seed 响应头。
+
+生成完成后，WebUI 使用 `createAssetKey('bgm', filename)`、`saveAssetToDB`、
+`registerLocalAsset` 和 `loadAudioBuffer` 把 Blob 写入现有 `bgmLibrary`。不新增
+`generatedBgmAssets`，也不提升工程 `schemaVersion: 4`。ACE-Step 后端依赖需在启动前由
+操作者手动执行 `uv sync --project ace_step_1_5 --locked`；启动脚本对该服务使用
+`uv run --no-sync`。
+
+脚本制作页的“插入控制块”提供默认选中的产品模型 ID `ace_step_1_5`。点击“生成BGM”会复用同一生成请求和 BGM 资产持久化流程，成功后再复用 `addBgmBlock` 插入 `bgm` 时间轴块，并将生成条目的 `assetKey` 写入块的 `audioAssetKey`。实时播放与离线 WAV 导出优先按该稳定键读取 IndexedDB，用户手工切换 BGM 名称时清除显式绑定并回退到名称选择。

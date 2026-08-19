@@ -427,6 +427,80 @@
         <div v-if="activeTab === 'sfx'" class="space-y-8">
             <section class="space-y-6 border-t border-slate-200 pt-6">
                 <h2 class="text-lg font-bold text-slate-800 border-b pb-2">背景音乐管理 (BGM)</h2>
+                <div class="bg-gradient-to-br from-indigo-50 to-slate-50 p-5 rounded-xl border border-indigo-100">
+                    <div class="flex items-start justify-between gap-4 mb-4">
+                        <div>
+                            <h3 class="text-sm font-bold text-indigo-900">AI 生成 BGM</h3>
+                            <p class="text-xs text-slate-500 mt-1">生成完成后会自动写入下方 BGM 资源库，可直接试听、裁剪和加入时间轴。</p>
+                        </div>
+                        <span class="text-[10px] font-bold text-indigo-600 bg-white/80 border border-indigo-100 rounded-full px-2 py-1 whitespace-nowrap">ACE-Step 1.5</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Prompt（建议使用英文音乐描述）</label>
+                            <textarea v-model="bgmGenerateForm.prompt" rows="3" data-testid="bgm-generation-prompt"
+                                class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none resize-y"
+                                placeholder="Dark cinematic ambient underscore, sparse felt piano, low cello drone, designed underneath spoken narration, no vocals"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">名称（可选）</label>
+                            <input v-model="bgmGenerateForm.name" data-testid="bgm-generation-name"
+                                class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                                placeholder="例如：地下室低压悬疑">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">描述（可选）</label>
+                            <input v-model="bgmGenerateForm.description" data-testid="bgm-generation-description"
+                                class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                                placeholder="例如：调查进入地下区域时使用">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">模型</label>
+                            <select v-model="bgmGenerateForm.model" data-testid="bgm-generation-model"
+                                class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none bg-white">
+                                <option v-for="model in bgmModelOptions" :key="model.id" :value="model.id">{{ model.label }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">时长（秒，10–600）</label>
+                            <input v-model.number="bgmGenerateForm.seconds" type="number" min="10" max="600" step="1" data-testid="bgm-generation-seconds"
+                                class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">BPM（可选）</label>
+                            <input v-model.number="bgmGenerateForm.bpm" type="number" min="30" max="240" step="1"
+                                class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" placeholder="自动判断">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Key（可选）</label>
+                            <input v-model="bgmGenerateForm.keyscale" class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" placeholder="例如：D minor">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">拍号（可选）</label>
+                            <input v-model="bgmGenerateForm.timesignature" class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" placeholder="例如：4">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Seed</label>
+                            <input v-model.number="bgmGenerateForm.seed" type="number" step="1"
+                                class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Steps</label>
+                            <input v-model.number="bgmGenerateForm.steps" type="number" min="1" max="20" step="1"
+                                class="w-full px-3 py-2 border border-indigo-100 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 mt-4">
+                        <button type="button" data-testid="bgm-generation-submit" @click="generateBgm" :disabled="isGeneratingBgm"
+                            class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-wait">
+                            {{ isGeneratingBgm ? '生成中，请稍候…' : '生成 BGM' }}
+                        </button>
+                        <button type="button" data-testid="bgm-generation-stop" @click="stopBgmGeneration" :disabled="!isGeneratingBgm"
+                            class="px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed">停止</button>
+                        <span v-if="isGeneratingBgm" class="text-xs text-indigo-700">正在等待 8313 worker 完成，浏览器停止只取消当前等待。</span>
+                    </div>
+                    <p v-if="bgmGenerationError" data-testid="bgm-generation-error" class="mt-3 text-xs text-red-600 whitespace-pre-wrap">{{ bgmGenerationError }}</p>
+                </div>
                 <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
                     <h3 class="text-sm font-bold text-slate-700 mb-4">{{ isEditingBgm ? '编辑 BGM' : '添加新 BGM' }}</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -511,6 +585,10 @@
                                 <div>
                                     <div class="font-bold text-slate-800 text-sm">{{ bgm.name }}</div>
                                     <div class="text-xs text-slate-500 mt-0.5">{{ bgm.description }}</div>
+                                    <div v-if="bgm.source" class="text-[10px] text-indigo-600 mt-1">{{ bgm.source === 'ace-step-v15-xl-turbo-diffusers' ? 'ACE-Step 1.5 XL Turbo' : bgm.source }}</div>
+                                    <div v-if="bgm.generation" class="text-[10px] text-slate-400 mt-0.5">
+                                        {{ bgm.generation.seconds }}s<span v-if="bgm.generation.bpm"> · {{ bgm.generation.bpm }} BPM</span><span v-if="bgm.generation.keyscale"> · {{ bgm.generation.keyscale }}</span><span v-if="bgm.generation.seed != null"> · Seed {{ bgm.generation.seed }}</span>
+                                    </div>
                                     <div class="text-xs text-slate-400 mt-1">{{ bgm.filename }}</div>
                                 </div>
                             </div>
@@ -707,6 +785,22 @@
                         <!-- 插入控制块 -->
                         <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
                             <div class="font-bold text-xs text-slate-700">插入控制块</div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider" for="timeline-bgm-model">BGM 模型</label>
+                                <select id="timeline-bgm-model" data-testid="timeline-bgm-model" v-model="timelineBgmModel"
+                                    :disabled="isGeneratingBgm || isSequencePlaying"
+                                    class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                                    title="选择生成 BGM 使用的模型">
+                                    <option v-for="model in bgmModelOptions" :key="model.id" :value="model.id">{{ model.label }}</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider" for="timeline-bgm-prompt">BGM 描述</label>
+                                <input id="timeline-bgm-prompt" data-testid="timeline-bgm-prompt" v-model="bgmGenerateForm.prompt"
+                                    :disabled="isGeneratingBgm || isSequencePlaying"
+                                    class="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-purple-500 outline-none disabled:bg-slate-100"
+                                    placeholder="英文音乐描述，例如：cinematic ambient underscore, no vocals">
+                            </div>
                             <div class="flex flex-wrap gap-2">
                                 <button @click="addDialogueBlock"
                                     class="px-2 py-2 bg-blue-100 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-200 transition-all">
@@ -716,7 +810,14 @@
                                     class="px-2 py-2 bg-purple-100 text-purple-600 rounded-lg text-sm font-bold hover:bg-purple-200 transition-all">
                                     ➕ 插入BGM
                                 </button>
+                                <button data-testid="timeline-bgm-generate" @click="generateBgmAndInsert"
+                                    :disabled="isGeneratingBgm || isSequencePlaying"
+                                    class="px-2 py-2 bg-fuchsia-600 text-white rounded-lg text-sm font-bold hover:bg-fuchsia-700 transition-all disabled:opacity-50 disabled:cursor-wait">
+                                    {{ isGeneratingBgm ? '⏳ 生成中…' : '🎼 生成BGM' }}
+                                </button>
                             </div>
+                            <p class="text-[10px] leading-relaxed text-slate-400">生成成功后会自动插入播放控制块，并绑定这次生成的音频资产。</p>
+                            <p v-if="bgmGenerationError" data-testid="timeline-bgm-error" class="text-[10px] leading-relaxed text-red-600 whitespace-pre-wrap">{{ bgmGenerationError }}</p>
                         </div>
 
                         <!-- 配音/生成/播放 -->
@@ -791,6 +892,8 @@
 
                             <!-- BGM 控制块 -->
                             <div v-if="line.type === 'bgm'"
+                                :data-testid="'bgm-line-' + line.id"
+                                :data-bgm-audio-asset-key="line.audioAssetKey || null"
                                 :class="['flex flex-wrap items-center gap-3 p-3 rounded-lg border mb-2 transition-all', selectedLineIndex === index ? 'border-purple-500 bg-purple-50 shadow-md' : 'bg-purple-50/50 border-purple-200', currentSequenceIndex === index ? 'ring-2 ring-green-500' : '']">
                                 <div
                                     class="flex flex-col items-center justify-center gap-1 w-8 flex-shrink-0 border-r border-purple-200 pr-2">
@@ -812,7 +915,7 @@
                                     <option value="stop">停止</option>
                                 </select>
                                 <div class="flex-1 min-w-[220px] flex items-center gap-2">
-                                    <select v-if="line.action === 'play'" v-model="line.bgmName"
+                                    <select v-if="line.action === 'play'" v-model="line.bgmName" @change="line.audioAssetKey = ''"
                                         class="flex-1 px-2 py-1.5 text-xs border rounded bg-white focus:ring-1 focus:ring-purple-500 outline-none font-bold text-purple-700">
                                         <option value="" disabled>-- 选择背景音乐 --</option>
                                         <option v-for="s in bgmLibrary" :key="s.id" :value="s.name">{{ s.name }}</option>
@@ -821,6 +924,11 @@
                                         停止当前播放的所有背景音乐
                                     </div>
                                 </div>
+                                <span v-if="line.action === 'play' && line.audioAssetKey"
+                                    class="text-[10px] font-bold text-fuchsia-700 bg-fuchsia-100 rounded-full px-2 py-1 whitespace-nowrap"
+                                    title="该控制块已绑定生成的 BGM 音频">
+                                    已绑定生成音频
+                                </span>
                                 <div v-if="line.action === 'play'" class="w-28 flex-shrink-0 space-y-1">
                                     <div class="text-[10px] font-bold text-slate-400 uppercase text-center leading-tight">
                                         BGM音量
@@ -1251,6 +1359,7 @@
     <script src="./js/project-storage.js"></script>
     <script src="./js/voice-design.js?v=20260816-ports"></script>
     <script src="./js/soundeffect-client.js"></script>
+    <script src="./js/bgm-client.js"></script>
     <script src="./editConfig/emotion.js"></script>
     <script src="./editConfig/paralinguistic.js"></script>
     <script src="./editConfig/speakingStyle.js"></script>
@@ -1296,6 +1405,8 @@
                 const projectStorage = window.UnitaleProjectStorage;
                 // SoundEffect 客户端封装 MOSS（8312）和 Stable Audio 3 Medium（8311）请求；生成结果仍由本页写入工程资产库。
                 const soundEffectClient = window.UnitaleSoundEffectClient;
+                // BGM 客户端封装 ACE-Step（8313）请求；生成结果复用现有 BGM 资产链路。
+                const bgmClient = window.UnitaleBgmClient;
 
                 // 配套脚本未成功加载时立即终止启动，避免后续以不完整 schema 保存工程。
                 if (!projectStorage) {
@@ -1304,9 +1415,16 @@
                 if (!soundEffectClient) {
                     throw new Error('js/soundeffect-client.js 未正确加载');
                 }
+                if (!bgmClient) {
+                    throw new Error('js/bgm-client.js 未正确加载');
+                }
                 const soundEffectModelOptions = Object.values(soundEffectClient.SOUND_EFFECT_MODELS || {});
                 if (soundEffectModelOptions.length === 0) {
                     throw new Error('js/soundeffect-client.js 未提供音效模型配置');
+                }
+                const bgmModelOptions = Object.values(bgmClient.BGM_MODELS || {});
+                if (bgmModelOptions.length === 0) {
+                    throw new Error('js/bgm-client.js 未提供 BGM 模型配置');
                 }
 
                 // 解构工程协议常量和唯一的数据规范化入口，避免页面复制 schema 转换逻辑。
@@ -2166,6 +2284,25 @@
                 const bgmForm = ref({ id: '', name: '', description: '', filename: '', assetKey: '', trimStart: 0, trimEnd: 1, volume: 0.3 });
                 // 控制 BGM 表单提交时新增还是覆盖已有素材。
                 const isEditingBgm = ref(false);
+                // ACE-Step 生成参数与请求状态；生成结果仍写入同一个 bgmLibrary。
+                const DEFAULT_BGM_PROMPT = 'Dark cinematic ambient underscore, sparse felt piano, low cello drone, designed underneath spoken narration, no vocals';
+                const bgmGenerateForm = ref({
+                    model: bgmClient.DEFAULT_MODEL || 'ace_step_1_5',
+                    prompt: DEFAULT_BGM_PROMPT,
+                    seconds: 60,
+                    bpm: '',
+                    keyscale: '',
+                    timesignature: '4',
+                    seed: -1,
+                    steps: 8,
+                    name: '',
+                    description: ''
+                });
+                const isGeneratingBgm = ref(false);
+                const bgmGenerationError = ref('');
+                let bgmAbortController = null;
+                // 插入控制块使用独立的模型选择，但复用同一套生成参数和 IndexedDB 资产链路。
+                const timelineBgmModel = ref(bgmClient.DEFAULT_MODEL || 'ace_step_1_5');
 
                 // 聊天状态
                 // 独立聊天测试工具的用户输入。
@@ -3607,6 +3744,17 @@ ${voiceReferenceHardConstraints}`;
                     // 先恢复 BGM 和音色两类工程级音频资源库；SFX 由 dialogue.sfx_plan 自身持有。
                     await restoreAssetCollection(bgmLibrary.value, 'filename');
                     await restoreAssetCollection(timbres.value, 'refPath');
+
+                    // BGM 控制块的稳定键通常指向资源库条目；资源库缺失时仍尝试直接恢复绑定资产。
+                    for (const script of scriptList.value) {
+                        for (const line of script.data.scriptLines || []) {
+                            if (!line || line.type !== 'bgm' || !line.audioAssetKey) continue;
+                            const blob = await tryLoadStoredAssetBlob(line);
+                            if (!blob) continue;
+                            registerLocalAsset(line, blob, `${line.id}.wav`);
+                            await loadAudioBuffer(line);
+                        }
+                    }
 
                     // 角色属于各自脚本，flatMap 汇总后统一恢复其 voiceFile。
                     const allChars = scriptList.value.flatMap(s => s.data.characters || []);
@@ -5216,6 +5364,105 @@ ${voiceReferenceHardConstraints}`;
                     event.target.value = '';
                 };
 
+                /**
+                 * 通过选定模型生成 BGM，并写入现有 IndexedDB 与 BGM 资源库。
+                 * @param {Object} [options] - 可选的模型覆盖和生成成功后的插入动作
+                 * @returns {Promise<Object|null>} 生成的 BGM 资源或失败/取消时的 null
+                */
+                const generateBgm = async (options = {}) => {
+                    if (isGeneratingBgm.value) return;
+
+                    // Vue 点击事件会把 MouseEvent 传入方法；只有普通对象才作为调用方选项。
+                    const requestOptions = options && typeof options === 'object' && !(options instanceof Event)
+                        ? options
+                        : {};
+                    const form = bgmGenerateForm.value;
+                    const prompt = String(requestOptions.prompt ?? form.prompt ?? '').trim();
+                    if (!prompt) {
+                        bgmGenerationError.value = '请输入 BGM Prompt。';
+                        return null;
+                    }
+                    const selectedModel = requestOptions.model || form.model || bgmClient.DEFAULT_MODEL;
+
+                    isGeneratingBgm.value = true;
+                    bgmGenerationError.value = '';
+                    bgmAbortController = new AbortController();
+
+                    try {
+                        const generated = await bgmClient.generateBgmAudio({
+                            model: selectedModel,
+                            prompt,
+                            seconds: form.seconds,
+                            bpm: form.bpm,
+                            keyscale: form.keyscale,
+                            timesignature: form.timesignature,
+                            seed: form.seed,
+                            steps: form.steps,
+                            signal: bgmAbortController.signal
+                        });
+                        const now = Date.now();
+                        const filename = `ace-step-bgm-${now}.wav`;
+                        const assetKey = createAssetKey('bgm', filename);
+                        const resolvedSeed = Number.isInteger(generated.seed)
+                            ? generated.seed
+                            : Number(form.seed);
+                        const bgm = {
+                            id: String(now),
+                            name: String(form.name || '').trim() || `ACE-Step BGM ${new Date().toLocaleTimeString()}`,
+                            description: String(form.description || '').trim() || prompt,
+                            filename,
+                            assetKey,
+                            trimStart: 0,
+                            trimEnd: 1,
+                            volume: 0.3,
+                            enabled: true,
+                            source: generated.model || form.model,
+                            generation: {
+                                prompt,
+                                seconds: Number(form.seconds),
+                                bpm: form.bpm === '' || form.bpm == null ? null : Number(form.bpm),
+                                keyscale: String(form.keyscale || '').trim() || null,
+                                timesignature: String(form.timesignature || '').trim() || null,
+                                seed: resolvedSeed,
+                                steps: Number(form.steps),
+                                sampleRate: Number.isFinite(generated.sampleRate) ? generated.sampleRate : 48000,
+                                model: selectedModel
+                            }
+                        };
+
+                        await saveAssetToDB(assetKey, generated.blob);
+                        registerLocalAsset(bgm, generated.blob, filename);
+                        bgmLibrary.value.push(bgm);
+                        await loadAudioBuffer(bgm);
+                        triggerAutoSave();
+                        bgmGenerateForm.value = { ...form, model: selectedModel, name: '', description: '', seed: resolvedSeed };
+                        if (requestOptions.insertBlock) {
+                            // 生成成功后复用“插入BGM”的唯一入口，并把本次资产键写进控制块。
+                            addBgmBlock({ bgmName: bgm.name, audioAssetKey: bgm.assetKey });
+                            triggerAutoSave();
+                        }
+                        return bgm;
+                    } catch (error) {
+                        if (error?.name === 'AbortError') return null;
+                        bgmGenerationError.value = error?.message || String(error);
+                        return null;
+                    } finally {
+                        isGeneratingBgm.value = false;
+                        bgmAbortController = null;
+                    }
+                };
+
+                /** 生成 BGM 并在生成成功后立即插入绑定该音频的播放控制块。 */
+                const generateBgmAndInsert = () => generateBgm({
+                    model: timelineBgmModel.value,
+                    insertBlock: true
+                });
+
+                /** 取消浏览器对 ACE-Step 响应的等待，不改动服务端已有 worker。 */
+                const stopBgmGeneration = () => {
+                    if (bgmAbortController) bgmAbortController.abort();
+                };
+
                 // --- 情绪预设管理逻辑 ---
                 // 移除 saveEmotionPresetsToLocal
 
@@ -6722,6 +6969,38 @@ ${voiceReferenceHardConstraints}`;
                     event.target.value = '';
                 };
 
+                /**
+                 * 解析时间轴 BGM 的实际素材；优先使用控制块的稳定键，再回退名称。
+                 * @param {Object|string} bgmInput - BGM 控制块或资源名称
+                 * @returns {Object|null} 可供加载器使用的 BGM 资源对象
+                 */
+                const resolveBgmLibraryItem = (bgmInput) => {
+                    const line = bgmInput && typeof bgmInput === 'object' ? bgmInput : null;
+                    const bgmName = line ? (line.bgmName || line.name || '') : String(bgmInput || '');
+                    const audioAssetKey = line?.audioAssetKey || '';
+                    const libraryItem = (audioAssetKey
+                        ? bgmLibrary.value.find(item => item.assetKey === audioAssetKey)
+                        : null) || bgmLibrary.value.find(item => item.name === bgmName);
+                    if (libraryItem) return libraryItem;
+                    // 工程只剩时间轴绑定、资源库元数据缺失时，仍可直接从 IndexedDB 稳定键恢复。
+                    if (!audioAssetKey) return null;
+                    return {
+                        id: line?.id || audioAssetKey,
+                        name: bgmName,
+                        assetKey: audioAssetKey,
+                        filename: line?.filename || '',
+                        trimStart: line?.trimStart ?? 0,
+                        trimEnd: line?.trimEnd ?? 1,
+                        volume: line?.volume ?? 1.0
+                    };
+                };
+
+                /** 返回 BGM 在当前导出任务中的稳定素材键。 */
+                const getBgmAssetIdentity = (bgmInput) => {
+                    const item = resolveBgmLibraryItem(bgmInput);
+                    return item?.assetKey || item?.filename || item?.name || '';
+                };
+
                 // --- 导出音频逻辑 (WAV) ---
                 /**
                  * 按脚本时间轴离线混合台词、音效与 BGM，并下载 WAV。
@@ -6760,17 +7039,17 @@ ${voiceReferenceHardConstraints}`;
                             }
                         }
 
-                        // 同样用 Set 收集时间轴中实际执行 play 的 BGM。
-                        const usedBgmNames = new Set();
-                        // stop 块没有新素材名，只从 play 块读取 bgmName。
-                        scriptLines.value.forEach(l => { if (l.type === 'bgm' && l.action === 'play') usedBgmNames.add(l.bgmName); });
-                        for (const name of usedBgmNames) {
-                            // 通过名称把时间轴控制块关联到 BGM 资源库。
-                            const item = bgmLibrary.value.find(b => b.name === name);
-                            if (item && item.filename) {
-                                // 单一 BGM 缺失不阻断对白与其他 BGM 的导出。
-                                try { assets.bgm[name] = await loadAudioBuffer(item); } catch (e) { }
-                            }
+                        // 收集时间轴中实际执行 play 的 BGM；稳定键优先，避免同名资源串音。
+                        const usedBgmAssets = new Map();
+                        scriptLines.value.forEach(line => {
+                            if (line.type !== 'bgm' || line.action !== 'play') return;
+                            const item = resolveBgmLibraryItem(line);
+                            const key = getBgmAssetIdentity(line);
+                            if (item && key) usedBgmAssets.set(key, item);
+                        });
+                        for (const [key, item] of usedBgmAssets) {
+                            // 单一 BGM 缺失不阻断对白与其他 BGM 的导出。
+                            try { assets.bgm[key] = await loadAudioBuffer(item); } catch (e) { }
                         }
 
                         // currentTime 是离线工程时间轴上的秒数游标。
@@ -6790,8 +7069,14 @@ ${voiceReferenceHardConstraints}`;
                                 if (line.action === 'play') {
                                     // 新 BGM 开始前先把上一首闭合到当前时间。
                                     if (currentBgm) bgmSegments.push({ ...currentBgm, end: currentTime });
-                                    // 记录新片段的名称、起点和该控制块指定的音量。
-                                    currentBgm = { name: line.bgmName, start: currentTime, volume: line.volume };
+                                    // 记录稳定素材键、资源对象、起点和该控制块指定的音量。
+                                    currentBgm = {
+                                        key: getBgmAssetIdentity(line),
+                                        item: resolveBgmLibraryItem(line),
+                                        name: line.bgmName,
+                                        start: currentTime,
+                                        volume: line.volume
+                                    };
                                 } else if (line.action === 'stop') {
                                     // stop 只有在确有活动 BGM 时才产生闭合片段。
                                     if (currentBgm) {
@@ -6853,12 +7138,12 @@ ${voiceReferenceHardConstraints}`;
 
                         // 把已闭合的每个 BGM 片段安排到离线音频图中。
                         bgmSegments.forEach(seg => {
-                            // 通过片段名称获取预加载的 BGM AudioBuffer。
-                            const buffer = assets.bgm[seg.name];
+                            // 通过稳定素材键获取预加载的 BGM AudioBuffer。
+                            const buffer = assets.bgm[seg.key];
                             // 素材存在时才创建节点；缺失 BGM 不影响其余轨道。
                             if (buffer) {
                                 // 回查资源库，读取库级音量和裁剪循环区间。
-                                const libItem = bgmLibrary.value.find(b => b.name === seg.name);
+                                const libItem = seg.item || resolveBgmLibraryItem(seg.name);
                                 // 旧工程无库级音量时保持 1 倍。
                                 const libVol = libItem ? (libItem.volume ?? 1.0) : 1.0;
                                 // 最终 BGM 音量 = 控制块音量 × 资源库默认音量。
@@ -7324,8 +7609,16 @@ ${voiceReferenceHardConstraints}`;
                     }));
                 };
 
-                /** 在选中项后或列表末尾插入 BGM 播放控制块。 */
-                const addBgmBlock = () => {
+                /**
+                 * 在选中项后或列表末尾插入 BGM 播放控制块。
+                 * @param {Object} [options] - 可选的 BGM 名称与稳定音频资产键
+                 * @returns {Object} 新插入的时间轴块
+                 */
+                const addBgmBlock = (options = {}) => {
+                    // 生成式入口传入稳定键后，控制块不再只依赖易变的名称匹配。
+                    const selectedBgm = bgmLibrary.value.find(item => item.name === options.bgmName)
+                        || bgmLibrary.value[0]
+                        || null;
                     // 新 BGM 控制块默认执行播放动作。
                     const newBlock = {
                         // 生成当前页面会话内基本唯一的块 ID。
@@ -7337,7 +7630,9 @@ ${voiceReferenceHardConstraints}`;
                         // 块级音量初始为 1，播放时还会乘资源库级音量。
                         volume: 1.0,
                         // 资源库非空时默认选择第一项，空库则等待用户选择。
-                        bgmName: bgmLibrary.value.length > 0 ? bgmLibrary.value[0].name : ''
+                        bgmName: options.bgmName || selectedBgm?.name || '',
+                        // 只有“生成BGM”入口显式写入稳定键；普通插入继续保持名称选择语义。
+                        audioAssetKey: options.audioAssetKey || ''
                     };
                     // 有合法选中块时插入其后，符合时间轴编辑的直觉。
                     if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
@@ -7350,6 +7645,7 @@ ${voiceReferenceHardConstraints}`;
                         // 自动选中新追加的最后一项。
                         selectedLineIndex.value = scriptLines.value.length - 1;
                     }
+                    return newBlock;
                 };
 
                 /** 在选中项后或列表末尾插入使用默认值的台词块。 */
@@ -7475,11 +7771,11 @@ ${voiceReferenceHardConstraints}`;
 
                 /**
                  * 淡出旧 BGM，并循环播放指定素材的剪辑区间。
-                 * @param {string} bgmName - BGM 资源名称
+                 * @param {Object|string} bgmInput - BGM 控制块或 BGM 资源名称
                  * @param {number} [volume] - 脚本块音量系数
                  * @returns {Promise<void>} 新 BGM 启动或加载失败后兑现
                  */
-                const playBgm = async (bgmName, volume = 0.4) => {
+                const playBgm = async (bgmInput, volume = 0.4) => {
                     // 切换曲目时先把现有 BGM 平滑淡出。
                     if (bgmAudioNode && bgmGainNode) {
                         // 保存旧节点，避免创建新 BGM 后引用被覆盖。
@@ -7502,11 +7798,12 @@ ${voiceReferenceHardConstraints}`;
                         bgmGainNode = null;
                     }
 
-                    // 时间轴只保存 BGM 名称，实际文件和裁剪参数来自资源库。
-                    const bgmLibItem = bgmLibrary.value.find(b => b.name === bgmName);
-                    // 资源不存在或没有文件标识时记录警告并保持静音。
-                    if (!bgmLibItem || !bgmLibItem.filename) {
-                        console.warn(`BGM not found in library: ${bgmName}`);
+                    // 生成式控制块优先按 audioAssetKey 解析，普通旧块继续按名称兼容。
+                    const bgmLibItem = resolveBgmLibraryItem(bgmInput);
+                    const bgmLabel = typeof bgmInput === 'object' ? (bgmInput.bgmName || '') : String(bgmInput || '');
+                    // 资源不存在或既没有稳定键也没有路径时记录警告并保持静音。
+                    if (!bgmLibItem || (!getAssetStorageKey(bgmLibItem) && !getAssetPath(bgmLibItem))) {
+                        console.warn(`BGM not found in library: ${bgmLabel}`);
                         return;
                     }
 
@@ -7577,7 +7874,7 @@ ${voiceReferenceHardConstraints}`;
 
                         // 最近指令是 play 才恢复音乐；stop 或不存在都保持前面清理后的静音。
                         if (lastBgmLine && lastBgmLine.action === 'play') {
-                            await playBgm(lastBgmLine.bgmName, lastBgmLine.volume);
+                            await playBgm(lastBgmLine, lastBgmLine.volume);
                         }
                     }
 
@@ -7619,7 +7916,7 @@ ${voiceReferenceHardConstraints}`;
                         if (line.type === 'bgm') {
                             if (line.action === 'play') {
                                 // 等新 BGM 完成加载和启动后再继续下一块。
-                                await playBgm(line.bgmName, line.volume);
+                                await playBgm(line, line.volume);
                             } else if (line.action === 'stop') {
                                 // stop 块有活动节点时执行与全局停止一致的两秒淡出。
                                 if (bgmAudioNode && bgmGainNode) {
@@ -8414,7 +8711,9 @@ ${voiceReferenceHardConstraints}`;
                                     // 新 BGM 控制块默认使用 1 倍块级音量。
                                     volume: 1.0,
                                     // 使用匹配后的资源库 BGM 名称。
-                                    bgmName: matchedBgmName
+                                    bgmName: matchedBgmName,
+                                    // 保留已有工程中显式绑定的 BGM 资产键；名称仍作为旧数据回退。
+                                    audioAssetKey: typeof item.audioAssetKey === 'string' ? item.audioAssetKey : ''
                                 };
                                 // LLM 输出只是候选计划；页面在此按发起请求时的开关做最终收敛。
                                 applyCloneModePolicy(generatedLine, cloneModePolicyAtRequest);
@@ -8768,6 +9067,9 @@ ${voiceReferenceHardConstraints}`;
                     // BGM 资源库、表单、编辑状态及其 CRUD/上传入口。
                     bgmLibrary, bgmForm, isEditingBgm,
                     saveBgm, editBgm, deleteBgm, resetBgmForm, handleBgmFileUpload,
+                    // ACE-Step BGM 生成表单、进度、错误和浏览器取消入口。
+                    bgmGenerateForm, bgmModelOptions, timelineBgmModel, isGeneratingBgm, bgmGenerationError,
+                    generateBgm, generateBgmAndInsert, stopBgmGeneration,
 
                     // 可分配角色、当前试听 ID，以及原始/Step-Audio-EditX 台词音频的生成、试听和清理入口。
                     availableRoles, isAuditioningId, generateLineAudio, playLineAudio, clearLineAudio,

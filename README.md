@@ -12,7 +12,7 @@
 - 台词处理：支持角色音量、台词音量、播放速度、波形裁剪、停顿、原始 TTS 音频试听和清除。VoxCPM2 另有极致/可控克隆、表演档位、自然语言控制指令和非语言标签。
 - Step-Audio-EditX：以当前行原始音频为首次输入，已有编辑结果时支持继续叠加；编辑结果独立保存，可单独试听、删除、导出和恢复，不替换原始台词音频。
 - 上下文音效：LLM 只为原文明确的非语言事件生成 `dialogue.sfx_plan`；每行最多两项，选择 MOSS 或 Stable Audio 生成 WAV 后直接绑定到计划，不经过工程级 SFX 素材库。
-- BGM：导入本地音频、剪辑和设置默认音量，在脚本中插入播放/停止控制块；BGM 与台词、音效一起参与实时预览和 WAV 混音。
+- BGM：导入本地音频或调用 ACE-Step 1.5 生成 BGM，剪辑和设置默认音量，在脚本中插入播放/停止控制块；“生成BGM”会按选定模型生成后自动插入并绑定该音频；BGM 与台词、音效一起参与实时预览和 WAV 混音。
 - 导出：完整工程 JSON、TXT、SRT 字幕和混音 WAV。MP4 使用 WebCodecs 生成与脚本时长对应的纯黑视频轨道；当前 MP4 只包含视频轨道，不是带 WAV 音轨的最终有声视频。
 - Prompt 管理：可编辑脚本分析 Prompt、角色音色分析 Prompt、动态参考文本 Prompt 和固定参考文本策略。默认脚本 Prompt 要求 `emotion` 从 [`editConfig/emotion.js`](editConfig/emotion.js) 的官方标签中选择。
 
@@ -24,6 +24,7 @@
 | [`js/project-storage.js`](js/project-storage.js) | `unitale-project` schema 4 的工程规范化、迁移和运行时字段清理 |
 | [`js/voice-design.js`](js/voice-design.js) | 音色设计服务目录；当前默认 Qwen `8301`、MOSS `8302`、MiMo `8303` |
 | [`js/soundeffect-client.js`](js/soundeffect-client.js) | MOSS-SoundEffect 与 Stable Audio 的请求封装 |
+| [`js/bgm-client.js`](js/bgm-client.js) | ACE-Step 1.5 BGM 请求封装；生成结果由页面写入现有 IndexedDB 资产链路 |
 | [`editConfig/`](editConfig/) | Step-Audio-EditX 的 emotion、paralinguistic、speaking style 词表 |
 | [`docs/`](docs/) | 本地开发、回归、后端接入和模型实践说明 |
 | [`Design/`](Design/) | 视觉参考图，不参与运行时加载 |
@@ -43,7 +44,7 @@ python3 -m http.server 5173
 修改后执行内联脚本和外部脚本语法检查：
 
 ```bash
-node -e "const fs=require('fs');const files=['index.html','js/project-storage.js','js/voice-design.js','js/soundeffect-client.js','editConfig/emotion.js','editConfig/paralinguistic.js','editConfig/speakingStyle.js'];for(const file of files){const source=fs.readFileSync(file,'utf8');if(file==='index.html'){for(const match of source.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}}else new Function(source);console.log('syntax ok:',file)}"
+node -e "const fs=require('fs');const files=['index.html','js/project-storage.js','js/voice-design.js','js/soundeffect-client.js','js/bgm-client.js','editConfig/emotion.js','editConfig/paralinguistic.js','editConfig/speakingStyle.js'];for(const file of files){const source=fs.readFileSync(file,'utf8');if(file==='index.html'){for(const match of source.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}}else new Function(source);console.log('syntax ok:',file)}"
 ```
 
 没有自动化测试框架；改动页面、存储、播放、音效或导出后应按 [`docs/本地开发与回归.md`](docs/本地开发与回归.md) 在浏览器手动验证。在线模型链路需要真实后端和模型权重，不能用静态检查替代。
@@ -70,6 +71,7 @@ WebUI 会自动使用或调用以下本地端点；端口只是当前项目的�
 | MiMo VoiceDesign | `8303` | `POST /v1/mimo/timbre` |
 | MOSS-SoundEffect v2 | `8312` | `POST /v1/moss/soundEffect`，发送中文 `prompt` |
 | Stable Audio 3 Medium | `8311` | `POST /v1/stableAudio/soundEffect`，发送英文 `prompt_en` |
+| ACE-Step 1.5 XL Turbo | `8313` | `POST /v1/aceStep/bgm`，发送英文音乐 `prompt` |
 | Step-Audio-EditX | `8331` | `POST /v1/stepAudioEditx/edit` |
 
 当前台词合成流程如下：
@@ -78,6 +80,14 @@ WebUI 会自动使用或调用以下本地端点；端口只是当前项目的�
 2. 浏览器用 `GET /v1/check/audio` 检查服务端文件；新版服务会比较音频 `sha256`，同名文件内容变化时重新上传。
 3. 浏览器按选定模型向 `/v1/qwen/clone`、`/v1/voxcpm2/clone`、`/v1/longCat/clone` 或 `/v2/dotsTTS/clone` 发送 JSON，成功响应必须是非空音频二进制；原始 WAV 同时保存到浏览器 IndexedDB 工程资产。
 4. VoxCPM2 的可控克隆只发送 `control_instruction` 和 `nonverbal_tags`，极致克隆发送 `prompt_text`；LongCat 不使用 VoxCPM2 的表演字段。
+
+BGM 生成使用独立的 [`js/bgm-client.js`](js/bgm-client.js)，不复用音效客户端：
+
+1. 在“背景音乐管理 (BGM)”的“AI 生成 BGM”表单填写英文音乐描述、时长、可选 BPM/调式/拍号和 Seed；脚本制作页“插入控制块”默认选择产品模型 ID `ace_step_1_5`，也可直接填写描述并点击“生成BGM”。
+2. 页面向 `http://127.0.0.1:8313/v1/aceStep/bgm` 发送 JSON；成功响应必须是非空 `audio/wav`，并可通过响应头读取实际 Seed。
+3. WAV 立即以 `bgm` `assetKey` 保存到 `UnitaleDB`，登记到现有 `bgmLibrary`，随后复用既有试听、裁剪、时间轴、完整工程导出/导入和离线混音流程。工程 schema 仍为 4。
+4. “生成BGM”成功后复用“插入BGM”逻辑创建 `bgm` 控制块，并把本次生成的 `audioAssetKey` 写入控制块；播放和导出优先按该稳定键解析，名称只作为旧工程回退。
+5. “停止”只 Abort 浏览器当前等待；不会假装已经终止后端 GPU worker。
 
 LLM 使用用户配置的 OpenAI 兼容 `/chat/completions`。脚本分析是非流式请求，返回严格 JSON 数组；角色分析和参考文案生成也是浏览器直连 LLM，因此云端服务需要允许 CORS，API Key 仅保存在当前浏览器的 `localStorage` 中。
 
