@@ -232,7 +232,7 @@
                                 {{ ttsModelLabel(option) }}
                             </option>
                         </select>
-                        <p class="mt-1 text-[10px] text-slate-400">8321 使用 Qwen3-TTS；8322 使用 VoxCPM2；8323 使用 LongCat-AudioDiT-3.5B；8324 使用 dots.tts-soar。</p>
+                        <p class="mt-1 text-[10px] text-slate-400">8321 使用 Qwen3-TTS；8322 使用 VoxCPM2；8323 使用 LongCat-AudioDiT-3.5B；8324 使用 dots.tts-soar；8325 使用 FireRedTTS3。</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -291,7 +291,7 @@
                             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">参考音频文本</label>
                             <textarea v-model="timbreForm.promptText" rows="2"
                                 class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
-                                placeholder="参考音频中实际说出的准确文字，用于 VoxCPM2 / Qwen3-TTS / LongCat 等克隆模型"></textarea>
+                            placeholder="参考音频中实际说出的准确文字，用于 VoxCPM2 / Qwen3-TTS / LongCat / FireRedTTS3 等克隆模型"></textarea>
                         </div>
                         <div class="md:col-span-2">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">参考音频文件</label>
@@ -1821,13 +1821,14 @@
                 const isEditing = ref(false);
 
                 // TTS 配置状态
-                // 本地服务按模型能力分组；8322 承载 VoxCPM2，8323/8324 独立承载 LongCat 与 dots.tts-soar。
+                // 本地服务按模型能力分组；8322/8323/8324/8325 独立承载不同克隆模型。
                 const TTS_PROTOCOLS = {
                     referenceTextClone: 'reference-text-clone',
                     qwen3Tts: 'qwen3-tts',
                     voxcpm2: 'voxcpm2',
                     longcatAudioDit: 'longcat-audiodit',
-                    dotsTtsSoar: 'dots-tts-soar'
+                    dotsTtsSoar: 'dots-tts-soar',
+                    fireredTts3: 'fireredtts3'
                 };
                 const TTS_MODEL_OPTIONS = Object.freeze([
                     {
@@ -1865,20 +1866,31 @@
                         baseUrl: 'http://127.0.0.1:8324',
                         clonePath: '/v2/dotsTTS/clone',
                         environment: 'dots_tts_soar'
+                    },
+                    {
+                        id: 'fireredtts3',
+                        name: 'FireRedTTS3',
+                        backend: 'fireredtts3',
+                        protocol: TTS_PROTOCOLS.fireredTts3,
+                        baseUrl: 'http://127.0.0.1:8325',
+                        clonePath: '/v1/FireRedTTS3/clone',
+                        environment: 'firered_tts3'
                     }
                 ]);
-                // 端口可推断四种参考音频克隆协议。
+                // 端口可推断五种参考音频克隆协议。
                 const TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT = Object.freeze({
                     '8321': TTS_PROTOCOLS.qwen3Tts,
                     '8322': TTS_PROTOCOLS.voxcpm2,
                     '8323': TTS_PROTOCOLS.longcatAudioDit,
-                    '8324': TTS_PROTOCOLS.dotsTtsSoar
+                    '8324': TTS_PROTOCOLS.dotsTtsSoar,
+                    '8325': TTS_PROTOCOLS.fireredTts3
                 });
                 const TTS_CLONE_PATH_BY_BACKEND = Object.freeze({
                     'qwen3-tts': '/v1/qwen/clone',
                     voxcpm2: '/v1/voxcpm2/clone',
                     'longcat-audiodit': '/v1/longCat/clone',
-                    'dots-tts-soar': '/v2/dotsTTS/clone'
+                    'dots-tts-soar': '/v2/dotsTTS/clone',
+                    fireredtts3: '/v1/FireRedTTS3/clone'
                 });
                 /**
                  * 根据 TTS-and-VoiceDesign 的默认端口推断合成协议。
@@ -1915,6 +1927,7 @@
                 const getTtsBackend = (config) => {
                     const explicit = String(config?.backend || '').trim().toLowerCase();
                     if (explicit.includes('longcat') || explicit.includes('audiodit')) return 'longcat-audiodit';
+                    if (explicit.includes('firered')) return 'fireredtts3';
                     if (explicit === 'qwen3-tts' || explicit.includes('qwen')) return 'qwen3-tts';
                     // 内置配置和旧版保存项都可能直接使用 backend/modelId=voxcpm2，必须先归一化再进入未知后端保护分支。
                     if (explicit === 'voxcpm2' || explicit.includes('voxcpm')) return 'voxcpm2';
@@ -1923,6 +1936,7 @@
                     if (explicit) return '';
                     const modelId = String(config?.modelId || '').toLowerCase();
                     if (modelId.includes('longcat') || modelId.includes('audiodit')) return 'longcat-audiodit';
+                    if (modelId.includes('firered')) return 'fireredtts3';
                     if (modelId.includes('qwen')) return 'qwen3-tts';
                     if (modelId === 'voxcpm2' || modelId.includes('voxcpm')) return 'voxcpm2';
                     if (modelId.includes('dots')) return 'dots-tts-soar';
@@ -1932,6 +1946,7 @@
                     if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.voxcpm2) return 'voxcpm2';
                     if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.longcatAudioDit) return 'longcat-audiodit';
                     if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.dotsTtsSoar) return 'dots-tts-soar';
+                    if (normalizeTtsProtocol(config?.protocol, config?.baseUrl, config?.modelId) === TTS_PROTOCOLS.fireredTts3) return 'fireredtts3';
                     return '';
                 };
                 /** 返回模型的唯一克隆接口；接口按模型后端固定，不接受配置覆盖。 */
@@ -1956,14 +1971,15 @@
                     'qwen3-tts': 'Qwen3-TTS',
                     voxcpm2: 'VoxCPM2',
                     'longcat-audiodit': 'LongCat-AudioDiT 3.5B',
-                    'dots-tts-soar': 'dots.tts-soar'
+                    'dots-tts-soar': 'dots.tts-soar',
+                    fireredtts3: 'FireRedTTS3'
                 });
                 const ttsModelLabel = (config) => {
                     const backend = getTtsBackend(config);
                     if (TTS_MODEL_LABELS[backend]) return TTS_MODEL_LABELS[backend];
                     return String(config?.name || config?.modelId || 'TTS').trim().replace(/\s+/g, '-');
                 };
-                const isSupportedTts = (config) => ['qwen3-tts', 'voxcpm2', 'longcat-audiodit', 'dots-tts-soar'].includes(getTtsBackend(config));
+                const isSupportedTts = (config) => ['qwen3-tts', 'voxcpm2', 'longcat-audiodit', 'dots-tts-soar', 'fireredtts3'].includes(getTtsBackend(config));
                 /** 判断当前 TTS 配置是否为支持逐句表演计划的 VoxCPM2 服务。 */
                 const usesVoxCpm2 = (config) =>
                     getTtsBackend(config) === 'voxcpm2';
@@ -2162,13 +2178,15 @@
                     const sourceName = String(source.name || '').toLowerCase();
                     const inferredModel = source.modelId
                         || (sourceName.includes('longcat') || sourceName.includes('audiodit') ? 'longcat-audiodit-3.5b-bf16' : '')
+                        || (sourceName.includes('firered') ? 'fireredtts3' : '')
                         || (sourceName.includes('dots') ? 'dots-tts-soar' : '');
                     const option = TTS_MODEL_OPTIONS.find(item => item.id === inferredModel)
                         || TTS_MODEL_OPTIONS.find(item => item.backend === source.backend)
                         || (String(source.baseUrl || '').includes(':8321') ? TTS_MODEL_OPTIONS[0] : null)
                         || (String(source.baseUrl || '').includes(':8322') ? TTS_MODEL_OPTIONS[1] : null)
                         || (String(source.baseUrl || '').includes(':8323') ? TTS_MODEL_OPTIONS[2] : null)
-                        || (String(source.baseUrl || '').includes(':8324') ? TTS_MODEL_OPTIONS[3] : null);
+                        || (String(source.baseUrl || '').includes(':8324') ? TTS_MODEL_OPTIONS[3] : null)
+                        || (String(source.baseUrl || '').includes(':8325') ? TTS_MODEL_OPTIONS[4] : null);
                     const modelId = option?.id || source.modelId || '';
                     const backend = source.backend || option?.backend || '';
                     const baseUrl = String(source.baseUrl || option?.baseUrl || '').trim();
@@ -2226,7 +2244,9 @@
                     // 默认 MOSS 音色设计端点。
                     { name: 'MOSS VoiceGenerator', provider: 'moss', type: 'local_model', environment: 'moss_voiceGenerator', url: 'http://127.0.0.1:8302/v1/moss/timbre' },
                     // 默认 MiMo 音色设计端点。
-                    { name: 'MiMo TTS VoiceDesign', provider: 'mimo', type: 'cloud_api', url: 'http://127.0.0.1:8303/v1/mimo/timbre' }
+                    { name: 'MiMo TTS VoiceDesign', provider: 'mimo', type: 'cloud_api', url: 'http://127.0.0.1:8303/v1/mimo/timbre' },
+                    // FireRedTTS3 Instruct 使用独立 8304 worker 服务。
+                    { name: 'FireRedTTS3 Instruct', provider: 'fireredtts3', type: 'local_model', environment: 'firered_tts3', url: 'http://127.0.0.1:8304/v1/FireRedTTS3/timbre' }
                 ];
                 // 优先采用外部脚本注入的目录，使用户可只改 js/voice-design.js 扩展模型。
                 const voiceDesigns = ref(
@@ -2244,6 +2264,7 @@
                     if (hint.includes('qwen')) return 'Qwen3-VoiceDesign';
                     if (hint.includes('moss')) return 'MOSS-VoiceGenerator';
                     if (hint.includes('mimo')) return 'MiMo-VoiceDesign';
+                    if (hint.includes('firered')) return 'FireRedTTS3-Instruct';
                     if (hint.includes('voxcpm')) return 'VoxCPM2-VoiceDesign';
                     return String(design?.name || design?.environment || 'VoiceDesign').trim().replace(/\s+/g, '-');
                 };
@@ -4861,7 +4882,7 @@ ${voiceReferenceHardConstraints}`;
                         registerLocalAsset(assetKey, file, filename);
                         await saveAssetToDB(assetKey, file);
 
-                        // 3. 上传回唯一的 VoxCPM2 服务；后端合成只接收 audio_path，因此必须先登记参考音频与真实参考文本。
+                        // 3. 上传到当前选中的 TTS 服务；后端合成只接收 audio_path，因此必须先登记参考音频与真实参考文本。
                         const formData = new FormData();
                         formData.append('audio', file);
                         formData.append('full_path', filename);

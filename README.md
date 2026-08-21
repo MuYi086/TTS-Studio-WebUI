@@ -6,8 +6,8 @@
 
 ## 当前能力
 
-- 模型配置：维护 OpenAI 兼容 LLM（大语言模型）配置，以及 Qwen3-TTS、VoxCPM2、LongCat-AudioDiT 3.5B、dots.tts-soar 本地 TTS 配置。
-- 音色资源库：保存参考音频、准确参考文案和音色描述；角色可以绑定库内音色，也可以调用 Qwen、MOSS 或 MiMo VoiceDesign 生成新的参考音色。
+- 模型配置：维护 OpenAI 兼容 LLM（大语言模型）配置，以及 Qwen3-TTS、VoxCPM2、LongCat-AudioDiT 3.5B、dots.tts-soar、FireRedTTS3 本地 TTS 配置。
+- 音色资源库：保存参考音频、准确参考文案和音色描述；角色可以绑定库内音色，也可以调用 Qwen、MOSS、MiMo 或 FireRedTTS3 Instruct 生成新的参考音色。
 - 脚本制作：支持多个脚本标签、TXT 导入、快速拆分、LLM 深度分析、角色识别、台词与 BGM 时间轴、上下移动、批量生成、顺序播放和停止播放。
 - 台词处理：支持角色音量、台词音量、播放速度、波形裁剪、停顿、原始 TTS 音频试听和清除。VoxCPM2 另有极致/可控克隆、表演档位、自然语言控制指令和非语言标签。
 - Step-Audio-EditX：以当前行原始音频为首次输入，已有编辑结果时支持继续叠加；编辑结果独立保存，可单独试听、删除、导出和恢复，不替换原始台词音频。
@@ -22,7 +22,7 @@
 | --- | --- |
 | [`index.html`](index.html) | 唯一开发入口；页面、状态、Prompt、请求、播放、时间轴和导出逻辑 |
 | [`js/project-storage.js`](js/project-storage.js) | `unitale-project` schema 4 的工程规范化、迁移和运行时字段清理 |
-| [`js/voice-design.js`](js/voice-design.js) | 音色设计服务目录；当前默认 Qwen `8301`、MOSS `8302`、MiMo `8303` |
+| [`js/voice-design.js`](js/voice-design.js) | 音色设计服务目录；当前默认 Qwen `8301`、MOSS `8302`、MiMo `8303`、FireRedTTS3 Instruct `8304` |
 | [`js/soundeffect-client.js`](js/soundeffect-client.js) | MOSS-SoundEffect 与 Stable Audio 的请求封装 |
 | [`js/bgm-client.js`](js/bgm-client.js) | ACE-Step 1.5 BGM 请求封装；生成结果由页面写入现有 IndexedDB 资产链路 |
 | [`editConfig/`](editConfig/) | Step-Audio-EditX 的 emotion、paralinguistic、speaking style 词表 |
@@ -65,10 +65,12 @@ WebUI 会自动使用或调用以下本地端点；端口只是当前项目的�
 | VoxCPM2 | `8322` | `POST /v1/voxcpm2/clone`；支持极致/可控克隆字段 |
 | LongCat-AudioDiT 3.5B | `8323` | `POST /v1/longCat/clone`；要求参考音频和准确 `prompt_text` |
 | dots.tts-soar | `8324` | `POST /v2/dotsTTS/clone`；允许省略 `prompt_text` 的音频克隆协议 |
+| FireRedTTS3 Base | `8325` | `POST /v1/FireRedTTS3/clone`；要求参考音频和准确 `prompt_text` |
 | 控制面 / 共享工具 | `8300` | `/v1/control`、`/v1/upload_audio`、`/v1/check/audio` |
 | Qwen VoiceDesign | `8301` | `POST /v1/qwen/timbre` |
 | MOSS VoiceGenerator | `8302` | `POST /v1/moss/timbre` |
 | MiMo VoiceDesign | `8303` | `POST /v1/mimo/timbre` |
+| FireRedTTS3 Instruct | `8304` | `POST /v1/FireRedTTS3/timbre` |
 | MOSS-SoundEffect v2 | `8312` | `POST /v1/moss/soundEffect`，发送中文 `prompt` |
 | Stable Audio 3 Medium | `8311` | `POST /v1/stableAudio/soundEffect`，发送英文 `prompt_en` |
 | ACE-Step 1.5 XL Turbo | `8313` | `POST /v1/aceStep/bgm`，发送英文音乐 `prompt` |
@@ -76,10 +78,10 @@ WebUI 会自动使用或调用以下本地端点；端口只是当前项目的�
 
 当前台词合成流程如下：
 
-1. 角色必须绑定参考音频路径；Qwen3-TTS、VoxCPM2、LongCat 等参考文本协议还要求绑定音频中实际说出的准确文案。
+1. 角色必须绑定参考音频路径；Qwen3-TTS、VoxCPM2、LongCat 和 FireRedTTS3 等参考文本协议还要求绑定音频中实际说出的准确文案。
 2. 浏览器用 `GET /v1/check/audio` 检查服务端文件；新版服务会比较音频 `sha256`，同名文件内容变化时重新上传。
-3. 浏览器按选定模型向 `/v1/qwen/clone`、`/v1/voxcpm2/clone`、`/v1/longCat/clone` 或 `/v2/dotsTTS/clone` 发送 JSON，成功响应必须是非空音频二进制；原始 WAV 同时保存到浏览器 IndexedDB 工程资产。
-4. VoxCPM2 的可控克隆只发送 `control_instruction` 和 `nonverbal_tags`，极致克隆发送 `prompt_text`；LongCat 不使用 VoxCPM2 的表演字段。
+3. 浏览器按选定模型向 `/v1/qwen/clone`、`/v1/voxcpm2/clone`、`/v1/longCat/clone`、`/v2/dotsTTS/clone` 或 `/v1/FireRedTTS3/clone` 发送 JSON，成功响应必须是非空音频二进制；原始 WAV 同时保存到浏览器 IndexedDB 工程资产。
+4. VoxCPM2 的可控克隆只发送 `control_instruction` 和 `nonverbal_tags`，极致克隆发送 `prompt_text`；LongCat 和 FireRedTTS3 不使用 VoxCPM2 的表演字段。
 
 BGM 生成使用独立的 [`js/bgm-client.js`](js/bgm-client.js)，不复用音效客户端：
 

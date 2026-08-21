@@ -21,5 +21,13 @@ window.voiceDesigns = [
         provider: 'mimo',
         type: 'cloud_api',
         url: 'http://127.0.0.1:8303/v1/mimo/timbre'
+    },
+    {
+        id: 'fireredtts3-voicedesign',
+        name: 'FireRedTTS3 Instruct',
+        provider: 'fireredtts3',
+        type: 'local_model',
+        environment: 'firered_tts3',
+        url: 'http://127.0.0.1:8304/v1/FireRedTTS3/timbre'
     }
 ];

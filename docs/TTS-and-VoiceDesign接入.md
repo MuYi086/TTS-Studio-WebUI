@@ -12,6 +12,7 @@ curl http://127.0.0.1:8300/v1/control
 curl http://127.0.0.1:8301/v1/health
 curl http://127.0.0.1:8302/v1/health
 curl http://127.0.0.1:8303/v1/health
+curl http://127.0.0.1:8304/v1/health
 curl http://127.0.0.1:8311/v1/health
 curl http://127.0.0.1:8312/v1/health
 curl http://127.0.0.1:8313/v1/health
@@ -19,6 +20,7 @@ curl http://127.0.0.1:8321/v1/health
 curl http://127.0.0.1:8322/v1/health
 curl http://127.0.0.1:8323/v1/health
 curl http://127.0.0.1:8324/v1/health
+curl http://127.0.0.1:8325/v1/health
 curl http://127.0.0.1:8331/v1/health
 ```
 
@@ -26,7 +28,7 @@ curl http://127.0.0.1:8331/v1/health
 
 - `GET /v1/check/audio?file_name=...`
 - `POST /v1/upload_audio`
-- 按模型调用 `POST /v1/qwen/clone`、`POST /v1/voxcpm2/clone`、`POST /v1/longCat/clone` 或 `POST /v2/dotsTTS/clone`
+- 按模型调用 `POST /v1/qwen/clone`、`POST /v1/voxcpm2/clone`、`POST /v1/longCat/clone`、`POST /v2/dotsTTS/clone` 或 `POST /v1/FireRedTTS3/clone`
 
 | 当前 WebUI 合成服务 | 端口 | WebUI 协议 | 前端发送的合成关键字段 |
 | --- | ---: | --- | --- |
@@ -34,10 +36,11 @@ curl http://127.0.0.1:8331/v1/health
 | VoxCPM2 | `8322` | `voxcpm2` | `audio_path`、`text`、`backend="voxcpm2"`、`clone_mode`，再按模式二选一传 `prompt_text` 或 `control_instruction`，以及 `nonverbal_tags`；`cfg_value` 由后端 `VOXCPM2_CFG_VALUE` 统一控制 |
 | LongCat-AudioDiT-3.5B-bf16 | `8323` | `longcat-audiodit` | `audio_path`、`text`、准确的 `prompt_text`；worker 按官方接口拼接参考文本与目标文本，并使用 24 kHz 单声道参考音频 |
 | dots.tts-soar | `8324` | `dots-tts-soar` | `audio_path`、`text`，可省略 `prompt_text` |
+| FireRedTTS3 Base | `8325` | `fireredtts3` | `audio_path`、`text`、准确的 `prompt_text`；最终路由为 `/v1/FireRedTTS3/clone` |
 
-WebUI 会为 Qwen3-TTS、VoxCPM2 和 LongCat-AudioDiT 创建内置 TTS 配置；用户在脚本工作台的 TTS 下拉框中选中的配置决定当前台词请求的 Base URL 与后端模型。历史配置会保留在浏览器中，但只有协议可识别的本地模型才进入当前合成选择器，页面不会把旧端口静默改写为其他模型。
+WebUI 会为 Qwen3-TTS、VoxCPM2、LongCat-AudioDiT、dots.tts-soar 和 FireRedTTS3 创建内置 TTS 配置；用户在脚本工作台的 TTS 下拉框中选中的配置决定当前台词请求的 Base URL 与后端模型。历史配置会保留在浏览器中，但只有协议可识别的本地模型才进入当前合成选择器，页面不会把旧端口静默改写为其他模型。
 
-四个本地 TTS 模型成功返回 WAV 后，后端还会将同一份原始音频同步保存到 `TTS-and-VoiceDesign/api/tempAudio/`；这与浏览器 IndexedDB 的工程资产保存相互独立，不会改变页面播放和导出流程。
+本地 TTS 模型成功返回 WAV 后，后端还会将同一份原始音频同步保存到 `TTS-and-VoiceDesign/api/tempAudio/`；这与浏览器 IndexedDB 的工程资产保存相互独立，不会改变页面播放和导出流程。
 
 ## 台词合成中的参考文案与 VoxCPM2 表演计划
 
@@ -81,12 +84,13 @@ WebUI 将 Step-Audio-EditX 作为原始台词生成后的独立编辑步骤，�
 | Qwen | `POST http://127.0.0.1:8301/v1/qwen/timbre` | `text`、`voice_description` |
 | MOSS | `POST http://127.0.0.1:8302/v1/moss/timbre` | `text`、`voice_description` |
 | MiMo | `POST http://127.0.0.1:8303/v1/mimo/timbre` | `text`、`voice_description` |
+| FireRedTTS3 Instruct | `POST http://127.0.0.1:8304/v1/FireRedTTS3/timbre` | `text`、`voice_description` |
 
 VoxCPM2 的最终模型调用入口按项目统一表定义为 `8322/v1/voxcpm2/clone`；当前 WebUI 的音色设计下拉目录不把 VoxCPM2 作为独立音色设计项，避免把音色设计请求体误发到克隆接口。
 
-Qwen、MOSS 和 MiMo 音色设计分别使用独立的 uv/云端服务 `8301`、`8302` 和 `8303`；主控制面的旧代理地址仅用于兼容，不应作为 WebUI 默认地址。
+Qwen、MOSS、MiMo 和 FireRedTTS3 Instruct 音色设计分别使用独立的 uv/云端服务 `8301`、`8302`、`8303` 和 `8304`；主控制面的旧代理地址仅用于兼容，不应作为 WebUI 默认地址。
 
-角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：用户可以检查或编辑参考文案，再点击“生成音色”。生成音色不会再次调用 LLM，只把确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen、MiMo 或 VoxCPM2。
+角色音色分析会优先从结构化脚本中抽取该角色的代表台词和相邻旁白，再生成可复用的 `voice_description`。参考文案与音色生成是两个显式步骤：用户可以检查或编辑参考文案，再点击“生成音色”。生成音色不会再次调用 LLM，只把确认的音色描述作为 `voice_description`、参考文案作为 `text` 提交给 Qwen、MOSS、MiMo 或 FireRedTTS3 Instruct。
 
 参考音频必须已获得说话人授权、清晰且仅含一位说话人；参考文案应与实际语音逐字一致，不能写入未朗读的舞台说明、音频标签或 SSML（语音合成标记语言）。生成的参考音频和文案保存在浏览器本地音色库，并作为后续克隆的对应材料。
 
