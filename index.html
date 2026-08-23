@@ -120,9 +120,23 @@
                     class="px-3 py-1.5 bg-teal-100 text-teal-700 rounded-lg text-xs font-bold hover:bg-teal-200 transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait">
                     导出SRT字幕
                 </button>
+                <select data-testid="audio-export-profile" v-model="audioExportProfile" :disabled="isExportingAudio"
+                    title="空间化档位；最终文件统一为 48 kHz"
+                    class="px-2 py-1.5 bg-white border border-purple-200 text-purple-700 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50">
+                    <option v-for="profile in audioExportProfileOptions" :key="profile.id" :value="profile.id">
+                        {{ profile.label }}
+                    </option>
+                </select>
+                <select data-testid="audio-export-format" v-model="audioExportFormat" :disabled="isExportingAudio"
+                    title="最终音频格式"
+                    class="px-2 py-1.5 bg-white border border-purple-200 text-purple-700 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50">
+                    <option v-for="format in audioExportFormatOptions" :key="format.id" :value="format.id">
+                        {{ format.label }}
+                    </option>
+                </select>
                 <button data-testid="export-audio" @click="exportAudio" :disabled="isExportingAudio"
                     class="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold hover:bg-purple-200 transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait">
-                    {{ isExportingAudio ? (exportStatus || '⏳ 处理中...') : '导出音频' }}
+                    {{ isExportingAudio ? (exportStatus || '⏳ 处理中...') : '导出 48 kHz 音频' }}
                 </button>
                 <select v-model="videoResolution" class="px-2 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-sky-500">
                     <option value="1920x1080">横屏 16:9</option>
@@ -1360,6 +1374,8 @@
     <script src="./js/voice-design.js?v=20260816-ports"></script>
     <script src="./js/soundeffect-client.js"></script>
     <script src="./js/bgm-client.js"></script>
+    <script src="./js/spatial-timeline.js"></script>
+    <script src="./js/spatial-audio-client.js"></script>
     <script src="./editConfig/emotion.js"></script>
     <script src="./editConfig/paralinguistic.js"></script>
     <script src="./editConfig/speakingStyle.js"></script>
@@ -1407,6 +1423,10 @@
                 const soundEffectClient = window.UnitaleSoundEffectClient;
                 // BGM 客户端封装 ACE-Step（8313）请求；生成结果复用现有 BGM 资产链路。
                 const bgmClient = window.UnitaleBgmClient;
+                // 动态空间时间线在浏览器仍保留对白和音效对象边界时安排方位、距离与早期反射。
+                const spatialTimeline = window.UnitaleSpatialTimeline;
+                // 空间音频客户端把 48 kHz 浏览器混音交给 8300 控制面完成母带和最终编码。
+                const spatialAudioClient = window.UnitaleSpatialAudioClient;
 
                 // 配套脚本未成功加载时立即终止启动，避免后续以不完整 schema 保存工程。
                 if (!projectStorage) {
@@ -1418,6 +1438,12 @@
                 if (!bgmClient) {
                     throw new Error('js/bgm-client.js 未正确加载');
                 }
+                if (!spatialTimeline) {
+                    throw new Error('js/spatial-timeline.js 未正确加载');
+                }
+                if (!spatialAudioClient) {
+                    throw new Error('js/spatial-audio-client.js 未正确加载');
+                }
                 const soundEffectModelOptions = Object.values(soundEffectClient.SOUND_EFFECT_MODELS || {});
                 if (soundEffectModelOptions.length === 0) {
                     throw new Error('js/soundeffect-client.js 未提供音效模型配置');
@@ -1425,6 +1451,11 @@
                 const bgmModelOptions = Object.values(bgmClient.BGM_MODELS || {});
                 if (bgmModelOptions.length === 0) {
                     throw new Error('js/bgm-client.js 未提供 BGM 模型配置');
+                }
+                const audioExportProfileOptions = Object.values(spatialAudioClient.EXPORT_PROFILES || {});
+                const audioExportFormatOptions = Object.values(spatialAudioClient.EXPORT_FORMATS || {});
+                if (audioExportProfileOptions.length === 0 || audioExportFormatOptions.length === 0) {
+                    throw new Error('js/spatial-audio-client.js 未提供导出配置');
                 }
 
                 // 解构工程协议常量和唯一的数据规范化入口，避免页面复制 schema 转换逻辑。
@@ -2537,6 +2568,10 @@
                 let sequenceAbortController = null;
                 // WAV 与 SRT 导出共用的加载锁。
                 const isExportingAudio = ref(false);
+                // 默认采用保守空间增强；只影响最终导出，不修改模型生成的原始素材。
+                const audioExportProfile = ref(spatialAudioClient.DEFAULT_PROFILE || 'balanced');
+                // WAV 便于继续编辑，用户也可切换为体积更小的 MP3。
+                const audioExportFormat = ref(spatialAudioClient.DEFAULT_FORMAT || 'wav');
                 // 默认使用 Stable Audio 3 Medium；切换后“生成全部”与单条生成都会路由到同一选定模型。
                 const soundEffectModel = ref(soundEffectClient.DEFAULT_MODEL || soundEffectModelOptions[0].id);
                 const selectedSoundEffectModel = computed(() => (
@@ -7022,9 +7057,9 @@ ${voiceReferenceHardConstraints}`;
                     return item?.assetKey || item?.filename || item?.name || '';
                 };
 
-                // --- 导出音频逻辑 (WAV) ---
+                // --- 导出音频逻辑（48 kHz WAV/MP3） ---
                 /**
-                 * 按脚本时间轴离线混合台词、音效与 BGM，并下载 WAV。
+                 * 按脚本时间轴离线混合台词、音效与 BGM，再由后端空间化并下载最终文件。
                  * @returns {Promise<void>} 混音导出完成或失败后兑现
                  */
                 const exportAudio = async () => {
@@ -7036,9 +7071,13 @@ ${voiceReferenceHardConstraints}`;
                     if (dialogueLines.some(l => !l.audioUrl)) {
                         if (!confirm('部分台词尚未生成音频，导出时将被跳过。确定继续吗？')) return;
                     }
+                    // 锁定本次任务的档位，并为角色建立一次稳定位置；导出期间不随响应式状态漂移。
+                    const exportSpatialProfile = audioExportProfile.value;
+                    const rolePositions = spatialTimeline.createRolePositions(dialogueLines, exportSpatialProfile);
 
                     // 开启音频导出遮罩，避免渲染过程中重复提交。
                     isExportingAudio.value = true;
+                    exportStatus.value = '准备 48 kHz 混音...';
 
                     try {
                         // 按用途分开缓存 AudioBuffer，后续调度只做内存查找。
@@ -7129,8 +7168,27 @@ ${voiceReferenceHardConstraints}`;
                                         plan && plan.audioAssetKey && assets.soundEffects[plan.audioAssetKey]
                                     ));
                                     currentTime += getSoundEffectPreRoll(generatedPlans);
-                                    // 保存离线调度所需的缓冲、行配置、裁剪和速度快照。
-                                    events.push({ type: 'dialogue', time: currentTime, buffer: buffer, line: line, trimStart, trimEnd, playDuration, speed });
+                                    // 在对象尚未混合时生成逐句空间轨迹；后端拿到总线后已无法恢复这些边界。
+                                    const spatialEventIndex = events.length;
+                                    const spatialPlan = spatialTimeline.createDialoguePlan({
+                                        line,
+                                        eventIndex: spatialEventIndex,
+                                        rolePositions,
+                                        profile: exportSpatialProfile
+                                    });
+                                    // 保存离线调度所需的缓冲、行配置、裁剪、速度与空间计划快照。
+                                    events.push({
+                                        type: 'dialogue',
+                                        time: currentTime,
+                                        buffer,
+                                        line,
+                                        trimStart,
+                                        trimEnd,
+                                        playDuration,
+                                        speed,
+                                        spatialEventIndex,
+                                        spatialPlan
+                                    });
                                     // 游标越过这段对白在最终音频中的实际时长。
                                     currentTime += effectiveDuration;
                                 }
@@ -7154,8 +7212,13 @@ ${voiceReferenceHardConstraints}`;
                         }, 0);
                         // 在时间轴和最长音效尾部后各预留 1 秒，避免边界截断。
                         const totalDuration = Math.max(currentTime, soundEffectTailEnd) + 1;
-                        // 创建双声道、44.1kHz 的离线上下文；它不连接扬声器，只生成缓冲。
-                        const offlineCtx = new OfflineAudioContext(2, totalDuration * 44100, 44100);
+                        // 从浏览器混音阶段统一使用 48 kHz；后端仍会防御性重采样并锁定最终输出参数。
+                        const exportSampleRate = 48000;
+                        const offlineCtx = new OfflineAudioContext(
+                            2,
+                            Math.ceil(totalDuration * exportSampleRate),
+                            exportSampleRate
+                        );
 
                         // 把已闭合的每个 BGM 片段安排到离线音频图中。
                         bgmSegments.forEach(seg => {
@@ -7224,14 +7287,23 @@ ${voiceReferenceHardConstraints}`;
                             // 传给 start 的 duration 是源缓冲时间，不除以播放倍率。
                             const duration = evt.playDuration;
 
-                            // 完成“对白 → 对白增益 → 离线输出”的路由。
-                            dSrc.connect(dGain).connect(offlineCtx.destination);
+                            // 先保留原有行级音量，再连续改变距离、低通、声像和对象级早期反射。
+                            dSrc.connect(dGain);
+                            spatialTimeline.connectSpatialNodeChain({
+                                context: offlineCtx,
+                                input: dGain,
+                                destination: offlineCtx.destination,
+                                plan: evt.spatialPlan,
+                                startTime: evt.time,
+                                duration: evt.playDuration / evt.speed,
+                                profile: exportSpatialProfile
+                            });
                             // 在事件时间点从裁剪偏移播放指定源时长。
                             dSrc.start(evt.time, offset, duration);
 
                             // 每项 SoundEffect 计划按锚点和偏移直接混入离线时间轴。
                             const effectiveDialogueDuration = evt.playDuration / evt.speed;
-                            (evt.line.sfx_plan || []).forEach((plan) => {
+                            (evt.line.sfx_plan || []).forEach((plan, planIndex) => {
                                 if (!plan || !plan.audioAssetKey) return;
                                 const sBuffer = assets.soundEffects[plan.audioAssetKey];
                                 if (!sBuffer) return;
@@ -7240,29 +7312,52 @@ ${voiceReferenceHardConstraints}`;
                                 const sGain = offlineCtx.createGain();
                                 const soundEffectStartTime = evt.time + getSoundEffectStartOffset(plan, effectiveDialogueDuration);
                                 scheduleSoundEffectGain(sGain.gain, plan, evt.line.sfxVolume, soundEffectStartTime, sBuffer.duration);
-                                sSrc.connect(sGain).connect(offlineCtx.destination);
+                                const soundEffectSpatialPlan = spatialTimeline.createSoundEffectPlan({
+                                    plan,
+                                    eventIndex: evt.spatialEventIndex * 2 + planIndex,
+                                    profile: exportSpatialProfile
+                                });
+                                sSrc.connect(sGain);
+                                spatialTimeline.connectSpatialNodeChain({
+                                    context: offlineCtx,
+                                    input: sGain,
+                                    destination: offlineCtx.destination,
+                                    plan: soundEffectSpatialPlan,
+                                    startTime: soundEffectStartTime,
+                                    duration: sBuffer.duration,
+                                    profile: exportSpatialProfile
+                                });
                                 sSrc.start(soundEffectStartTime);
                             });
                         });
 
-                        // 一次性执行整个离线音频图，得到最终双声道 PCM 缓冲。
+                        exportStatus.value = '渲染 48 kHz 动态空间时间线...';
+                        // 一次性执行整个离线音频图，得到待母带处理的双声道 PCM 缓冲。
                         const renderedBuffer = await offlineCtx.startRendering();
-                        // 把 Web Audio 浮点 PCM 编码为可下载的 WAV Blob。
+                        // 把 Web Audio 浮点 PCM 编码为后端可流式接收的 WAV Blob。
                         const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
-                        // 为内存中的 WAV 创建临时对象 URL。
-                        const url = URL.createObjectURL(wavBlob);
+                        exportStatus.value = '空间化与响度处理中...';
+                        // 最终下载前执行空间化、双遍响度归一化、48 kHz 锁定与 WAV/MP3 编码。
+                        const exportResult = await spatialAudioClient.exportSpatialAudio({
+                            audio: wavBlob,
+                            profile: exportSpatialProfile,
+                            outputFormat: audioExportFormat.value
+                        });
+                        // 为后端返回的最终文件创建临时对象 URL。
+                        const url = URL.createObjectURL(exportResult.blob);
                         // 使用动态链接触发浏览器下载。
                         const a = document.createElement('a');
                         a.href = url;
-                        // 毫秒时间戳避免连续导出时文件名冲突。
-                        a.download = `storyforge_export_${Date.now()}.wav`;
+                        // 优先采用服务端文件名，回退名使用毫秒时间戳避免连续导出时冲突。
+                        a.download = exportResult.filename
+                            || `storyforge_export_${Date.now()}.${audioExportFormat.value}`;
                         // 临时链接进入 DOM 后再触发下载。
                         document.body.appendChild(a);
-                        // 模拟点击开始保存 WAV。
+                        // 模拟点击开始保存最终 WAV 或 MP3。
                         a.click();
                         // 下载已开始，移除临时链接。
                         document.body.removeChild(a);
-                        // 下载触发后释放 WAV 对象 URL。
+                        // 下载触发后释放最终文件对象 URL。
                         URL.revokeObjectURL(url);
 
                     } catch (e) {
@@ -7272,6 +7367,7 @@ ${voiceReferenceHardConstraints}`;
                     } finally {
                         // 无论结果如何都恢复导出按钮与页面交互。
                         isExportingAudio.value = false;
+                        exportStatus.value = '';
                     }
                 };
 
@@ -9126,6 +9222,8 @@ ${voiceReferenceHardConstraints}`;
                     toggleLineSelection,
                     // 完整工程导出/导入及文件输入框 ref。
                     exportScriptState, triggerImport, handleImportFile, importFileRef, exportAudio, isExportingAudio,
+                    // 空间化档位和最终格式只作用于导出链路，不写回原始素材。
+                    audioExportProfile, audioExportFormat, audioExportProfileOptions, audioExportFormatOptions,
                     // SRT、TXT 导入导出及 TXT 输入框 ref。
                     exportSRT, triggerImportTxt, handleImportTxt, importTxtRef,
                     // 工程操作遮罩、阶段文案和视频分辨率设置。

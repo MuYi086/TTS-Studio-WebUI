@@ -24,6 +24,32 @@ curl http://127.0.0.1:8325/v1/health
 curl http://127.0.0.1:8331/v1/health
 ```
 
+## 48 kHz 空间音频导出
+
+“导出音频”不会先下载一个普通 WAV 再做后处理。完整顺序是：浏览器解析脚本时间线，
+在对白和 SoundEffect 尚未合并时为每个对象安排连续的方位、距离增益、高频衰减与早期反射，
+再以 48 kHz 双声道离线混合；BGM 不做移动。随后把这份 WAV 中间件上传到
+`POST http://127.0.0.1:8300/v1/audio/export`；后端完成空间化、双遍响度归一化和最终编码后，
+浏览器才触发成品下载。模型返回的原始 TTS、BGM 和音效资产保持不变。
+
+接口使用 `multipart/form-data`：
+
+- `audio`：浏览器生成的非空 WAV 中间件。
+- `profile`：`standard`、`balanced` 或 `immersive`，页面默认 `balanced`。
+- `output_format`：`wav` 或 `mp3`，页面默认 `wav`。
+
+`standard` 完全旁路对象级空间节点且不增加空间湿声；`balanced` 为角色分配较克制的稳定左右
+锚点，并让每句在锚点附近缓慢改变距离；`immersive` 扩大移动、远近差和对象级早期反射。
+SoundEffect 的 `prompt` / `prompt_en` 中若含“左侧”“远处”“由远及近”“从左向右”等明确线索，
+会覆盖默认轨迹。后端在已经混合的总线上继续增加 Side-only Haas/房间湿声并统一响度，但不再
+尝试猜测单个对象的位置。空间差异应使用立体声耳机或双扬声器审听。
+
+成功响应是 48 kHz `audio/wav` 或 `audio/mpeg`，并公开 `Content-Disposition`、
+`X-Audio-Sample-Rate`、`X-Audio-Profile` 和 `X-Audio-Format` 响应头。对象级规划和 Web Audio
+节点链位于 [`js/spatial-timeline.js`](../js/spatial-timeline.js)，请求封装位于
+[`js/spatial-audio-client.js`](../js/spatial-audio-client.js)。后端需要系统 FFmpeg；该链路是
+CPU 后处理，不占用共享 GPU 锁。接口失败时页面显示错误且不下载未处理的中间 WAV。
+
 接入 TTS 时，服务需要兼容：
 
 - `GET /v1/check/audio?file_name=...`
