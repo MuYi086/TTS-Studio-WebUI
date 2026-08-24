@@ -1,4 +1,7 @@
 (function (global) {
+    const spatialSchema = global.UnitaleSpatialSchema
+        || (typeof require === 'function' ? require('./spatial-schema.js') : null);
+    if (!spatialSchema) throw new Error('spatial-schema.js 必须先加载');
     const PROJECT_KIND = 'unitale-project';
     const PROJECT_SCHEMA_VERSION = 4;
     const PROJECT_VERSION_LABEL = '4.0';
@@ -134,6 +137,11 @@
                 isGenerating: false,
                 generationError: ''
             };
+            normalizedPlan.spatial = spatialSchema.normalizeSpatialPlan(
+                purpose === 'ambience' ? 'ambience' : 'sfx',
+                item.spatial,
+                { text: item.prompt }
+            );
             // 取消控制器属于当前页面运行时对象，不能随工程快照跨会话序列化。
             delete normalizedPlan.abortController;
             plans.push(normalizedPlan);
@@ -274,6 +282,11 @@
             needs_review: cloneMode === 'controllable' && (source.needs_review === true || nonverbalTags.length > 0),
             // sfx_plan 直接携带 SoundEffect 生成 WAV 的稳定资产键。
             sfx_plan: normalizeSfxPlans(source.sfx_plan, id),
+            spatial: spatialSchema.normalizeSpatialPlan(
+                source.role_name === '旁白' || source.role === '旁白' ? 'narrator' : 'dialogue',
+                source.spatial,
+                { role: source.role_name || source.role || '旁白' }
+            ),
             break_duration: toNumber(source.break_duration, 0),
             trimStart: trim.trimStart,
             trimEnd: trim.trimEnd,
@@ -305,7 +318,8 @@
             volume: toNumber(source.volume, 1.0),
             bgmName: source.bgmName || source.name || '',
             // 生成式 BGM 控制块可直接绑定 IndexedDB 资产，名称仅作为人类可读回退。
-            audioAssetKey: typeof source.audioAssetKey === 'string' ? source.audioAssetKey : ''
+            audioAssetKey: typeof source.audioAssetKey === 'string' ? source.audioAssetKey : '',
+            spatial: spatialSchema.normalizeSpatialPlan('bgm', source.spatial)
         };
     }
 
@@ -325,6 +339,20 @@
         const data = source.data && typeof source.data === 'object' ? source.data : {};
         const lookup = options || {};
         const normalizedLines = ensureArray(data.scriptLines).map(normalizeScriptLine).filter(Boolean);
+        const spatialRoleOrder = [];
+        normalizedLines.forEach((line) => {
+            if (line.type === 'dialogue' && line.role && !spatialRoleOrder.includes(line.role)) {
+                spatialRoleOrder.push(line.role);
+            }
+        });
+        normalizedLines.forEach((line) => {
+            if (line.type !== 'dialogue' || line.spatial.source !== 'default') return;
+            const kind = line.role === '旁白' ? 'narrator' : 'dialogue';
+            line.spatial = spatialSchema.createDefaultSpatialPlan(kind, {
+                role: line.role,
+                roleIndex: Math.max(0, spatialRoleOrder.indexOf(line.role))
+            });
+        });
 
         const providedCharacters = ensureArray(data.characters).length
             ? ensureArray(data.characters)

@@ -8,9 +8,9 @@
     const DEFAULT_FORMAT = 'wav';
 
     const EXPORT_PROFILES = Object.freeze({
-        standard: Object.freeze({ id: 'standard', label: '标准立体声' }),
-        balanced: Object.freeze({ id: 'balanced', label: '均衡空间感' }),
-        immersive: Object.freeze({ id: 'immersive', label: '沉浸空间感' })
+        standard: Object.freeze({ id: 'standard', label: '标准母带（无空间化）' }),
+        balanced: Object.freeze({ id: 'balanced', label: 'Steam Audio 均衡' }),
+        immersive: Object.freeze({ id: 'immersive', label: 'Steam Audio 沉浸' })
     });
     const EXPORT_FORMATS = Object.freeze({
         wav: Object.freeze({ id: 'wav', label: 'WAV 24-bit' }),

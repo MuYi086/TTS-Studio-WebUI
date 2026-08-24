@@ -12,8 +12,9 @@
 - 台词处理：支持角色音量、台词音量、播放速度、波形裁剪、停顿、原始 TTS 音频试听和清除。VoxCPM2 另有极致/可控克隆、表演档位、自然语言控制指令和非语言标签。
 - Step-Audio-EditX：以当前行原始音频为首次输入，已有编辑结果时支持继续叠加；编辑结果独立保存，可单独试听、删除、导出和恢复，不替换原始台词音频。
 - 上下文音效：LLM 只为原文明确的非语言事件生成 `dialogue.sfx_plan`；每行最多两项，选择 MOSS 或 Stable Audio 生成 WAV 后直接绑定到计划，不经过工程级 SFX 素材库。
-- BGM：导入本地音频或调用 ACE-Step 1.5 生成 BGM，剪辑和设置默认音量，在脚本中插入播放/停止控制块；“生成BGM”会按选定模型生成后自动插入并绑定该音频；BGM 与台词、音效一起参与实时预览和 48 kHz 离线混音。
-- 导出：完整工程 JSON、TXT、SRT 字幕，以及标准/均衡/沉浸三档 48 kHz WAV 或 MP3。均衡/沉浸档会在对象仍独立时为对白和 SoundEffect 连续改变方位、距离、高频与早期反射，再交给后端统一母带；BGM 保持稳定。MP4 使用 WebCodecs 生成与脚本时长对应的纯黑视频轨道；当前 MP4 只包含视频轨道，不是带音轨的最终有声视频。
+- BGM：导入本地音频或调用 ACE-Step 1.5 生成 BGM，剪辑和设置默认音量，在脚本中插入播放/停止控制块；“生成BGM”会按选定模型生成后自动插入并绑定该音频；BGM 在正式空间导出中始终保留立体声。
+- 空间语义：LLM、规则默认值和用户编辑都只产生有限 DSL（mode/location/distance/movement/occlusion/spatial_blend/source），不允许直接生成坐标或 DSP 数值。工程 schema 保持 v4，由 `project-storage.js` 唯一规范化并持久化。
+- 导出：完整工程 JSON、TXT、SRT 字幕，以及三档 48 kHz WAV 或 MP3。“标准”在浏览器离线预混后只做无空间化母带；“Steam Audio 均衡/沉浸”把对白、SoundEffect 和 BGM 作为独立 Blob 连同 Manifest v1 上传，由后端正式双耳渲染。页面顺序试听与旧 Web Audio 空间链只作为近似预览。MP4 当前仍只包含纯黑视频轨道。
 - Prompt 管理：可编辑脚本分析 Prompt、角色音色分析 Prompt、动态参考文本 Prompt 和固定参考文本策略。默认脚本 Prompt 要求 `emotion` 从 [`editConfig/emotion.js`](editConfig/emotion.js) 的官方标签中选择。
 
 ## 界面与代码结构
@@ -25,8 +26,12 @@
 | [`js/voice-design.js`](js/voice-design.js) | 音色设计服务目录；当前默认 Qwen `8301`、MOSS `8302`、MiMo `8303`、FireRedTTS3 Instruct `8304` |
 | [`js/soundeffect-client.js`](js/soundeffect-client.js) | MOSS-SoundEffect 与 Stable Audio 的请求封装 |
 | [`js/bgm-client.js`](js/bgm-client.js) | ACE-Step 1.5 BGM 请求封装；生成结果由页面写入现有 IndexedDB 资产链路 |
-| [`js/spatial-timeline.js`](js/spatial-timeline.js) | 角色锚点、SoundEffect 空间线索解析和 Web Audio 动态方位/距离节点链 |
-| [`js/spatial-audio-client.js`](js/spatial-audio-client.js) | 8300 空间化、响度归一化与最终 WAV/MP3 导出请求封装 |
+| [`js/spatial-schema.js`](js/spatial-schema.js) | 有限空间 DSL、标签、安全默认值和枚举规范化 |
+| [`js/spatial-compiler.js`](js/spatial-compiler.js) | 把 schema v4 时间线确定性编译为 Render Manifest v1，并生成独立资产上传清单 |
+| [`js/steam-audio-client.js`](js/steam-audio-client.js) | `POST /v1/audio/spatial/render` multipart 上传与严格响应合同校验 |
+| [`js/audio-export-download.js`](js/audio-export-download.js) | WAV/MP3 浏览器下载、函数外统一入口与近期重复成品保护 |
+| [`js/spatial-timeline.js`](js/spatial-timeline.js) | Web Audio 近似预览；不参与正式均衡/沉浸导出 |
+| [`js/spatial-audio-client.js`](js/spatial-audio-client.js) | 旧预混总线的 `/v1/audio/export` 兼容客户端；当前用于标准母带 |
 | [`editConfig/`](editConfig/) | Step-Audio-EditX 的 emotion、paralinguistic、speaking style 词表 |
 | [`docs/`](docs/) | 本地开发、回归、后端接入和模型实践说明 |
 | [`Design/`](Design/) | 视觉参考图，不参与运行时加载 |
@@ -47,7 +52,7 @@ python3 -m http.server 5173
 
 ```bash
 node -e "const fs=require('fs');const files=['index.html','js/project-storage.js','js/voice-design.js','js/soundeffect-client.js','js/bgm-client.js','js/spatial-timeline.js','js/spatial-audio-client.js','editConfig/emotion.js','editConfig/paralinguistic.js','editConfig/speakingStyle.js'];for(const file of files){const source=fs.readFileSync(file,'utf8');if(file==='index.html'){for(const match of source.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)){if(match[1].trim())new Function(match[1]);}}else new Function(source);console.log('syntax ok:',file)}"
-node --test js/spatial-timeline.test.js
+node --test js/*.test.js
 ```
 
 仓库不安装测试框架；动态空间规划使用 Node.js 内置测试运行器回归。改动页面、存储、播放、音效或导出后仍应按 [`docs/本地开发与回归.md`](docs/本地开发与回归.md) 在浏览器手动验证。在线模型链路需要真实后端和模型权重，不能用静态检查替代。
@@ -69,7 +74,7 @@ WebUI 会自动使用或调用以下本地端点；端口只是当前项目的�
 | LongCat-AudioDiT 3.5B | `8323` | `POST /v1/longCat/clone`；要求参考音频和准确 `prompt_text` |
 | dots.tts-soar | `8324` | `POST /v2/dotsTTS/clone`；允许省略 `prompt_text` 的音频克隆协议 |
 | FireRedTTS3 Base | `8325` | `POST /v1/FireRedTTS3/clone`；要求参考音频和准确 `prompt_text` |
-| 控制面 / 共享工具 | `8300` | `/v1/control`、`/v1/upload_audio`、`/v1/check/audio`、`POST /v1/audio/export` |
+| 控制面 / 共享工具 | `8300` | `/v1/control`、`/v1/upload_audio`、`/v1/check/audio`、`POST /v1/audio/export`、`POST /v1/audio/spatial/render` |
 | Qwen VoiceDesign | `8301` | `POST /v1/qwen/timbre` |
 | MOSS VoiceGenerator | `8302` | `POST /v1/moss/timbre` |
 | MiMo VoiceDesign | `8303` | `POST /v1/mimo/timbre` |
@@ -95,6 +100,21 @@ BGM 生成使用独立的 [`js/bgm-client.js`](js/bgm-client.js)，不复用音�
 5. “停止”只 Abort 浏览器当前等待；不会假装已经终止后端 GPU worker。
 
 LLM 使用用户配置的 OpenAI 兼容 `/chat/completions`。脚本分析是非流式请求，返回严格 JSON 数组；角色分析和参考文案生成也是浏览器直连 LLM，因此云端服务需要允许 CORS，API Key 仅保存在当前浏览器的 `localStorage` 中。
+
+## 正式空间导出
+
+脚本深度分析会为 dialogue、`sfx_plan` 和 BGM play 块请求有限 `spatial` 语义；模型遗漏或越界时，
+`js/spatial-schema.js` 使用确定性安全默认值。用户也可以展开每条对白/音效的“空间语义”手动选择，
+或点击“补齐默认空间计划”。旁白默认位于正前对话距离，角色按稳定顺序分布，BGM 固定
+`preserve_stereo`。首版明确不使用遮挡、diffuse 和几何反射。
+
+正式导出不会创建浏览器空间总线。编译器沿用现有的 50 ms 预调度、SFX 负偏移预留、裁剪、倍速、
+停顿、BGM play/stop 和音量公式，生成 Manifest v1；然后按稳定 `audioAssetKey` 从 IndexedDB 读取
+每个独立 Blob，以重复 `assets` 字段上传。成功响应必须声明 Steam Audio engine、Manifest 版本、
+48 kHz、档位、格式和本次 job ID，否则前端拒绝下载。请求执行期间客户端轮询
+`/v1/audio/spatial/render/progress/{job_id}`，在导出按钮旁显示后端阶段、真实对象进度和百分比；
+失败仍通过正式 POST 错误提示，不会停留在无反馈等待状态。停止浏览器等待只代表取消客户端请求，
+不宣称已终止后端。
 
 ## 音色设计与 Step-Audio-EditX
 
@@ -140,7 +160,7 @@ LLM 不生成独立的 `type: "sfx"` 时间轴块，而是在承载事件的 `di
 ## 工程数据、备份与兼容性
 
 - 工程元数据和二进制资产保存在浏览器 IndexedDB 的 `UnitaleDB` 中，固定使用 `project.currentState` 和 `assets` 两个对象仓库。
-- 当前工程信封为 `kind: "unitale-project"`、`schemaVersion: 4`、`version: "4.0"`。导出 JSON 会嵌入 BGM、音色、台词原音频、EditX 编辑音频和 SoundEffect 音频，导入时自动迁移旧结构。
+- 当前工程信封为 `kind: "unitale-project"`、`schemaVersion: 4`、`version: "4.0"`。导出 JSON 会嵌入 BGM、音色、台词原音频、EditX 编辑音频和 SoundEffect 音频，并保留可序列化 `spatial` 语义；导入时自动迁移旧结构。
 - 工程导入会覆盖工程资源库和脚本，但不会覆盖 LLM/TTS 模型配置。清理站点数据、更换浏览器或使用无痕窗口前，先导出完整工程。
 - `audioUrl`、对象 URL 和取消控制器是运行时字段，不应写入工程；`audioAssetKey` 只是本地资产键，不是静态文件路径。
 - 旧 `bgImage`、独立 `sfx` 和 `filter` 字段不属于当前时间轴协议。当前只有 `dialogue` 与 `bgm` 两类块；`break_duration` 仍表示对白后的时间轴停顿。
@@ -153,13 +173,13 @@ LLM 不生成独立的 `type: "sfx"` 时间轴块，而是在承载事件的 `di
 3. 在“脚本制作”导入 TXT 或粘贴原文，先快速拆分或运行 LLM 深度分析。检查角色、`emotion`、BGM 控制块、`sfx_plan` 和 VoxCPM2 表演字段。
 4. 选择 TTS 模型，单行或批量生成台词；生成后试听、调整裁剪、速度、音量和停顿。需要情绪编辑时，再为已有原始音频调用 Step-Audio-EditX。
 5. 选择 SoundEffect 模型，逐项或批量生成计划音效；确认音效落点、时长和混音预设，再顺序试听脚本。
-6. 定期导出完整工程。交付音频可选择空间化档位和 WAV/MP3；页面先做 48 kHz 时间线混音，再在下载前由 8300 完成空间化、响度归一化和编码。字幕使用 SRT；MP4 当前是纯黑视频轨道，若需要有声视频须在外部后期工具中合成导出的音轨。
+6. 检查/编辑空间语义后导出完整工程。标准档由页面预混后交给 8300 母带；均衡/沉浸档把独立对象交给 8300 的 Steam Audio renderer。字幕使用 SRT；MP4 当前是纯黑视频轨道，若需要有声视频须在外部后期工具中合成导出的音轨。
 
 ## 当前限制
 
 - 本地模型、模型权重、GPU、CUDA、后端 CORS 和服务端临时音频目录不属于本仓库；在线链路必须按实际运行环境验证。
 - 浏览器直连云端 LLM 可能被 CORS 或浏览器安全策略阻断；不要把 API Key 写进代码或提交到 Git。
-- 48 kHz 混音依赖 Web Audio API，最终 WAV/MP3 还依赖 8300 控制面和 FFmpeg；MP4 生成依赖 WebCodecs 以及 CDN 中的 `mp4-muxer` 运行时。
+- 标准 48 kHz 混音依赖 Web Audio API；正式均衡/沉浸 WAV/MP3 依赖 8300、FFmpeg、已构建的 Steam Audio SDK renderer。缺失 renderer 时后端会明确返回 503；MP4 生成依赖 WebCodecs 以及 CDN 中的 `mp4-muxer` 运行时。
 - MP4 当前只生成纯黑画面的视频轨道，不读取旧背景图，也不编码音频轨道。
 - 长时间运行的音效、TTS、音色设计和大工程 Base64 导入导出会受到浏览器内存、模型显存和本地服务队列限制。
 

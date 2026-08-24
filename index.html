@@ -134,10 +134,23 @@
                         {{ format.label }}
                     </option>
                 </select>
-                <button data-testid="export-audio" @click="exportAudio" :disabled="isExportingAudio"
-                    class="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold hover:bg-purple-200 transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait">
-                    {{ isExportingAudio ? (exportStatus || '⏳ 处理中...') : '导出 48 kHz 音频' }}
+                <button data-testid="export-audio" @click="isExportingAudio ? cancelAudioExport() : exportAudio()"
+                    :disabled="isExportingAudio && !audioExportAbortController"
+                    :class="['px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1', isExportingAudio ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-purple-100 text-purple-700 hover:bg-purple-200']">
+                    {{ isExportingAudio ? (audioExportAbortController ? '停止等待' : '处理中...') : '导出 48 kHz 音频' }}
                 </button>
+                <div v-if="isExportingAudio" class="w-64" aria-live="polite">
+                    <div class="flex items-center justify-between gap-2 text-[10px] text-purple-700">
+                        <span class="truncate" :title="exportStatus">{{ exportStatus || '处理中...' }}</span>
+                        <span v-if="audioExportProgress" class="font-mono font-bold">{{ audioExportProgress.progress }}%</span>
+                    </div>
+                    <div v-if="audioExportProgress" role="progressbar"
+                        :aria-valuenow="audioExportProgress.progress" aria-valuemin="0" aria-valuemax="100"
+                        class="mt-1 h-1.5 overflow-hidden rounded-full bg-purple-100">
+                        <div class="h-full rounded-full bg-purple-500 transition-all duration-300"
+                            :style="{ width: `${audioExportProgress.progress}%` }"></div>
+                    </div>
+                </div>
                 <select v-model="videoResolution" class="px-2 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-sky-500">
                     <option value="1920x1080">横屏 16:9</option>
                     <option value="1080x1920">竖屏 9:16</option>
@@ -897,7 +910,15 @@
                                 </option>
                             </select>
                         </div>
+                        <button @click="applyDefaultSpatialPlans"
+                            class="self-end px-3 py-2 rounded-lg border border-cyan-200 bg-cyan-50 text-xs font-bold text-cyan-800 hover:bg-cyan-100"
+                            title="按角色稳定位置和对象类型补齐有限语义计划，不生成坐标或 DSP 参数">
+                            补齐默认空间计划
+                        </button>
                     </div>
+                    <p class="mb-3 text-[10px] leading-relaxed text-slate-500">
+                        页面顺序试听是 Web Audio 近似预览；顶部“均衡/沉浸”下载会上传独立对白、音效与 BGM，使用 Steam Audio 正式渲染。“标准”仅做无空间化母带。
+                    </p>
                     <div ref="scriptListContainer" class="space-y-3 max-h-[600px] overflow-y-auto px-2 pb-10">
                         <div v-for="(line, index) in scriptLines" :key="line.id" @click="toggleLineSelection(index, $event)"
                             :data-testid="'script-line-' + line.id"
@@ -1210,6 +1231,21 @@
                                     </div>
                             </div>
 
+                                <details class="w-full rounded border border-cyan-100 bg-cyan-50/60 px-2 py-1.5" @click.stop>
+                                    <summary class="cursor-pointer text-[10px] font-bold text-cyan-800">对白空间语义 · {{ line.spatial?.source || 'default' }}</summary>
+                                    <div class="mt-2 grid grid-cols-2 gap-2 md:grid-cols-5">
+                                        <label v-for="field in ['mode', 'location', 'distance', 'movement', 'spatial_blend']" :key="field" class="text-[9px] text-slate-500">
+                                            {{ field }}
+                                            <select v-model="line.spatial[field]" @change="line.spatial.source = 'user'; triggerAutoSave()"
+                                                class="mt-0.5 w-full rounded border border-cyan-200 bg-white px-1 py-1 text-[10px] text-cyan-900">
+                                                <option v-for="value in spatialFieldOptions[field]" :key="value" :value="value">
+                                                    {{ spatialOptionLabel(field, value) }}
+                                                </option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </details>
+
                                 <!-- 每项音效都直接由 SoundEffect 生成并绑定到当前台词，不再引用工程级 SFX 素材库。 -->
                                 <div v-if="line.sfx_plan && line.sfx_plan.length > 0"
                                     class="w-full rounded border border-amber-200 bg-amber-50/70 px-2 py-1.5">
@@ -1226,6 +1262,20 @@
                                         </button>
                                         <button v-if="plan.audioUrl" @click="playGeneratedSoundEffect(plan)"
                                             class="rounded border border-emerald-300 bg-white px-1.5 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100">试听</button>
+                                        <details class="w-full rounded border border-amber-200 bg-white/70 px-1.5 py-1" @click.stop>
+                                            <summary class="cursor-pointer font-bold">音效空间语义 · {{ plan.spatial?.source || 'default' }}</summary>
+                                            <div class="mt-1 grid grid-cols-2 gap-1 md:grid-cols-5">
+                                                <label v-for="field in ['mode', 'location', 'distance', 'movement', 'spatial_blend']" :key="field" class="text-[9px] text-slate-500">
+                                                    {{ field }}
+                                                    <select v-model="plan.spatial[field]" @change="plan.spatial.source = 'user'; triggerAutoSave()"
+                                                        class="mt-0.5 w-full rounded border border-amber-200 bg-white px-1 py-1 text-[10px]">
+                                                        <option v-for="value in spatialFieldOptions[field]" :key="value" :value="value">
+                                                            {{ spatialOptionLabel(field, value) }}
+                                                        </option>
+                                                    </select>
+                                                </label>
+                                            </div>
+                                        </details>
                                         <span v-if="plan.generationError" class="w-full text-red-600">生成失败：{{ plan.generationError }}</span>
                                     </div>
                                 </div>
@@ -1370,12 +1420,16 @@
         </div>
     </div>
 
+    <script src="./js/spatial-schema.js"></script>
     <script src="./js/project-storage.js"></script>
     <script src="./js/voice-design.js?v=20260816-ports"></script>
     <script src="./js/soundeffect-client.js"></script>
     <script src="./js/bgm-client.js"></script>
     <script src="./js/spatial-timeline.js"></script>
     <script src="./js/spatial-audio-client.js"></script>
+    <script src="./js/spatial-compiler.js"></script>
+    <script src="./js/steam-audio-client.js"></script>
+    <script src="./js/audio-export-download.js"></script>
     <script src="./editConfig/emotion.js"></script>
     <script src="./editConfig/paralinguistic.js"></script>
     <script src="./editConfig/speakingStyle.js"></script>
@@ -1425,8 +1479,13 @@
                 const bgmClient = window.UnitaleBgmClient;
                 // 动态空间时间线在浏览器仍保留对白和音效对象边界时安排方位、距离与早期反射。
                 const spatialTimeline = window.UnitaleSpatialTimeline;
-                // 空间音频客户端把 48 kHz 浏览器混音交给 8300 控制面完成母带和最终编码。
+                const spatialSchema = window.UnitaleSpatialSchema;
+                // 旧客户端只接收浏览器预混总线，用于标准母带与历史工程兼容。
                 const spatialAudioClient = window.UnitaleSpatialAudioClient;
+                // 正式导出编译器保留对象边界，再把 Manifest 与独立 Blob 交给 Steam Audio。
+                const spatialCompiler = window.UnitaleSpatialCompiler;
+                const steamAudioClient = window.UnitaleSteamAudioClient;
+                const audioExportDownload = window.UnitaleAudioExportDownload;
 
                 // 配套脚本未成功加载时立即终止启动，避免后续以不完整 schema 保存工程。
                 if (!projectStorage) {
@@ -1444,6 +1503,13 @@
                 if (!spatialAudioClient) {
                     throw new Error('js/spatial-audio-client.js 未正确加载');
                 }
+                if (!spatialSchema || !spatialCompiler || !steamAudioClient || !audioExportDownload) {
+                    throw new Error('Steam Audio 正式导出模块未正确加载');
+                }
+                const audioDownloadCoordinator = audioExportDownload.createCoordinator();
+                const spatialFieldOptions = spatialSchema.ENUMS;
+                const spatialFieldLabels = spatialSchema.LABELS;
+                const spatialOptionLabel = (field, value) => spatialFieldLabels[field]?.[value] || value;
                 const soundEffectModelOptions = Object.values(soundEffectClient.SOUND_EFFECT_MODELS || {});
                 if (soundEffectModelOptions.length === 0) {
                     throw new Error('js/soundeffect-client.js 未提供音效模型配置');
@@ -2568,6 +2634,12 @@
                 let sequenceAbortController = null;
                 // WAV 与 SRT 导出共用的加载锁。
                 const isExportingAudio = ref(false);
+                // 非响应式单飞锁直接保护导出函数，避免事件重入绕过按钮状态。
+                let audioExportInFlight = false;
+                // Abort 只取消浏览器等待；后端 renderer 是否停止由服务端生命周期治理。
+                const audioExportAbortController = ref(null);
+                // 正式 Steam Audio 导出由后端任务状态驱动真实阶段和百分比。
+                const audioExportProgress = ref(null);
                 // 默认采用保守空间增强；只影响最终导出，不修改模型生成的原始素材。
                 const audioExportProfile = ref(spatialAudioClient.DEFAULT_PROFILE || 'balanced');
                 // WAV 便于继续编辑，用户也可切换为体积更小的 MP3。
@@ -7058,6 +7130,36 @@ ${voiceReferenceHardConstraints}`;
                 };
 
                 // --- 导出音频逻辑（48 kHz WAV/MP3） ---
+                /** 取消浏览器对当前导出的等待，不对后端任务终止状态作虚假承诺。 */
+                const cancelAudioExport = () => {
+                    if (!audioExportAbortController.value) return;
+                    exportStatus.value = '正在取消浏览器等待...';
+                    audioExportAbortController.value.abort();
+                };
+
+                /**
+                 * 统一下载正式与标准音频；近期相同成品需要用户明确确认才会再次保存。
+                 * @param {Object} exportResult 后端返回的 Blob 与文件名
+                 * @param {string} profile 本次导出档位
+                 * @param {string} outputFormat 本次导出格式
+                 * @param {string} fallbackPrefix 服务端未返回文件名时使用的前缀
+                 * @returns {boolean} 是否实际触发浏览器下载
+                 */
+                const downloadAudioExportResult = (exportResult, profile, outputFormat, fallbackPrefix) => {
+                    const filename = exportResult.filename
+                        || `${fallbackPrefix}_${Date.now()}.${outputFormat}`;
+                    const settings = {
+                        blob: exportResult.blob,
+                        filename,
+                        profile,
+                        outputFormat
+                    };
+                    if (audioDownloadCoordinator.downloadOnce(settings)) return true;
+                    const confirmed = confirm('检测到相同音频成品刚刚已经下载，是否仍要再次保存？');
+                    if (!confirmed) return false;
+                    return audioDownloadCoordinator.downloadOnce({ ...settings, allowDuplicate: true });
+                };
+
                 /**
                  * 按脚本时间轴离线混合台词、音效与 BGM，再由后端空间化并下载最终文件。
                  * @returns {Promise<void>} 混音导出完成或失败后兑现
@@ -7071,15 +7173,20 @@ ${voiceReferenceHardConstraints}`;
                     if (dialogueLines.some(l => !l.audioUrl)) {
                         if (!confirm('部分台词尚未生成音频，导出时将被跳过。确定继续吗？')) return;
                     }
+                    if (audioExportInFlight) return;
+                    audioExportInFlight = true;
                     // 锁定本次任务的档位，并为角色建立一次稳定位置；导出期间不随响应式状态漂移。
                     const exportSpatialProfile = audioExportProfile.value;
-                    const rolePositions = spatialTimeline.createRolePositions(dialogueLines, exportSpatialProfile);
-
-                    // 开启音频导出遮罩，避免渲染过程中重复提交。
-                    isExportingAudio.value = true;
-                    exportStatus.value = '准备 48 kHz 混音...';
 
                     try {
+                        const rolePositions = spatialTimeline.createRolePositions(dialogueLines, exportSpatialProfile);
+                        // 开启音频导出遮罩，避免渲染过程中重复提交。
+                        isExportingAudio.value = true;
+                        audioExportAbortController.value = new AbortController();
+                        audioExportProgress.value = null;
+                        exportStatus.value = exportSpatialProfile === 'standard'
+                            ? '准备 48 kHz 标准母带...'
+                            : '整理独立音频对象...';
                         // 按用途分开缓存 AudioBuffer，后续调度只做内存查找。
                         const assets = { dialogues: {}, soundEffects: {}, bgm: {} };
 
@@ -7110,6 +7217,80 @@ ${voiceReferenceHardConstraints}`;
                         for (const [key, item] of usedBgmAssets) {
                             // 单一 BGM 缺失不阻断对白与其他 BGM 的导出。
                             try { assets.bgm[key] = await loadAudioBuffer(item); } catch (e) { }
+                        }
+
+                        // 均衡/沉浸档必须保留对象边界，由确定性编译器生成 Manifest 后正式渲染。
+                        if (exportSpatialProfile !== 'standard') {
+                            const assetCatalog = {};
+                            const assetOwners = new Map();
+                            dialogueLines.forEach((line) => {
+                                const buffer = assets.dialogues[line.id];
+                                if (!buffer || !line.audioAssetKey) return;
+                                assetCatalog[line.audioAssetKey] = {
+                                    durationMs: Math.round(buffer.duration * 1000),
+                                    filename: `${line.id}.wav`
+                                };
+                                assetOwners.set(line.audioAssetKey, line);
+                            });
+                            scriptLines.value.forEach((line) => {
+                                if (!line || line.type !== 'dialogue') return;
+                                (line.sfx_plan || []).forEach((plan) => {
+                                    const buffer = plan && assets.soundEffects[plan.audioAssetKey];
+                                    if (!buffer) return;
+                                    assetCatalog[plan.audioAssetKey] = {
+                                        durationMs: Math.round(buffer.duration * 1000),
+                                        filename: `${plan.id || plan.audioAssetKey}.wav`
+                                    };
+                                    assetOwners.set(plan.audioAssetKey, plan);
+                                });
+                            });
+                            for (const [key, item] of usedBgmAssets) {
+                                const buffer = assets.bgm[key];
+                                if (!buffer) continue;
+                                assetCatalog[key] = {
+                                    durationMs: Math.round(buffer.duration * 1000),
+                                    filename: item.filename || `${key}.wav`
+                                };
+                                assetOwners.set(key, item);
+                            }
+
+                            const compiled = spatialCompiler.compileRenderManifest({
+                                scriptLines: scriptLines.value,
+                                characters: characters.value,
+                                bgmLibrary: bgmLibrary.value,
+                                assetsByKey: assetCatalog,
+                                profile: exportSpatialProfile,
+                                room: 'dry_studio'
+                            });
+                            exportStatus.value = `加载 ${compiled.assetRequests.length} 个独立对象...`;
+                            const uploadAssets = [];
+                            for (const request of compiled.assetRequests) {
+                                const owner = assetOwners.get(request.assetKey);
+                                const blob = await loadStoredAssetBlob(owner || request.assetKey);
+                                if (!blob || !blob.size) {
+                                    throw new Error(`无法读取正式导出对象：${request.filename || request.assetKey}`);
+                                }
+                                uploadAssets.push({ ...request, blob });
+                            }
+                            exportStatus.value = `Steam Audio 正式渲染（${compiled.manifest.sources.length} 个对象）...`;
+                            const exportResult = await steamAudioClient.renderSpatialAudio({
+                                manifest: compiled.manifest,
+                                assets: uploadAssets,
+                                profile: exportSpatialProfile,
+                                outputFormat: audioExportFormat.value,
+                                signal: audioExportAbortController.value.signal,
+                                onProgress: (progress) => {
+                                    audioExportProgress.value = progress;
+                                    exportStatus.value = progress.message || 'Steam Audio 正式渲染中...';
+                                }
+                            });
+                            downloadAudioExportResult(
+                                exportResult,
+                                exportSpatialProfile,
+                                audioExportFormat.value,
+                                'storyforge_steam'
+                            );
+                            return;
                         }
 
                         // currentTime 是离线工程时间轴上的秒数游标。
@@ -7341,32 +7522,30 @@ ${voiceReferenceHardConstraints}`;
                         const exportResult = await spatialAudioClient.exportSpatialAudio({
                             audio: wavBlob,
                             profile: exportSpatialProfile,
-                            outputFormat: audioExportFormat.value
+                            outputFormat: audioExportFormat.value,
+                            signal: audioExportAbortController.value.signal
                         });
-                        // 为后端返回的最终文件创建临时对象 URL。
-                        const url = URL.createObjectURL(exportResult.blob);
-                        // 使用动态链接触发浏览器下载。
-                        const a = document.createElement('a');
-                        a.href = url;
-                        // 优先采用服务端文件名，回退名使用毫秒时间戳避免连续导出时冲突。
-                        a.download = exportResult.filename
-                            || `storyforge_export_${Date.now()}.${audioExportFormat.value}`;
-                        // 临时链接进入 DOM 后再触发下载。
-                        document.body.appendChild(a);
-                        // 模拟点击开始保存最终 WAV 或 MP3。
-                        a.click();
-                        // 下载已开始，移除临时链接。
-                        document.body.removeChild(a);
-                        // 下载触发后释放最终文件对象 URL。
-                        URL.revokeObjectURL(url);
+                        downloadAudioExportResult(
+                            exportResult,
+                            exportSpatialProfile,
+                            audioExportFormat.value,
+                            'storyforge_export'
+                        );
 
                     } catch (e) {
                         // 捕获素材解码、时间轴调度、离线渲染或编码异常。
+                        if (e.name === 'AbortError') {
+                            alert('已取消浏览器等待；后端 renderer 是否终止以服务端生命周期为准。');
+                            return;
+                        }
                         console.error(e);
                         alert('导出失败: ' + e.message);
                     } finally {
                         // 无论结果如何都恢复导出按钮与页面交互。
+                        audioExportInFlight = false;
                         isExportingAudio.value = false;
+                        audioExportAbortController.value = null;
+                        audioExportProgress.value = null;
                         exportStatus.value = '';
                     }
                 };
@@ -7678,6 +7857,34 @@ ${voiceReferenceHardConstraints}`;
                 }
 
                 // --- 脚本制作逻辑 ---
+                /** 对旧工程和手工新增块补齐安全 DSL，并把本次修改标为规则生成。 */
+                const applyDefaultSpatialPlans = () => {
+                    const roles = [];
+                    scriptLines.value.forEach((line) => {
+                        if (line?.type === 'dialogue' && line.role && !roles.includes(line.role)) roles.push(line.role);
+                    });
+                    scriptLines.value.forEach((line) => {
+                        if (!line) return;
+                        if (line.type === 'bgm') {
+                            line.spatial = spatialSchema.normalizeSpatialPlan('bgm', line.spatial);
+                            line.spatial.source = 'rule';
+                            return;
+                        }
+                        const kind = line.role === '旁白' ? 'narrator' : 'dialogue';
+                        line.spatial = spatialSchema.normalizeSpatialPlan(kind, line.spatial, {
+                            role: line.role,
+                            roleIndex: Math.max(0, roles.indexOf(line.role))
+                        });
+                        line.spatial.source = 'rule';
+                        (line.sfx_plan || []).forEach((plan) => {
+                            const sfxKind = plan.purpose === 'ambience' ? 'ambience' : 'sfx';
+                            plan.spatial = spatialSchema.normalizeSpatialPlan(sfxKind, plan.spatial);
+                            plan.spatial.source = 'rule';
+                        });
+                    });
+                    triggerAutoSave();
+                };
+
                 /** 按换行和句末标点将原文快速拆分为默认台词块。 */
                 const splitScript = () => {
                     // 快速拆分依赖非空原文，否则不覆盖当前脚本列表。
@@ -7722,7 +7929,8 @@ ${voiceReferenceHardConstraints}`;
                         // 尚未调用 TTS，因此没有运行时音频 URL。
                         audioUrl: '',
                         // 初始不处于单行生成请求中。
-                        isGenerating: false
+                        isGenerating: false,
+                        spatial: spatialSchema.createDefaultSpatialPlan('narrator')
                     }));
                 };
 
@@ -7749,7 +7957,8 @@ ${voiceReferenceHardConstraints}`;
                         // 资源库非空时默认选择第一项，空库则等待用户选择。
                         bgmName: options.bgmName || selectedBgm?.name || '',
                         // 只有“生成BGM”入口显式写入稳定键；普通插入继续保持名称选择语义。
-                        audioAssetKey: options.audioAssetKey || ''
+                        audioAssetKey: options.audioAssetKey || '',
+                        spatial: spatialSchema.createDefaultSpatialPlan('bgm')
                     };
                     // 有合法选中块时插入其后，符合时间轴编辑的直觉。
                     if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
@@ -7802,7 +8011,8 @@ ${voiceReferenceHardConstraints}`;
                         // 尚未生成或恢复 TTS 音频。
                         audioUrl: '',
                         // 初始没有活动生成请求。
-                        isGenerating: false
+                        isGenerating: false,
+                        spatial: spatialSchema.createDefaultSpatialPlan('narrator')
                     };
                     // 在当前选中项后插入并移动选中索引。
                     if (selectedLineIndex.value !== -1 && selectedLineIndex.value < scriptLines.value.length) {
@@ -8431,6 +8641,11 @@ ${voiceReferenceHardConstraints}`;
 5. prompt_en 是 Stable Audio 3 Medium 接收的全英文文字。重写为 8–40 个英文词的自然、具体、单一声学描述：先写声源和动作，再补充节奏、材质、空间/距离或自然收尾；用句号或分号组织短句。不得出现中文、角色名、台词、可辨认语言、音乐/配乐、情绪解释、镜头/视觉描述、字段名、项目符号、生成参数或负面提示词列表；也不得把中文 prompt 的语序或文字原样搬入。人体非语言声音明确写 \`no intelligible speech or voices\`，物体或环境声不要无意义地附加这句话。每条 prompt_en 只能出现一次 \`TrackType: SFX\`，必须作为最后一个 ASCII 文本片段，后面不再添加任何标点、解释或换行。
 6. 输出前逐项自检：prompt 与 prompt_en 都非空、描述同一声源和同一动作；不得一边写开门、另一边写脚步；duration_seconds 足够覆盖该动作但不靠拉长时长制造氛围；required 仅在缺声会影响剧情理解时为 true。示例：\`"prompt":"近距离收音，木门缓慢推开，铰链短促吱呀后停止，无可辨认说话声","prompt_en":"Close-miked wooden door slowly opens; a brief hinge creak, then silence. No intelligible speech or voices. TrackType: SFX"\`。`;
 
+                    const spatialSection = `# 空间语义计划（有限 DSL）
+每个 dialogue、每个 sfx_plan 项和 BGM play 块都输出 spatial。只能描述语义，不得输出 x/y/z、角度、增益、滤波、延迟、混响、房间尺寸或任何 DSP 数值。
+spatial 固定字段：{"mode":"dry_center|point|preserve_stereo","location":"front_center|front_left|front_right|side_left|side_right|rear_left|rear_center|rear_right|above_front|above_rear|below_front","distance":"intimate|near|conversational|mid|far","movement":"static|approaching|receding|left_to_right|right_to_left|front_to_rear|rear_to_front|rising|falling","occlusion":"none","spatial_blend":"subtle|medium|strong|full","source":"llm"}。
+旁白默认 point/front_center/conversational/static/subtle；角色对白在稳定左右位置，非原文明示不要频繁移动；音效按可听方位和动作选择，不能判断时使用 front_center/mid/static/strong；BGM 必须 preserve_stereo/front_center/conversational/static/subtle。首版不支持遮挡，occlusion 必须为 none。`;
+
                     // BGM 与音效区独立，按需输出控制块，绝不把音乐当成固定背景。
                     let bgmSection = "";
                     // 只暴露当前启用的 BGM 资源。
@@ -8491,6 +8706,7 @@ ${voiceReferenceHardConstraints}`;
                     if (!templateToUse.includes('${clonePlanSection}')) {
                         finalPrompt = insertPromptSectionBeforeInput(finalPrompt, clonePlanSection);
                     }
+                    finalPrompt = insertPromptSectionBeforeInput(finalPrompt, spatialSection);
 
                     try {
                         // 固定本次请求使用的当前 LLM 配置引用。
@@ -8717,7 +8933,14 @@ ${voiceReferenceHardConstraints}`;
                                         audioAssetKey: '',
                                         audioUrl: '',
                                         isGenerating: false,
-                                        generationError: ''
+                                        generationError: '',
+                                        spatial: spatialSchema.normalizeSpatialPlan(
+                                            purpose === 'ambience' ? 'ambience' : 'sfx',
+                                            source.spatial && typeof source.spatial === 'object'
+                                                ? { ...source.spatial, source: 'llm' }
+                                                : null,
+                                            { text: prompt }
+                                        )
                                     });
                                     return plans;
                                 }, []);
@@ -8830,11 +9053,34 @@ ${voiceReferenceHardConstraints}`;
                                     // 使用匹配后的资源库 BGM 名称。
                                     bgmName: matchedBgmName,
                                     // 保留已有工程中显式绑定的 BGM 资产键；名称仍作为旧数据回退。
-                                    audioAssetKey: typeof item.audioAssetKey === 'string' ? item.audioAssetKey : ''
+                                    audioAssetKey: typeof item.audioAssetKey === 'string' ? item.audioAssetKey : '',
+                                    spatial: spatialSchema.normalizeSpatialPlan(
+                                        lineType === 'bgm'
+                                            ? 'bgm'
+                                            : (item.role_name === '旁白' || item.role === '旁白' ? 'narrator' : 'dialogue'),
+                                        item.spatial && typeof item.spatial === 'object'
+                                            ? { ...item.spatial, source: 'llm' }
+                                            : null,
+                                        { role: item.role_name || item.role || '旁白' }
+                                    )
                                 };
                                 // LLM 输出只是候选计划；页面在此按发起请求时的开关做最终收敛。
                                 applyCloneModePolicy(generatedLine, cloneModePolicyAtRequest);
                                 return generatedLine;
+                            });
+                            const analyzedRoleOrder = [];
+                            scriptLines.value.forEach((line) => {
+                                if (line.type === 'dialogue' && line.role && !analyzedRoleOrder.includes(line.role)) {
+                                    analyzedRoleOrder.push(line.role);
+                                }
+                            });
+                            scriptLines.value.forEach((line) => {
+                                if (line.type !== 'dialogue' || line.spatial.source !== 'default') return;
+                                const kind = line.role === '旁白' ? 'narrator' : 'dialogue';
+                                line.spatial = spatialSchema.createDefaultSpatialPlan(kind, {
+                                    role: line.role,
+                                    roleIndex: Math.max(0, analyzedRoleOrder.indexOf(line.role))
+                                });
                             });
                         } else {
                             // 非数组结构无法转换为时间轴，保留原始结果供用户检查。
@@ -9208,6 +9454,7 @@ ${voiceReferenceHardConstraints}`;
 
                     // 小说原文、规范时间轴、快速拆分、删除、自适应文本框与 AI 分析状态。
                     rawScript, scriptLines, splitScript, removeScriptLine, autoResizeTextarea, analyzeScript, isAnalyzingScript, rawAnalysisResult,
+                    applyDefaultSpatialPlans, spatialFieldOptions, spatialOptionLabel, triggerAutoSave,
                     // 两类时间轴块的添加入口和当前编辑选中索引。
                     addBgmBlock, addDialogueBlock, selectedLineIndex,
                     // 波形绘制和裁剪拖拽入口。
@@ -9221,7 +9468,8 @@ ${voiceReferenceHardConstraints}`;
                     // 批量选择状态切换操作。
                     toggleLineSelection,
                     // 完整工程导出/导入及文件输入框 ref。
-                    exportScriptState, triggerImport, handleImportFile, importFileRef, exportAudio, isExportingAudio,
+                    exportScriptState, triggerImport, handleImportFile, importFileRef, exportAudio, cancelAudioExport,
+                    isExportingAudio, audioExportAbortController, audioExportProgress,
                     // 空间化档位和最终格式只作用于导出链路，不写回原始素材。
                     audioExportProfile, audioExportFormat, audioExportProfileOptions, audioExportFormatOptions,
                     // SRT、TXT 导入导出及 TXT 输入框 ref。

@@ -24,31 +24,34 @@ curl http://127.0.0.1:8325/v1/health
 curl http://127.0.0.1:8331/v1/health
 ```
 
-## 48 kHz 空间音频导出
+## 48 kHz 母带与正式空间导出
 
-“导出音频”不会先下载一个普通 WAV 再做后处理。完整顺序是：浏览器解析脚本时间线，
-在对白和 SoundEffect 尚未合并时为每个对象安排连续的方位、距离增益、高频衰减与早期反射，
-再以 48 kHz 双声道离线混合；BGM 不做移动。随后把这份 WAV 中间件上传到
-`POST http://127.0.0.1:8300/v1/audio/export`；后端完成空间化、双遍响度归一化和最终编码后，
-浏览器才触发成品下载。模型返回的原始 TTS、BGM 和音效资产保持不变。
+页面把 `standard` 和 `balanced`/`immersive` 分成两条真实不同的链路：
 
-接口使用 `multipart/form-data`：
+- `standard`：浏览器按现有时间线离线预混 48 kHz 双声道总线，上传到
+  `POST http://127.0.0.1:8300/v1/audio/export`。后端只做双遍响度归一化和 WAV/MP3 编码，
+  不增加空间滤镜。
+- `balanced`/`immersive`：浏览器不预混对象。`js/spatial-compiler.js` 把裁剪、倍速、停顿、
+  SFX 锚点和 BGM play/stop 编译为 Render Manifest v1，并从 IndexedDB 读取每个独立 Blob，
+  上传到 `POST http://127.0.0.1:8300/v1/audio/spatial/render`。后端调用 Steam Audio CPU
+  renderer 逐对象完成距离、空气吸收、HRTF 和简单移动，然后只做 loudnorm/编码。
 
-- `audio`：浏览器生成的非空 WAV 中间件。
-- `profile`：`standard`、`balanced` 或 `immersive`，页面默认 `balanced`。
-- `output_format`：`wav` 或 `mp3`，页面默认 `wav`。
+正式接口使用 `multipart/form-data`：`manifest` 是 JSON 文本，`assets` 是可重复的独立音频
+文件字段，另有 `profile=balanced|immersive`、`output_format=wav|mp3` 和每次请求唯一的
+`job_id`。Manifest 与上传文件名
+必须一一对应；BGM 使用 `preserve_stereo`。首版不支持 diffuse、遮挡和几何反射，前后端都会
+显式限制，不能把未实现字段当作已经生效。
 
-`standard` 完全旁路对象级空间节点且不增加空间湿声；`balanced` 为角色分配较克制的稳定左右
-锚点，并让每句在锚点附近缓慢改变距离；`immersive` 扩大移动、远近差和对象级早期反射。
-SoundEffect 的 `prompt` / `prompt_en` 中若含“左侧”“远处”“由远及近”“从左向右”等明确线索，
-会覆盖默认轨迹。后端在已经混合的总线上继续增加 Side-only Haas/房间湿声并统一响度，但不再
-尝试猜测单个对象的位置。空间差异应使用立体声耳机或双扬声器审听。
-
-成功响应是 48 kHz `audio/wav` 或 `audio/mpeg`，并公开 `Content-Disposition`、
-`X-Audio-Sample-Rate`、`X-Audio-Profile` 和 `X-Audio-Format` 响应头。对象级规划和 Web Audio
-节点链位于 [`js/spatial-timeline.js`](../js/spatial-timeline.js)，请求封装位于
-[`js/spatial-audio-client.js`](../js/spatial-audio-client.js)。后端需要系统 FFmpeg；该链路是
-CPU 后处理，不占用共享 GPU 锁。接口失败时页面显示错误且不下载未处理的中间 WAV。
+成功响应是 48 kHz `audio/wav` 或 `audio/mpeg`。正式客户端除
+`Content-Disposition`、`X-Audio-Sample-Rate`、`X-Audio-Profile`、`X-Audio-Format` 外，还严格
+检查 `X-Spatial-Engine: steam-audio`、`X-Spatial-Manifest-Version: 1.0` 和
+`X-Spatial-Job-ID`。POST 执行期间客户端轮询
+`GET /v1/audio/spatial/render/progress/{job_id}`，页面显示上传、暂存、标准化、Steam Audio
+逐对象渲染、母带与完成/失败状态；同样的阶段会带 job ID 输出到 8300 终端。有限 DSL 位于
+[`js/spatial-schema.js`](../js/spatial-schema.js)，编译器与客户端分别位于
+[`js/spatial-compiler.js`](../js/spatial-compiler.js) 和
+[`js/steam-audio-client.js`](../js/steam-audio-client.js)。`js/spatial-timeline.js` 只保留 Web
+Audio 近似预览。两条后处理都不占用共享 GPU 锁；失败时页面不下载中间文件。
 
 接入 TTS 时，服务需要兼容：
 
