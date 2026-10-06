@@ -1,6 +1,6 @@
-# TTS-and-VoiceDesign 接入
+# LLM-for-Local-Machine 接入
 
-本文只描述当前 WebUI 已调用的接口边界。模型路径、Conda（Python 环境管理工具）依赖与完整 API 示例以 [后端 README](https://github.com/MuYi086/TTS-and-VoiceDesign/blob/main/README.md) 为准。
+本文只描述当前 WebUI 已调用的接口边界。模型路径、Conda（Python 环境管理工具）依赖与完整 API 示例以 [后端 README](https://github.com/MuYi086/LLM-for-Local-Machine/blob/main/README.md) 为准。
 
 ## 启动与健康检查
 
@@ -69,7 +69,7 @@ Audio 近似预览。两条后处理都不占用共享 GPU 锁；失败时页面
 
 WebUI 会为 Qwen3-TTS、VoxCPM2、LongCat-AudioDiT、dots.tts-soar 和 FireRedTTS3 创建内置 TTS 配置；用户在脚本工作台的 TTS 下拉框中选中的配置决定当前台词请求的 Base URL 与后端模型。历史配置会保留在浏览器中，但只有协议可识别的本地模型才进入当前合成选择器，页面不会把旧端口静默改写为其他模型。
 
-本地 TTS 模型成功返回 WAV 后，后端还会将同一份原始音频同步保存到 `TTS-and-VoiceDesign/api/tempAudio/`；这与浏览器 IndexedDB 的工程资产保存相互独立，不会改变页面播放和导出流程。
+本地 TTS 模型成功返回 WAV 后，后端还会将同一份原始音频同步保存到 `LLM-for-Local-Machine/api/tempAudio/`；这与浏览器 IndexedDB 的工程资产保存相互独立，不会改变页面播放和导出流程。
 
 ## 台词合成中的参考文案与 VoxCPM2 表演计划
 

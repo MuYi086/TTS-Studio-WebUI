@@ -37,7 +37,7 @@ node -e "const fs=require('fs');const files=['index.html','js/project-storage.js
 node --test js/*.test.js
 ```
 
-涉及页面、IndexedDB、播放、音效、导入导出或后端请求的改动，还必须启动浏览器手动回归；需要在线模型的场景按 [`docs/TTS-and-VoiceDesign接入.md`](docs/TTS-and-VoiceDesign接入.md) 连接真实本地服务验证，不能把未实际调用的后端能力写成前端现状。
+涉及页面、IndexedDB、播放、音效、导入导出或后端请求的改动，还必须启动浏览器手动回归；需要在线模型的场景按 [`docs/LLM-for-Local-Machine接入.md`](docs/LLM-for-Local-Machine接入.md) 连接真实本地服务验证，不能把未实际调用的后端能力写成前端现状。
 
 ## 数据与兼容性红线
 

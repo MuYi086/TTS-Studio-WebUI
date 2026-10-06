@@ -59,7 +59,7 @@ node --test js/*.test.js
 
 ## 后端服务
 
-默认后端是 [TTS-and-VoiceDesign](https://github.com/MuYi086/TTS-and-VoiceDesign)。在后端仓库根目录启动：
+默认后端是 [LLM-for-Local-Machine](https://github.com/MuYi086/LLM-for-Local-Machine)。在后端仓库根目录启动：
 
 ```bash
 bash start.sh
@@ -136,7 +136,7 @@ POST http://127.0.0.1:8331/v1/upload_audio
 POST http://127.0.0.1:8331/v1/stepAudioEditx/edit
 ```
 
-前端先上传当前行的原始音频（已有编辑结果时上传上一份编辑结果），再发送 `prompt_text`、`prompt_audio`、`generated_text`、`edit_type: "emotion"` 和当前行的官方 `emotion` 标签。编辑结果使用独立 `stepAudioEditXAudioAssetKey` 保存；删除它不会删除原始 `audioAssetKey`。后端模型、tokenizer、源码和 CUDA 环境的配置与检查方式见 [`docs/TTS-and-VoiceDesign接入.md`](docs/TTS-and-VoiceDesign接入.md)。
+前端先上传当前行的原始音频（已有编辑结果时上传上一份编辑结果），再发送 `prompt_text`、`prompt_audio`、`generated_text`、`edit_type: "emotion"` 和当前行的官方 `emotion` 标签。编辑结果使用独立 `stepAudioEditXAudioAssetKey` 保存；删除它不会删除原始 `audioAssetKey`。后端模型、tokenizer、源码和 CUDA 环境的配置与检查方式见 [`docs/LLM-for-Local-Machine接入.md`](docs/LLM-for-Local-Machine接入.md)。
 
 ## SoundEffect 音效计划
 
@@ -186,7 +186,7 @@ LLM 不生成独立的 `type: "sfx"` 时间轴块，而是在承载事件的 `di
 ## 文档导航
 
 - [本地开发与回归](docs/本地开发与回归.md)
-- [TTS-and-VoiceDesign 接入](docs/TTS-and-VoiceDesign接入.md)
+- [LLM-for-Local-Machine 接入](docs/LLM-for-Local-Machine接入.md)
 - [MOSS-SoundEffect 上下文音效](docs/MOSS-SoundEffect自动生成上下文音效.md)
 - [VoxCPM2 合成音频最佳实践](docs/VoxCpm2合成音频最佳实践.md)
 - [克隆音频响度分析](docs/克隆音频响度分析.md)

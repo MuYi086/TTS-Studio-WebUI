@@ -1975,7 +1975,7 @@
                     }
                 ]);
                 // 端口可推断五种参考音频克隆协议。
-                const TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT = Object.freeze({
+                const LLM_FOR_LOCAL_MACHINE_PROTOCOL_BY_PORT = Object.freeze({
                     '8321': TTS_PROTOCOLS.qwen3Tts,
                     '8322': TTS_PROTOCOLS.voxcpm2,
                     '8323': TTS_PROTOCOLS.longcatAudioDit,
@@ -1990,7 +1990,7 @@
                     fireredtts3: '/v1/FireRedTTS3/clone'
                 });
                 /**
-                 * 根据 TTS-and-VoiceDesign 的默认端口推断合成协议。
+                 * 根据 LLM-for-Local-Machine 的默认端口推断合成协议。
                  * @param {string} baseUrl - TTS 服务根地址
                  * @returns {string} 命中的协议标识；未知端口返回空字符串
                  */
@@ -2000,7 +2000,7 @@
                     try {
                         // 允许用户省略 http(s)://，协议推断不应因此失效。
                         const parsedUrl = new URL(/^https?:\/\//i.test(rawUrl) ? rawUrl : `http://${rawUrl}`);
-                        return TTS_AND_VOICE_DESIGN_PROTOCOL_BY_PORT[parsedUrl.port] || '';
+                        return LLM_FOR_LOCAL_MACHINE_PROTOCOL_BY_PORT[parsedUrl.port] || '';
                     } catch {
                         // 无法解析的地址留给保存与 fetch 阶段报告，未知地址仍尊重手动协议。
                         return '';
